@@ -3002,6 +3002,7 @@ const selectedViewSnapshot =
       <div style={G.hdr}>
         <div
           style={{
+            position: "relative",
             display: "flex",
             justifyContent: "space-between",
             alignItems: "center",
@@ -3059,70 +3060,155 @@ const selectedViewSnapshot =
           </div>
         </div>
 
-        <>
-  <button
-    onClick={() => setMenuOpen((v) => !v)}
-    style={{
-      position: "fixed",
-      right: "max(18px, calc((100vw - 480px) / 2 + 18px))",
-top: 45,
-      zIndex: 450,
-      width: 45,
-height: 35,
-borderRadius: 14,
-fontSize: 20,
-      cursor: "pointer",
-      boxShadow: "0 10px 28px rgba(0,0,0,0.35)",
-    }}
-  >
-    ☰
-  </button>
-
-  {menuOpen && (
-    <div
+       <>
+  {!menuOpen && (
+    <button
+      onClick={() => setMenuOpen(true)}
       style={{
-        position: "fixed",
-        top: 80,
-        right: "max(18px, calc((100vw - 480px) / 2 + 18px))",
-        zIndex: 440,
-        width: 220,
-        maxWidth: "70vw",
-        background: "#ffffff",
-        background: "#0f172a",
-border: "1px solid rgba(201,168,64,0.35)",
-borderRadius: 18,
-boxShadow: "0 16px 40px rgba(0,0,0,0.45)",
-        padding: 12,
-        direction: "rtl",
+        position: "absolute",
+left: 380,
+top: "50%",
+transform: "translateY(25%)",
+zIndex: 20,
+        width: 36,
+        height: 36,
+        borderRadius: 12,
+        border: "1px solid rgba(148,163,184,0.35)",
+        background: "#f8fafc",
+        color: "#0f172a",
+        fontSize: 22,
+        cursor: "pointer",
+        boxShadow: "0 8px 24px rgba(0,0,0,0.25)",
       }}
     >
-      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-        {tabs.map((t) => (
+      ☰
+    </button>
+  )}
+
+  {menuOpen && (
+    <>
+      <div
+        onClick={() => setMenuOpen(false)}
+        style={{
+          position: "fixed",
+          top: 0,
+          right: "max(0px, calc((100vw - 480px) / 2))",
+          width: "min(100vw, 480px)",
+          height: "100dvh",
+          zIndex: 600,
+          background: "rgba(0,0,0,0.55)",
+        }}
+      />
+
+      <div
+        style={{
+          position: "fixed",
+          top: 0,
+          right: "max(0px, calc((100vw - 480px) / 2))",
+          width: "min(78vw, 360px)",
+          height: "100dvh",
+          zIndex: 650,
+          background: "#020617",
+          animation: "slideMenuIn 0.24s ease-out",
+          borderLeft: "1px solid rgba(201,168,64,0.22)",
+          boxShadow: "-18px 0 42px rgba(0,0,0,0.45)",
+          padding: "22px 18px",
+          animation: "slideMenuIn 0.25s ease-out",
+          direction: "rtl",
+          display: "flex",
+          flexDirection: "column",
+          gap: 18,
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            marginBottom: 8,
+          }}
+        >
           <button
-            key={t.id}
-            onClick={() => {
-              setTab(t.id);
-              setMenuOpen(false);
-            }}
+            onClick={() => setMenuOpen(false)}
             style={{
-              width: "100%",
-              textAlign: "right",
-              padding: "12px 14px",
+              width: 38,
+              height: 38,
               borderRadius: 12,
+              border: "none",
+              background: "transparent",
+              color: "#cbd5e1",
+              fontSize: 30,
               cursor: "pointer",
-              background: tab === t.id ? "#fef3c7" : "#f8fafc",
-              border: `1px solid ${tab === t.id ? "#c9a840" : "#e2e8f0"}`,
-              color: tab === t.id ? "#92400e" : "#334155",
-              fontFamily: "inherit",
-              fontSize: 14,
-              fontWeight: tab === t.id ? 800 : 600,
             }}
           >
-            {t.label}
+            ×
           </button>
-        ))}
+
+          <div style={{ textAlign: "right" }}>
+            <div style={{ color: "#f8fafc", fontWeight: 900, fontSize: 18 }}>
+              مدير الثروة
+            </div>
+            <div style={{ color: "#94a3b8", fontSize: 11 }}>
+              Smart Wealth Tracker
+            </div>
+          </div>
+        </div>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          {tabs.map((t) => {
+            const icon =
+              t.id === "overview"
+                ? "▦"
+                : t.id === "assets"
+                ? "◇"
+                : t.id === "liabilities"
+                ? "▣"
+                : "⚙";
+
+            return (
+              <button
+                key={t.id}
+                onClick={() => {
+                  setTab(t.id);
+                  setMenuOpen(false);
+                }}
+                style={{
+                  width: "100%",
+                  minHeight: 54,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  padding: "0 18px",
+                  borderRadius: 18,
+                  cursor: "pointer",
+                  background:
+                    tab === t.id
+                      ? "linear-gradient(135deg,#10b981,#059669)"
+                      : "transparent",
+                  border:
+                    tab === t.id
+                      ? "1px solid rgba(16,185,129,0.75)"
+                      : "1px solid transparent",
+                  color: tab === t.id ? "#ffffff" : "#cbd5e1",
+                  fontFamily: "inherit",
+                  fontSize: 16,
+                  fontWeight: tab === t.id ? 900 : 700,
+                  boxShadow:
+                    tab === t.id
+                      ? "0 10px 28px rgba(16,185,129,0.35)"
+                      : "none",
+                }}
+              >
+                <span>{t.label}</span>
+                <span style={{ fontSize: 24, opacity: tab === t.id ? 1 : 0.75 }}>
+                  {icon}
+                </span>
+              </button>
+            );
+          })}
+        </div>
       </div>
-    </div>
+    </>
   )}
 </>
 </div>
