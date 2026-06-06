@@ -1684,8 +1684,8 @@ const prepareEditCreditCard = (id) => {
   };
 
   return (
-    <div style={G.scr}>
-      <div style={{ ...G.card("#ef444422"), textAlign: "center" }}>
+<div style={G.scr}>
+        <div style={{ ...G.card("#ef444422"), textAlign: "center" }}>
         <div style={{ fontSize: 11, color: "#ef4444", marginBottom: 4 }}>
           إجمالي الخصوم الجارية
         </div>
@@ -3061,19 +3061,16 @@ const selectedViewSnapshot =
 
         <>
   <button
-    onClick={() => setMenuOpen(v => !v)}
+    onClick={() => setMenuOpen((v) => !v)}
     style={{
       position: "fixed",
-right: "max(18px, calc((100vw - 480px) / 2 + 18px))",
-top: 156,
-      zIndex: 300,
-      width: 46,
-      height: 46,
-      borderRadius: 16,
-      border: "1px solid rgba(201,168,64,0.45)",
-      background: "#0f172a",
-      color: "#c9a840",
-      fontSize: 22,
+      right: "max(18px, calc((100vw - 480px) / 2 + 18px))",
+top: 45,
+      zIndex: 450,
+      width: 45,
+height: 35,
+borderRadius: 14,
+fontSize: 20,
       cursor: "pointer",
       boxShadow: "0 10px 28px rgba(0,0,0,0.35)",
     }}
@@ -3081,55 +3078,54 @@ top: 156,
     ☰
   </button>
 
-  
-  <div
-    style={{
-     position: "fixed",
-top: 150,
-right: "max(18px, calc((100vw - 480px) / 2 + 18px))",
-zIndex: 400,
-width: 220,
-maxWidth: "70vw",
-
-      background: "#ffffff",
-      borderLeft: "1px solid #e2e8f0",
-      boxShadow: menuOpen ? "-16px 0 36px rgba(15,23,42,0.18)" : "none",
-      transition: "transform 0.25s ease",
-      padding: 18,
-      direction: "rtl",
-    }}
-  >
-   
-
-    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-      {tabs.map((t) => (
-        <button
-          key={t.id}
-          onClick={() => {
-            setTab(t.id);
-            setMenuOpen(false);
-          }}
-          style={{
-            width: "100%",
-            textAlign: "right",
-            padding: "12px 14px",
-            borderRadius: 12,
-            cursor: "pointer",
-            background: tab === t.id ? "#fef3c7" : "#f8fafc",
-            border: `1px solid ${tab === t.id ? "#c9a840" : "#e2e8f0"}`,
-            color: tab === t.id ? "#92400e" : "#334155",
-            fontFamily: "inherit",
-            fontSize: 14,
-            fontWeight: tab === t.id ? 800 : 600,
-          }}
-        >
-          {t.label}
-        </button>
-      ))}
-    </div>
-  </div>
-</>
+  {menuOpen && (
+    <div
+      style={{
+        position: "fixed",
+        top: 80,
+        right: "max(18px, calc((100vw - 480px) / 2 + 18px))",
+        zIndex: 440,
+        width: 220,
+        maxWidth: "70vw",
+        background: "#ffffff",
+        background: "#0f172a",
+border: "1px solid rgba(201,168,64,0.35)",
+borderRadius: 18,
+boxShadow: "0 16px 40px rgba(0,0,0,0.45)",
+        padding: 12,
+        direction: "rtl",
+      }}
+    >
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        {tabs.map((t) => (
+          <button
+            key={t.id}
+            onClick={() => {
+              setTab(t.id);
+              setMenuOpen(false);
+            }}
+            style={{
+              width: "100%",
+              textAlign: "right",
+              padding: "12px 14px",
+              borderRadius: 12,
+              cursor: "pointer",
+              background: tab === t.id ? "#fef3c7" : "#f8fafc",
+              border: `1px solid ${tab === t.id ? "#c9a840" : "#e2e8f0"}`,
+              color: tab === t.id ? "#92400e" : "#334155",
+              fontFamily: "inherit",
+              fontSize: 14,
+              fontWeight: tab === t.id ? 800 : 600,
+            }}
+          >
+            {t.label}
+          </button>
+        ))}
       </div>
+    </div>
+  )}
+</>
+</div>
 
 {tab === "overview" && <Overview state={viewState} setState={setState} />}
       {tab === "assets" && (
