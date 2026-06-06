@@ -3061,11 +3061,11 @@ const selectedViewSnapshot =
 
         <>
   <button
-    onClick={() => setMenuOpen(true)}
+    onClick={() => setMenuOpen(v => !v)}
     style={{
       position: "fixed",
-      right: 18,
-      top: 72,
+right: "max(18px, calc((100vw - 480px) / 2 + 18px))",
+top: 156,
       zIndex: 300,
       width: 46,
       height: 46,
@@ -3081,65 +3081,25 @@ const selectedViewSnapshot =
     ☰
   </button>
 
-  {menuOpen && (
-    <div
-      onClick={() => setMenuOpen(false)}
-      style={{
-        position: "fixed",
-        inset: 0,
-        zIndex: 250,
-        background: "rgba(0,0,0,0.35)",
-      }}
-    />
-  )}
-
+  
   <div
     style={{
-      position: "fixed",
-      top: 0,
-      right: menuOpen ? 0 : -280,
-      zIndex: 400,
-      width: 260,
-      height: "100vh",
+     position: "fixed",
+top: 150,
+right: "max(18px, calc((100vw - 480px) / 2 + 18px))",
+zIndex: 400,
+width: 220,
+maxWidth: "70vw",
+
       background: "#ffffff",
       borderLeft: "1px solid #e2e8f0",
       boxShadow: menuOpen ? "-16px 0 36px rgba(15,23,42,0.18)" : "none",
-      transition: "right 0.25s ease",
+      transition: "transform 0.25s ease",
       padding: 18,
       direction: "rtl",
     }}
   >
-    <div
-      style={{
-        display: "flex",
-        justifyContent: "space-between",
-        alignItems: "center",
-        marginBottom: 22,
-      }}
-    >
-      <div
-        style={{
-          color: "#0f172a",
-          fontWeight: 800,
-          fontSize: 16,
-        }}
-      >
-        القائمة
-      </div>
-
-      <button
-        onClick={() => setMenuOpen(false)}
-        style={{
-          background: "transparent",
-          border: "none",
-          color: "#64748b",
-          fontSize: 24,
-          cursor: "pointer",
-        }}
-      >
-        ×
-      </button>
-    </div>
+   
 
     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
       {tabs.map((t) => (
