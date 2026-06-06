@@ -3013,14 +3013,17 @@ const selectedViewSnapshot =
   value={selectedViewMonth}
   onChange={(e) => setSelectedViewMonth(e.target.value)}
   style={{
-    fontSize: 11,
-    color: "#cbd5e1",
-    background: "#1e293b",
-    padding: "4px 10px",
-    borderRadius: 8,
-    border: "1px solid #334155",
-    outline: "none",
-  }}
+  position: "absolute",
+  left: "50%",
+  transform: "translateX(-50%)",
+  fontSize: 11,
+  color: "#cbd5e1",
+  background: "#1e293b",
+  padding: "4px 10px",
+  borderRadius: 8,
+  border: "1px solid #334155",
+  outline: "none",
+}}
 >
   <option value="current">
     {state.settings?.month || state.currentMonth || "الشهر الحالي"}
@@ -3059,6 +3062,21 @@ const selectedViewSnapshot =
             </div>
           </div>
         </div>
+        <style>
+  {`
+    @keyframes drawerIn {
+      from {
+        opacity: 0;
+        transform: translateX(100%);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateX(0);
+      }
+    }
+  `}
+</style>
 
        <>
   {!menuOpen && (
@@ -3073,12 +3091,9 @@ zIndex: 20,
         width: 36,
         height: 36,
         borderRadius: 12,
-        border: "1px solid rgba(148,163,184,0.35)",
-        background: "#f8fafc",
-        color: "#0f172a",
-        fontSize: 22,
-        cursor: "pointer",
-        boxShadow: "0 8px 24px rgba(0,0,0,0.25)",
+border: "none",background: "#1e293b",
+color: "#e8c96a",
+boxShadow: "0 6px 18px rgba(0,0,0,0.25)",
       }}
     >
       ☰
@@ -3109,11 +3124,10 @@ zIndex: 20,
           height: "100dvh",
           zIndex: 650,
           background: "#020617",
-          animation: "slideMenuIn 0.24s ease-out",
+animation: "drawerIn 0.28s ease-out",
           borderLeft: "1px solid rgba(201,168,64,0.22)",
           boxShadow: "-18px 0 42px rgba(0,0,0,0.45)",
           padding: "22px 18px",
-          animation: "slideMenuIn 0.25s ease-out",
           direction: "rtl",
           display: "flex",
           flexDirection: "column",
@@ -3124,7 +3138,7 @@ zIndex: 20,
           style={{
             display: "flex",
             alignItems: "center",
-            justifyContent: "space-between",
+justifyContent: "flex-end",
             marginBottom: 8,
           }}
         >
