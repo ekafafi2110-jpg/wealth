@@ -3001,67 +3001,111 @@ const selectedViewSnapshot =
     <div style={G.app}>
       <div style={G.hdr}>
         <div
-          style={{
-            position: "relative",
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            marginBottom: 12,
-          }}
-        >
-          <select
-  value={selectedViewMonth}
-  onChange={(e) => setSelectedViewMonth(e.target.value)}
   style={{
-  position: "absolute",
-  left: "50%",
-  transform: "translateX(-50%)",
-  fontSize: 11,
-  color: "#cbd5e1",
-  background: "#1e293b",
-  padding: "4px 10px",
-  borderRadius: 8,
-  border: "1px solid #334155",
-  outline: "none",
-}}
+    position: "relative",
+    display: "grid",
+    gridTemplateColumns: "70px 1fr 150px",
+    alignItems: "center",
+    marginBottom: 12,
+    minHeight: 44,
+  }}
 >
-  <option value="current">
-    {state.settings?.month || state.currentMonth || "الشهر الحالي"}
-  </option>
+<div
+  style={{
+    display: "flex",
+    justifyContent: "flex-start",
+    alignItems: "center",
+  }}
+>
+  {!menuOpen && (
+    <button
+      onClick={() => setMenuOpen(true)}
+      style={{
+        width: 34,
+        height: 34,
+        borderRadius: 11,
+        border: "1px solid rgba(232, 201, 106, 0.18)",
+        background: "rgba(30, 41, 59, 0.9)",
+        color: "#e8c96a",
+        boxShadow: "none",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        fontSize: 18,
+        cursor: "pointer",
+      }}
+    >
+      ☰
+    </button>
+  )}
+</div>
+  <div
+    style={{
+      display: "flex",
+      justifyContent: "center",
+      alignItems: "center",
+    }}
+  >
+    <select
+      value={selectedViewMonth}
+      onChange={(e) => setSelectedViewMonth(e.target.value)}
+      style={{
+        fontSize: 11,
+        color: "#cbd5e1",
+        background: "#1e293b",
+        padding: "4px 10px",
+        borderRadius: 8,
+        border: "1px solid #334155",
+        outline: "none",
+      }}
+    >
+      <option value="current">
+        {state.settings?.month || state.currentMonth || "الشهر الحالي"}
+      </option>
 
-  {snapshots.map((snap) => (
-    <option key={snap.id} value={snap.id}>
-      {snap.month}
-    </option>
-  ))}
-</select>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <div style={{ textAlign: "right" }}>
-              <div style={{ fontSize: 13, fontWeight: 700 }}>
-                مدير الثروة الذكي
-              </div>
-              <div style={{ fontSize: 10, color: "#64748b" }}>
-                Smart Wealth Tracker
-              </div>
-            </div>
-            <div
-              style={{
-                width: 32,
-                height: 32,
-                background: "linear-gradient(135deg,#c9a840,#e8c96a)",
-                borderRadius: 9,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                fontSize: 16,
-                fontWeight: 800,
-                color: "#0f172a",
-              }}
-            >
-              ث
-            </div>
-          </div>
-        </div>
+      {snapshots.map((snap) => (
+        <option key={snap.id} value={snap.id}>
+          {snap.month}
+        </option>
+      ))}
+    </select>
+  </div>
+
+  <div
+    style={{
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "flex-end",
+      gap: 8,
+    }}
+  >
+    <div style={{ textAlign: "right" }}>
+      <div style={{ fontSize: 13, fontWeight: 700 }}>
+        مدير الثروة الذكي
+      </div>
+      <div style={{ fontSize: 10, color: "#64748b" }}>
+        Smart Wealth Tracker
+      </div>
+    </div>
+
+    <div
+      style={{
+        width: 32,
+        height: 32,
+        background: "linear-gradient(135deg,#c9a840,#e8c96a)",
+        borderRadius: 9,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        fontSize: 16,
+        fontWeight: 800,
+        color: "#0f172a",
+      }}
+    >
+      ث
+    </div>
+  </div>
+</div>
         <style>
   {`
     @keyframes drawerIn {
@@ -3079,27 +3123,7 @@ const selectedViewSnapshot =
 </style>
 
        <>
-  {!menuOpen && (
-    <button
-      onClick={() => setMenuOpen(true)}
-      style={{
-        position: "absolute",
-left: 380,
-top: "50%",
-transform: "translateY(25%)",
-zIndex: 20,
-        width: 36,
-        height: 36,
-        borderRadius: 12,
-border: "none",background: "#1e293b",
-color: "#e8c96a",
-boxShadow: "0 6px 18px rgba(0,0,0,0.25)",
-      }}
-    >
-      ☰
-    </button>
-  )}
-
+  
   {menuOpen && (
     <>
       <div
