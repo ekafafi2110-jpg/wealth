@@ -312,12 +312,34 @@ const [overBudgetDueDate, setOverBudgetDueDate] = useState("");
   );
 });
   const assetSources = getAssetSources(state);
-  const allExpenseCategories =
+  const defaultExpenseCategories = [
+  { id: "food", label: "طعام", icon: "🍽️", color: "#f59e0b", pinned: true },
+  { id: "transport", label: "مواصلات", icon: "🚗", color: "#3b82f6", pinned: true },
+  { id: "shopping", label: "تسوق", icon: "🛒", color: "#a855f7", pinned: true },
+  { id: "health", label: "صحة", icon: "💚", color: "#22c55e", pinned: true },
+  { id: "entertainment", label: "ترفيه", icon: "🎮", color: "#ec4899", pinned: true },
+  { id: "bills", label: "فواتير", icon: "🧾", color: "#64748b", pinned: true },
+  { id: "fuel", label: "بنزين", icon: "⛽", color: "#f97316", pinned: true },
+  { id: "other", label: "أخرى", icon: "•••", color: "#94a3b8", isOther: true, pinned: true },
+];
+
+const savedExpenseCategories =
   state.expenseCategories?.items ||
   [
     ...(state.expenseCategories?.main || []),
     ...(state.expenseCategories?.extra || []),
   ];
+
+const allExpenseCategories = [
+  ...defaultExpenseCategories.map((base) => {
+    const saved = savedExpenseCategories.find((item) => item.id === base.id);
+    return saved ? { ...base, ...saved } : base;
+  }),
+  ...savedExpenseCategories.filter(
+    (saved) =>
+      !defaultExpenseCategories.some((base) => base.id === saved.id)
+  ),
+];
 
 const pinnedExpenseCategories = allExpenseCategories
   .filter((cat) => cat.pinned && !cat.isOther)
@@ -825,21 +847,30 @@ onClick={() => setSelectedExpense(e)}    style={{
   >
     <div
       style={{
+        position: "relative",
         background: "#0c1525",
         borderRadius: "22px 22px 0 0",
         border: "1px solid #1e293b",
         padding: "22px 18px 34px",
         width: "100%",
         maxWidth: 440,
+        maxHeight: "82vh",
+        overflowY: "auto",
         direction: "rtl",
       }}
     >
       <div
         style={{
+          position: "sticky",
+          top: 0,
+          zIndex: 20,
+          background: "#0c1525",
           display: "flex",
           justifyContent: "space-between",
           alignItems: "center",
           marginBottom: 14,
+          paddingBottom: 12,
+          borderBottom: "1px solid rgba(148,163,184,0.12)",
         }}
       >
         <button
@@ -948,9 +979,6 @@ onClick={() => setSelectedExpense(e)}    style={{
   type="button"
   onClick={() => setShowCategoryManager(false)}
   style={{
-    position: "absolute",
-    top: 12,
-    left: 12,
     width: 36,
     height: 36,
     borderRadius: 12,
@@ -959,7 +987,10 @@ onClick={() => setSelectedExpense(e)}    style={{
     color: "#f8fafc",
     fontSize: 22,
     cursor: "pointer",
-    zIndex: 5,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    lineHeight: 1,
   }}
 >
   ×
