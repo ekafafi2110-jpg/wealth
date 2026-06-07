@@ -319,8 +319,21 @@ const [overBudgetDueDate, setOverBudgetDueDate] = useState("");
     ...(state.expenseCategories?.extra || []),
   ];
 
-const mainExpenseCategories =
-  allExpenseCategories.filter((cat) => cat.pinned || cat.isOther).slice(0, 9);
+const pinnedExpenseCategories = allExpenseCategories
+  .filter((cat) => cat.pinned && !cat.isOther)
+  .slice(0, 9);
+
+const otherExpenseCategory =
+  allExpenseCategories.find((cat) => cat.isOther) || {
+    id: "other",
+    label: "أخرى",
+    icon: "•••",
+    color: "#94a3b8",
+    isOther: true,
+    pinned: true,
+  };
+
+const mainExpenseCategories = pinnedExpenseCategories;
   const enteredAmount = Number(amount || 0);
 const expectedOverBudget = Math.max(
   0,
@@ -538,35 +551,74 @@ function addExtraExpenseCategory() {
 
   const cleanLabel = label.trim();
 
-  const allCategories = [
-    ...(state.expenseCategories?.main || []),
-    ...(state.expenseCategories?.extra || []),
-  ];
+  const currentItems =
+    state.expenseCategories?.items ||
+    [
+      ...(state.expenseCategories?.main || []),
+      ...(state.expenseCategories?.extra || []),
+    ];
 
-  const exists = allCategories.some((cat) => cat.label === cleanLabel);
+  const exists = currentItems.some((cat) => cat.label === cleanLabel);
 
   if (exists) {
     alert("هذا النوع موجود مسبقًا");
     return;
   }
 
-  setState((prev) => ({
-    ...prev,
-    expenseCategories: {
-      main: prev.expenseCategories?.main || [],
-      extra: [
+  setState((prev) => {
+    const prevItems =
+      prev.expenseCategories?.items ||
+      [
+        ...(prev.expenseCategories?.main || []),
         ...(prev.expenseCategories?.extra || []),
-        {
-          id: `custom_${Date.now()}`,
-          label: cleanLabel,
-          icon: "📌",
-          color: "#94a3b8",
-        },
-      ],
-    },
-  }));
+      ];
+
+    return {
+      ...prev,
+      expenseCategories: {
+        items: [
+          ...prevItems,
+          {
+            id: `custom_${Date.now()}`,
+            label: cleanLabel,
+            icon: "📌",
+            color: "#94a3b8",
+            pinned: false,
+          },
+        ],
+      },
+    };
+  });
+} 
+function toggleExpenseCategoryPinned(catId) {
+  setState((prev) => {
+    const items =
+      prev.expenseCategories?.items ||
+      [
+        ...(prev.expenseCategories?.main || []),
+        ...(prev.expenseCategories?.extra || []),
+      ];
+
+    const target = items.find((cat) => cat.id === catId);
+    if (!target) return prev;
+
+const pinnedCount = items.filter((cat) => cat.pinned && !cat.isOther).length;
+    if (!target.pinned && pinnedCount >= 9) {
+      alert("الحد الأقصى للشاشة الرئيسية هو 9 أنواع");
+      return prev;
+    }
+
+    return {
+      ...prev,
+      expenseCategories: {
+        items: items.map((cat) =>
+          cat.id === catId ? { ...cat, pinned: !cat.pinned } : cat
+        ),
+      },
+    };
+  });
 }
-  return (
+ return (
     <div style={G.scr}>
             <div style={G.card()}>
               {dueCurrentLiabilities.length > 0 && (
@@ -892,19 +944,26 @@ onClick={() => setSelectedExpense(e)}    style={{
           marginBottom: 14,
         }}
       >
-        <button
-          onClick={() => setShowCategoryManager(false)}
-          style={{
-            background: "transparent",
-            border: "none",
-            color: "#94a3b8",
-            fontSize: 24,
-            cursor: "pointer",
-          }}
-        >
-          ×
-        </button>
-
+       <button
+  type="button"
+  onClick={() => setShowCategoryManager(false)}
+  style={{
+    position: "absolute",
+    top: 12,
+    left: 12,
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    border: "1px solid rgba(148,163,184,0.28)",
+    background: "#1e293b",
+    color: "#f8fafc",
+    fontSize: 22,
+    cursor: "pointer",
+    zIndex: 5,
+  }}
+>
+  ×
+</button>
         <div style={{ textAlign: "right" }}>
           <div style={{ fontSize: 18, fontWeight: 900 }}>
             إدارة أنواع المصروف
@@ -916,38 +975,61 @@ onClick={() => setSelectedExpense(e)}    style={{
       </div>
 
       <div style={G.card()}>
-        {       (state.expenseCategories?.extra || []).length === 0 ? (
-          <div
-            style={{
-              textAlign: "center",
-              color: "#64748b",
-              padding: "18px 0",
-              fontSize: 13,
-            }}
-          >
-            لا توجد أنواع مصروف إضافية بعد
-          </div>
-        ) : (
-          (state.expenseCategories?.extra || []).map((catItem) => (
-            <div key={catItem.id} style={G.row}>
-              <span>{catItem.icon} {catItem.label}</span>
-              <button
-                type="button"
-                onClick={() => {
-                  setCategory(catItem.label);
-                  setShowCategoryManager(false);
-                }}
-                style={G.btn("#1e293b", "#e8c96a", {
-                  padding: "7px 10px",
-                  fontSize: 12,
-                })}
-              >
-                اختيار
-              </button>
-            </div>
-          ))
-        )}
-      </div>
+  {allExpenseCategories.filter((cat) => !cat.isOther).length === 0 ? (
+    <div
+      style={{
+        textAlign: "center",
+        color: "#64748b",
+        padding: "18px 0",
+        fontSize: 13,
+      }}
+    >
+      لا توجد أنواع مصروف إضافية بعد
+    </div>
+  ) : (
+    allExpenseCategories
+      .filter((cat) => !cat.isOther)
+      .map((catItem) => (
+        <div key={catItem.id} style={G.row}>
+  <span>
+    {catItem.icon} {catItem.label}
+  </span>
+
+  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+    <button
+      type="button"
+      onClick={() => toggleExpenseCategoryPinned(catItem.id)}
+      style={{
+        background: "transparent",
+        border: "none",
+        color: "#e8c96a",
+        fontSize: 20,
+        cursor: "pointer",
+        padding: 0,
+        lineHeight: 1,
+      }}
+    >
+      {catItem.pinned ? "★" : "☆"}
+    </button>
+
+    <button
+      type="button"
+      onClick={() => {
+        setCategory(catItem.label);
+        setShowCategoryManager(false);
+      }}
+      style={G.btn("#1e293b", "#e8c96a", {
+        padding: "7px 10px",
+        fontSize: 12,
+      })}
+    >
+      اختيار
+    </button>
+  </div>
+</div>
+      ))
+  )}
+</div>
       <button
   type="button"
   onClick={addExtraExpenseCategory}
@@ -1177,6 +1259,24 @@ onClick={() => setSelectedExpense(e)}    style={{
   );
 })}
             </div>
+            <button
+  type="button"
+  onClick={() => setShowCategoryManager(true)}
+  style={{
+    width: "100%",
+    minHeight: 44,
+    borderRadius: 14,
+    border: "1px solid rgba(232,201,106,0.45)",
+    background: "rgba(30,41,59,0.85)",
+    color: "#e8c96a",
+    fontFamily: "inherit",
+    fontWeight: 900,
+    cursor: "pointer",
+    marginBottom: 14,
+  }}
+>
+  {otherExpenseCategory.icon} إدارة أنواع المصروف
+</button>
 
             <label style={{ fontSize: 11, color: "#64748b" }}>طريقة الدفع</label>
             <select
@@ -1683,6 +1783,7 @@ function AssetsScreen({ state, setState, onAddExtraCash }) {
         >
           <div
             style={{
+              position: "relative",
               background: "#0c1525",
               borderRadius: "22px 22px 0 0",
               border: "1px solid #1e293b",
