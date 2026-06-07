@@ -263,6 +263,7 @@ function ExpenseDonut({ expenses }) {
 function Overview({ state, setState }) {
   const budget = calcBudget(state);
   const [showExpense, setShowExpense] = useState(false);
+  const [selectedExpense, setSelectedExpense] = useState(null);
 
   const [amount, setAmount] = useState("");
   const [category, setCategory] = useState("طعام");
@@ -413,6 +414,94 @@ setOverBudgetAssetKey("cash");
 setOverBudgetLiabilityName("تجاوز سقف الصرف");
 setOverBudgetDueDate("");
   };
+  function cancelExpense(expenseId) {
+  const ok = window.confirm("هل تريد إلغاء هذا المصروف وعكس أثره المالي؟");
+  if (!ok) return;
+
+  setState((prev) => {
+    const expense = (prev.expenses || []).find((e) => e.id === expenseId);
+    if (!expense) return prev;
+
+    let next = structuredClone(prev);
+
+    const amount = Number(expense.amount || 0);
+    const budgetCovered = Number(expense.budgetCovered || 0);
+    const overBudget = Number(expense.overBudget || 0);
+
+    next.expenses = (next.expenses || []).filter((e) => e.id !== expenseId);
+
+    next.session = {
+      ...next.session,
+      coveredSpent: Math.max(
+        0,
+        Number((Number(next.session?.coveredSpent || 0) - budgetCovered).toFixed(2))
+      ),
+      overBudgetSpent: Math.max(
+        0,
+        Number((Number(next.session?.overBudgetSpent || 0) - overBudget).toFixed(2))
+      ),
+    };
+
+    if (expense.paymentMethod === "card") {
+      const card = (next.currentLiabilities || []).find(
+        (x) => x.id === Number(expense.cardId) && x.type === "card"
+      );
+
+      if (card) {
+        card.balance = Math.max(
+          0,
+          Number((Number(card.balance || 0) - amount).toFixed(2))
+        );
+        card.payableBuffer = Math.max(
+          0,
+          Number((Number(card.payableBuffer || 0) - budgetCovered).toFixed(2))
+        );
+        card.uncoveredDebt = Math.max(
+          0,
+          Number((Number(card.uncoveredDebt || 0) - overBudget).toFixed(2))
+        );
+
+        if (Number(card.balance || 0) <= 0) {
+          card.status = "paid";
+        }
+      }
+    }
+
+    next.currentLiabilities = (next.currentLiabilities || []).filter(
+      (l) =>
+        l.expenseId !== expenseId ||
+        (l.type !== "direct_liability" && l.type !== "over_budget")
+    );
+
+    const assetCoverageTx = (next.transactions || []).find(
+      (tx) =>
+        tx.expenseId === expenseId &&
+        tx.type === "over_budget_covered_from_asset"
+    );
+
+    if (assetCoverageTx?.assetKey && Number(assetCoverageTx.amount || 0) > 0) {
+      next = addToAsset(
+        next,
+        assetCoverageTx.assetKey,
+        Number(assetCoverageTx.amount || 0)
+      );
+    }
+
+    next.transactions = (next.transactions || []).filter(
+      (tx) => tx.expenseId !== expenseId
+    );
+
+    next.transactions.push({
+      id: Date.now(),
+      type: "expense_cancelled",
+      amount,
+      expenseId,
+      date: new Date().toISOString(),
+    });
+
+    return next;
+  });
+}
 
   return (
     <div style={G.scr}>
@@ -453,13 +542,14 @@ setOverBudgetDueDate("");
             </div>
           </div>
 
-          <div style={{ background: "#1a0808", borderRadius: 10, padding: 10 }}>
-            <div style={{ fontSize: 10, color: "#64748b" }}>التجاوز</div>
-            <div style={{ color: "#ef4444", fontWeight: 800 }}>
-              {budget.overBudgetSpent.toFixed(2)}
-            </div>
-          </div>
-        </div>
+          {budget.overBudgetSpent > 0 && (
+  <div style={{ background: "#1a0808", borderRadius: 10, padding: 10 }}>
+    <div style={{ fontSize: 10, color: "#64748b" }}>التجاوز</div>
+    <div style={{ color: "#ef4444", fontWeight: 800 }}>
+      {budget.overBudgetSpent.toFixed(2)}
+    </div>
+  </div>
+)}        </div>
       </div>
 
       <button
@@ -535,9 +625,30 @@ setOverBudgetDueDate("");
         {recent.map((e, i) => (
           <div key={e.id} style={i < recent.length - 1 ? G.row : G.lrow}>
             <div>
-              <div style={{ fontSize: 15, fontWeight: 700 }}>
-                {Number(e.amount || 0).toFixed(2)} د.أ
-              </div>
+              <div
+  style={{
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+  }}
+>
+  <button
+onClick={() => setSelectedExpense(e)}    style={{
+      background: "transparent",
+      border: "none",
+      color: "#e8c96a",
+      fontSize: 16,
+      cursor: "pointer",
+      padding: 0,
+    }}
+  >
+    ✏️
+  </button>
+
+  <div style={{ fontSize: 15, fontWeight: 700 }}>
+    {Number(e.amount || 0).toFixed(2)} د.أ
+  </div>
+</div>
               <div style={{ fontSize: 10, color: "#64748b" }}>
                 مغطى: {Number(e.budgetCovered || 0).toFixed(2)} | تجاوز:{" "}
                 {Number(e.overBudget || 0).toFixed(2)}
@@ -582,6 +693,106 @@ setOverBudgetDueDate("");
       >
         تصفير البيانات التجريبية
       </button>
+
+      {selectedExpense && (
+  <div
+    onClick={(ev) => ev.target === ev.currentTarget && setSelectedExpense(null)}
+    style={{
+      position: "fixed",
+      inset: 0,
+      background: "rgba(0,0,0,0.8)",
+      backdropFilter: "blur(8px)",
+      display: "flex",
+      alignItems: "flex-end",
+      justifyContent: "center",
+      zIndex: 520,
+    }}
+  >
+    <div
+      style={{
+        background: "#0c1525",
+        borderRadius: "22px 22px 0 0",
+        border: "1px solid #1e293b",
+        padding: "22px 18px 34px",
+        width: "100%",
+        maxWidth: 440,
+        direction: "rtl",
+      }}
+    >
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          marginBottom: 14,
+        }}
+      >
+        <button
+          onClick={() => setSelectedExpense(null)}
+          style={{
+            background: "transparent",
+            border: "none",
+            color: "#94a3b8",
+            fontSize: 24,
+            cursor: "pointer",
+          }}
+        >
+          ×
+        </button>
+
+        <div style={{ textAlign: "right" }}>
+          <div style={{ fontSize: 18, fontWeight: 900 }}>
+            إدارة المصروف
+          </div>
+          <div style={{ fontSize: 11, color: "#64748b" }}>
+            تفاصيل العملية
+          </div>
+        </div>
+      </div>
+
+      <div style={G.card()}>
+        <div style={G.row}>
+          <span style={{ color: "#94a3b8" }}>المبلغ</span>
+          <b>{Number(selectedExpense.amount || 0).toFixed(2)} د.أ</b>
+        </div>
+
+        <div style={G.row}>
+          <span style={{ color: "#94a3b8" }}>التصنيف</span>
+          <b>{selectedExpense.category}</b>
+        </div>
+
+        <div style={G.row}>
+          <span style={{ color: "#94a3b8" }}>طريقة الدفع</span>
+          <b>{selectedExpense.paymentMethod}</b>
+        </div>
+
+        <div style={G.row}>
+          <span style={{ color: "#94a3b8" }}>المغطى من السقف</span>
+          <b>{Number(selectedExpense.budgetCovered || 0).toFixed(2)} د.أ</b>
+        </div>
+
+        <div style={G.lrow}>
+          <span style={{ color: "#94a3b8" }}>التجاوز</span>
+          <b style={{ color: Number(selectedExpense.overBudget || 0) > 0 ? "#ef4444" : "#f8fafc" }}>
+            {Number(selectedExpense.overBudget || 0).toFixed(2)} د.أ
+          </b>
+        </div>
+        <button
+  onClick={() => {
+    cancelExpense(selectedExpense.id);
+    setSelectedExpense(null);
+  }}
+  style={G.btn("#7f1d1d", "#fff", {
+    width: "100%",
+    marginTop: 10,
+  })}
+>
+  إلغاء المصروف
+</button>
+      </div>
+    </div>
+  </div>
+)}
 
       {showExpense && (
         <div
@@ -3192,8 +3403,8 @@ justifyContent: "flex-end",
           </div>
         </div>
 
-        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-          {tabs.map((t) => {
+<div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+            {tabs.map((t) => {
             const icon =
               t.id === "overview"
                 ? "▦"
@@ -3212,29 +3423,29 @@ justifyContent: "flex-end",
                 }}
                 style={{
                   width: "100%",
-                  minHeight: 54,
+                  minHeight: 40,
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "space-between",
                   padding: "0 18px",
                   borderRadius: 18,
                   cursor: "pointer",
-                  background:
-                    tab === t.id
-                      ? "linear-gradient(135deg,#10b981,#059669)"
-                      : "transparent",
-                  border:
-                    tab === t.id
-                      ? "1px solid rgba(16,185,129,0.75)"
-                      : "1px solid transparent",
-                  color: tab === t.id ? "#ffffff" : "#cbd5e1",
-                  fontFamily: "inherit",
-                  fontSize: 16,
-                  fontWeight: tab === t.id ? 900 : 700,
-                  boxShadow:
-                    tab === t.id
-                      ? "0 10px 28px rgba(16,185,129,0.35)"
-                      : "none",
+                 background:
+  tab === t.id
+    ? "linear-gradient(135deg, rgba(201,168,64,0.24), rgba(232,201,106,0.14))"
+    : "transparent",
+border:
+  tab === t.id
+    ? "1px solid rgba(232,201,106,0.55)"
+    : "1px solid transparent",
+color: tab === t.id ? "#f8fafc" : "#cbd5e1",
+fontFamily: "inherit",
+fontSize: 16,
+fontWeight: tab === t.id ? 900 : 700,
+boxShadow:
+  tab === t.id
+    ? "0 10px 28px rgba(201,168,64,0.18)"
+    : "none",
                 }}
               >
                 <span>{t.label}</span>
