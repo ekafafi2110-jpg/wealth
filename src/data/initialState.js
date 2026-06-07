@@ -44,6 +44,25 @@ export const INITIAL_STATE = {
     custom: [],
   },
   extraCash: [],
+  expenseCategories: {
+  items: [
+    { id: "food", label: "طعام", icon: "🍽️", color: "#f59e0b", pinned: true },
+    { id: "transport", label: "مواصلات", icon: "🚗", color: "#3b82f6", pinned: true },
+    { id: "shopping", label: "تسوق", icon: "🛒", color: "#a855f7", pinned: true },
+    { id: "health", label: "صحة", icon: "💚", color: "#22c55e", pinned: true },
+    { id: "entertainment", label: "ترفيه", icon: "🎮", color: "#ec4899", pinned: true },
+    { id: "bills", label: "فواتير", icon: "🧾", color: "#64748b", pinned: true },
+    { id: "fuel", label: "بنزين", icon: "⛽", color: "#f97316", pinned: true },
+    { id: "other", label: "أخرى", icon: "•••", color: "#94a3b8", isOther: true, pinned: true },
+
+    { id: "clothes", label: "ملابس", icon: "👕", color: "#38bdf8", pinned: false },
+    { id: "gifts", label: "هدايا", icon: "🎁", color: "#f472b6", pinned: false },
+    { id: "stationery", label: "قرطاسية", icon: "✏️", color: "#a78bfa", pinned: false },
+    { id: "school_installments", label: "أقساط مدارس", icon: "🏫", color: "#facc15", pinned: false },
+    { id: "car_maintenance", label: "صيانة سيارة", icon: "🔧", color: "#fb923c", pinned: false },
+    { id: "home_maintenance", label: "صيانة بيت", icon: "🏠", color: "#34d399", pinned: false },
+  ],
+},
 
   structuralLiabilities: [
     {

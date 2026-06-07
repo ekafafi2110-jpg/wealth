@@ -20,8 +20,18 @@ import {
   deductFromAsset,
   transferBetweenAssets,
 } from "./logic/assets";
-const CATS = ["طعام", "مواصلات", "تسوق", "صحة", "ترفيه", "فواتير", "أخرى"];
+const CATS = ["طعام", "مواصلات", "تسوق", "صحة", "ترفيه", "فواتير", "بنزين", "أخرى"];
 
+const CAT_ICONS = {
+  طعام: "🍽️",
+  مواصلات: "🚗",
+  تسوق: "🛒",
+  صحة: "💚",
+  ترفيه: "🎮",
+  فواتير: "🧾",
+  بنزين: "⛽",
+  أخرى: "•••",
+};
 const CC = {
   طعام: "#f59e0b",
   مواصلات: "#3b82f6",
@@ -29,6 +39,13 @@ const CC = {
   صحة: "#22c55e",
   ترفيه: "#ec4899",
   فواتير: "#64748b",
+  بنزين: "#f97316",
+  ملابس: "#38bdf8",
+هدايا: "#f472b6",
+قرطاسية: "#a78bfa",
+"أقساط مدارس": "#facc15",
+"صيانة سيارة": "#fb923c",
+"صيانة بيت": "#34d399",
   أخرى: "#94a3b8",
 };
 
@@ -156,14 +173,17 @@ function SpendBar({ spent, cap }) {
   );
 }
 function ExpenseDonut({ expenses }) {
-  const grouped = CATS.map((cat) => ({
-    name: cat,
-    value: expenses
-      .filter((e) => e.category === cat)
-      .reduce((sum, e) => sum + Number(e.amount || 0), 0),
-    color: CC[cat],
-  })).filter((x) => x.value > 0);
+  const expenseCats = Array.from(
+  new Set((expenses || []).map((e) => e.category).filter(Boolean))
+);
 
+const grouped = expenseCats.map((cat) => ({
+  name: cat,
+  value: (expenses || [])
+    .filter((e) => e.category === cat)
+    .reduce((sum, e) => sum + Number(e.amount || 0), 0),
+  color: CC[cat] || "#94a3b8",
+})).filter((x) => x.value > 0);
   const total = grouped.reduce((sum, x) => sum + x.value, 0);
 
   if (!grouped.length) {
@@ -264,6 +284,7 @@ function Overview({ state, setState }) {
   const budget = calcBudget(state);
   const [showExpense, setShowExpense] = useState(false);
   const [selectedExpense, setSelectedExpense] = useState(null);
+  const [showCategoryManager, setShowCategoryManager] = useState(false);
 
   const [amount, setAmount] = useState("");
   const [category, setCategory] = useState("طعام");
@@ -291,7 +312,15 @@ const [overBudgetDueDate, setOverBudgetDueDate] = useState("");
   );
 });
   const assetSources = getAssetSources(state);
+  const allExpenseCategories =
+  state.expenseCategories?.items ||
+  [
+    ...(state.expenseCategories?.main || []),
+    ...(state.expenseCategories?.extra || []),
+  ];
 
+const mainExpenseCategories =
+  allExpenseCategories.filter((cat) => cat.pinned || cat.isOther).slice(0, 9);
   const enteredAmount = Number(amount || 0);
 const expectedOverBudget = Math.max(
   0,
@@ -502,7 +531,41 @@ setOverBudgetDueDate("");
     return next;
   });
 }
+function addExtraExpenseCategory() {
+  const label = window.prompt("أدخل اسم نوع المصروف الجديد");
 
+  if (!label || !label.trim()) return;
+
+  const cleanLabel = label.trim();
+
+  const allCategories = [
+    ...(state.expenseCategories?.main || []),
+    ...(state.expenseCategories?.extra || []),
+  ];
+
+  const exists = allCategories.some((cat) => cat.label === cleanLabel);
+
+  if (exists) {
+    alert("هذا النوع موجود مسبقًا");
+    return;
+  }
+
+  setState((prev) => ({
+    ...prev,
+    expenseCategories: {
+      main: prev.expenseCategories?.main || [],
+      extra: [
+        ...(prev.expenseCategories?.extra || []),
+        {
+          id: `custom_${Date.now()}`,
+          label: cleanLabel,
+          icon: "📌",
+          color: "#94a3b8",
+        },
+      ],
+    },
+  }));
+}
   return (
     <div style={G.scr}>
             <div style={G.card()}>
@@ -794,6 +857,110 @@ onClick={() => setSelectedExpense(e)}    style={{
   </div>
 )}
 
+{showCategoryManager && (
+  <div
+    onClick={(ev) =>
+      ev.target === ev.currentTarget && setShowCategoryManager(false)
+    }
+    style={{
+      position: "fixed",
+      inset: 0,
+      background: "rgba(0,0,0,0.8)",
+      backdropFilter: "blur(8px)",
+      display: "flex",
+      alignItems: "flex-end",
+      justifyContent: "center",
+      zIndex: 540,
+    }}
+  >
+    <div
+      style={{
+        background: "#0c1525",
+        borderRadius: "22px 22px 0 0",
+        border: "1px solid #1e293b",
+        padding: "22px 18px 34px",
+        width: "100%",
+        maxWidth: 440,
+        direction: "rtl",
+      }}
+    >
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          marginBottom: 14,
+        }}
+      >
+        <button
+          onClick={() => setShowCategoryManager(false)}
+          style={{
+            background: "transparent",
+            border: "none",
+            color: "#94a3b8",
+            fontSize: 24,
+            cursor: "pointer",
+          }}
+        >
+          ×
+        </button>
+
+        <div style={{ textAlign: "right" }}>
+          <div style={{ fontSize: 18, fontWeight: 900 }}>
+            إدارة أنواع المصروف
+          </div>
+          <div style={{ fontSize: 11, color: "#64748b" }}>
+            التصنيفات الإضافية
+          </div>
+        </div>
+      </div>
+
+      <div style={G.card()}>
+        {       (state.expenseCategories?.extra || []).length === 0 ? (
+          <div
+            style={{
+              textAlign: "center",
+              color: "#64748b",
+              padding: "18px 0",
+              fontSize: 13,
+            }}
+          >
+            لا توجد أنواع مصروف إضافية بعد
+          </div>
+        ) : (
+          (state.expenseCategories?.extra || []).map((catItem) => (
+            <div key={catItem.id} style={G.row}>
+              <span>{catItem.icon} {catItem.label}</span>
+              <button
+                type="button"
+                onClick={() => {
+                  setCategory(catItem.label);
+                  setShowCategoryManager(false);
+                }}
+                style={G.btn("#1e293b", "#e8c96a", {
+                  padding: "7px 10px",
+                  fontSize: 12,
+                })}
+              >
+                اختيار
+              </button>
+            </div>
+          ))
+        )}
+      </div>
+      <button
+  type="button"
+  onClick={addExtraExpenseCategory}
+  style={G.btn("linear-gradient(135deg,#c9a840,#e8c96a)", "#0f172a", {
+    width: "100%",
+    marginTop: 10,
+  })}
+>
+  + إضافة نوع مصروف
+</button>
+    </div>
+  </div>
+)}
       {showExpense && (
         <div
           onClick={(e) => e.target === e.currentTarget && setShowExpense(false)}
@@ -954,34 +1121,61 @@ onClick={() => setSelectedExpense(e)}    style={{
 )}
 
             <div
-              style={{
-                display: "flex",
-                flexWrap: "wrap",
-                gap: 6,
-                justifyContent: "flex-end",
-                marginBottom: 12,
-              }}
-            >
-              {CATS.map((cat) => (
-                <button
-                  key={cat}
-                  onClick={() => setCategory(cat)}
-                  style={{
-                    padding: "6px 11px",
-                    borderRadius: 99,
-                    border: `1px solid ${
-                      category === cat ? CC[cat] : "#334155"
-                    }`,
-                    background: category === cat ? `${CC[cat]}22` : "transparent",
-                    color: category === cat ? CC[cat] : "#64748b",
-                    cursor: "pointer",
-                    fontSize: 12,
-                    fontFamily: "inherit",
-                  }}
-                >
-                  {cat}
-                </button>
-              ))}
+  style={{
+    display: "grid",
+    gridTemplateColumns: "repeat(4, 1fr)",
+    gap: 12,
+    marginBottom: 18,
+  }}
+>
+              {mainExpenseCategories.slice(0, 9).map((catItem) => {
+  const cat = catItem.label;
+  const active = category === cat;
+
+  return (
+    <button
+      key={cat}
+      type="button"
+      onClick={() => {
+  if (catItem.isOther) {
+    setShowCategoryManager(true);
+    return;
+  }
+
+  setCategory(cat);
+}}
+      style={{
+        minHeight: 82,
+        borderRadius: 16,
+        border: active
+          ? "1px solid #e8c96a"
+          : "1px solid rgba(148,163,184,0.28)",
+        background: active
+          ? "linear-gradient(180deg, rgba(232,201,106,0.18), rgba(15,23,42,0.95))"
+          : "linear-gradient(180deg, rgba(30,41,59,0.95), rgba(15,23,42,0.95))",
+        color: active ? "#e8c96a" : "#cbd5e1",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 8,
+        cursor: "pointer",
+        fontFamily: "inherit",
+        fontWeight: active ? 900 : 700,
+        boxShadow: active
+          ? "0 10px 26px rgba(232,201,106,0.14)"
+          : "none",
+      }}
+    >
+      <span style={{ fontSize: 26, lineHeight: 1 }}>
+        {catItem.icon || CAT_ICONS[cat] || "📌"}
+      </span>
+      <span style={{ fontSize: 12 }}>
+        {cat}
+      </span>
+    </button>
+  );
+})}
             </div>
 
             <label style={{ fontSize: 11, color: "#64748b" }}>طريقة الدفع</label>
