@@ -299,6 +299,7 @@ const [overBudgetAssetKey, setOverBudgetAssetKey] = useState("cash");
 const [overBudgetLiabilityName, setOverBudgetLiabilityName] = useState("تجاوز سقف الصرف");
 const [overBudgetDueDate, setOverBudgetDueDate] = useState("");
 const [isUnusualExpense, setIsUnusualExpense] = useState(false);
+const [showUnusualPicker, setShowUnusualPicker] = useState(false);
 const [unusualFundingMode, setUnusualFundingMode] = useState("asset");
 const [unusualCapAmount, setUnusualCapAmount] = useState("");
 const [unusualAssetKey, setUnusualAssetKey] = useState("cash");
@@ -1204,45 +1205,139 @@ overscrollBehavior: "contain",              border: "1px solid #1e293b",
               placeholder="المبلغ"
               style={{ ...G.inp(), marginBottom: 10, fontSize: 22 }}
             />
-            <div
-  style={{
-    marginBottom: 10,
-    border: isUnusualExpense
-      ? "1px solid rgba(232,201,106,0.55)"
-      : "1px solid rgba(148,163,184,0.18)",
-    background: isUnusualExpense
-      ? "rgba(232,201,106,0.08)"
-      : "rgba(15,23,42,0.45)",
-    borderRadius: 14,
-    padding: 10,
-  }}
->
-  <button
-    type="button"
-    onClick={() => setIsUnusualExpense((v) => !v)}
+          <div style={{ display: "none" }}>
+ 
+{showUnusualPicker && (
+  <div
     style={{
-      width: "100%",
-      border: "none",
-      background: "transparent",
-      color: isUnusualExpense ? "#e8c96a" : "#94a3b8",
-      fontSize: 13,
-      fontWeight: 900,
+      position: "fixed",
+      inset: 0,
+      background: "rgba(0,0,0,0.55)",
+      zIndex: 10000,
       display: "flex",
-      alignItems: "center",
-      justifyContent: "space-between",
-      cursor: "pointer",
-      fontFamily: "inherit",
-      padding: 0,
+      alignItems: "flex-end",
+      justifyContent: "center",
+      padding: 16,
     }}
+    onClick={() => setShowUnusualPicker(false)}
   >
-    <span>⚠️ غير اعتيادي</span>
-    <span style={{ fontSize: 11 }}>
-      {isUnusualExpense ? "مفعّل" : "اختياري"}
-    </span>
-  </button>
+    <div
+      onClick={(e) => e.stopPropagation()}
+      style={{
+        width: "100%",
+        maxWidth: 420,
+        background: "#0f172a",
+        border: "1px solid rgba(148,163,184,0.22)",
+        borderRadius: "20px 20px 0 0",
+        padding: 16,
+        boxShadow: "0 -18px 40px rgba(0,0,0,0.35)",
+        direction: "rtl",
+      }}
+    >
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          marginBottom: 14,
+        }}
+      >
+        <div style={{ fontSize: 15, fontWeight: 900, color: "#f8fafc" }}>
+          ⚠️ تمويل المصروف
+        </div>
 
-  {isUnusualExpense && (
-    <div style={{ marginTop: 10 }}>
+        <button
+          type="button"
+          onClick={() => setShowUnusualPicker(false)}
+          style={{
+            width: 34,
+            height: 34,
+            borderRadius: 12,
+            border: "none",
+            background: "#1e293b",
+            color: "#cbd5e1",
+            cursor: "pointer",
+            fontSize: 18,
+          }}
+        >
+          ×
+        </button>
+      </div>
+
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "1fr 1fr 1fr",
+          gap: 10,
+        }}
+      >
+        {[
+          ["asset", "🏦", "من أصل"],
+          ["liability", "🧾", "التزام"],
+          ["mix", "🔀", "مكس"],
+        ].map(([value, icon, label]) => (
+          <button
+            key={value}
+            type="button"
+            onClick={() => {
+              setIsUnusualExpense(true);
+              setUnusualFundingMode(value);
+              setShowUnusualPicker(false);
+            }}
+            style={{
+              minHeight: 76,
+              borderRadius: 16,
+              border:
+                unusualFundingMode === value
+                  ? "1px solid #e8c96a"
+                  : "1px solid rgba(148,163,184,0.24)",
+              background:
+                unusualFundingMode === value
+                  ? "rgba(232,201,106,0.12)"
+                  : "#1e293b",
+              color: unusualFundingMode === value ? "#e8c96a" : "#f8fafc",
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 6,
+              cursor: "pointer",
+              fontFamily: "inherit",
+              fontWeight: 900,
+            }}
+          >
+            <span style={{ fontSize: 24, lineHeight: 1 }}>{icon}</span>
+            <span style={{ fontSize: 12 }}>{label}</span>
+          </button>
+        ))}
+      </div>
+
+      {isUnusualExpense && (
+        <button
+          type="button"
+          onClick={() => {
+            setIsUnusualExpense(false);
+            setShowUnusualPicker(false);
+          }}
+          style={{
+            width: "100%",
+            marginTop: 12,
+            border: "none",
+            background: "transparent",
+            color: "#94a3b8",
+            fontSize: 12,
+            cursor: "pointer",
+            fontFamily: "inherit",
+          }}
+        >
+          إلغاء التحديد
+        </button>
+      )}
+    </div>
+  </div>
+)}
+{false && isUnusualExpense && (
+      <div style={{ marginTop: 10 }}>
       <div
         style={{
           fontSize: 11,
@@ -1540,13 +1635,49 @@ fontWeight: active ? 900 : 700,
             <label style={{ fontSize: 11, color: "#64748b" }}>طريقة الدفع</label>
             <select
               value={paymentMethod}
-              onChange={(e) => setPaymentMethod(e.target.value)}
-              style={{ ...G.inp(), marginBottom: 10 }}
+onChange={(e) => {
+  const value = e.target.value;
+  setPaymentMethod(value);
+
+  if (value === "emergency") {
+    setShowUnusualPicker(true);
+    return;
+  }
+
+  setIsUnusualExpense(false);
+  setShowUnusualPicker(false);
+}}
+
+style={{ ...G.inp(), marginBottom: 10 }}
             >
               <option value="cash">نقدا</option>
               <option value="card">بطاقة</option>
               <option value="liability">دين / التزام جديد</option>
+              <option value="emergency">مصروف طارئ</option>
             </select>
+            {paymentMethod === "emergency" && isUnusualExpense && (
+  <div
+    style={{
+      marginTop: -4,
+      marginBottom: 10,
+      padding: "8px 10px",
+      borderRadius: 12,
+      background: "rgba(232,201,106,0.08)",
+      color: "#e8c96a",
+      fontSize: 12,
+      fontWeight: 800,
+      textAlign: "right",
+      border: "1px solid rgba(232,201,106,0.22)",
+    }}
+  >
+    ⚠️ مصروف طارئ ·{" "}
+    {unusualFundingMode === "asset"
+      ? "من أصل"
+      : unusualFundingMode === "liability"
+      ? "التزام"
+      : "مكس"}
+  </div>
+)}
 
             {paymentMethod === "card" && (
               <select
