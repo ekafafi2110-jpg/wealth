@@ -343,7 +343,7 @@ const allExpenseCategories = [
 
 const pinnedExpenseCategories = allExpenseCategories
   .filter((cat) => cat.pinned && !cat.isOther)
-  .slice(0, 9);
+  .slice(0, 12);
 
 const otherExpenseCategory =
   allExpenseCategories.find((cat) => cat.isOther) || {
@@ -614,26 +614,40 @@ function addExtraExpenseCategory() {
 } 
 function toggleExpenseCategoryPinned(catId) {
   setState((prev) => {
-    const items =
+    const savedItems =
       prev.expenseCategories?.items ||
       [
         ...(prev.expenseCategories?.main || []),
         ...(prev.expenseCategories?.extra || []),
       ];
 
-    const target = items.find((cat) => cat.id === catId);
+    const mergedItems = [
+      ...defaultExpenseCategories.map((base) => {
+        const saved = savedItems.find((item) => item.id === base.id);
+        return saved ? { ...base, ...saved } : base;
+      }),
+      ...savedItems.filter(
+        (saved) =>
+          !defaultExpenseCategories.some((base) => base.id === saved.id)
+      ),
+    ];
+
+    const target = mergedItems.find((cat) => cat.id === catId);
     if (!target) return prev;
 
-const pinnedCount = items.filter((cat) => cat.pinned && !cat.isOther).length;
-    if (!target.pinned && pinnedCount >= 9) {
-      alert("الحد الأقصى للشاشة الرئيسية هو 9 أنواع");
+    const pinnedCount = mergedItems.filter(
+      (cat) => cat.pinned && !cat.isOther
+    ).length;
+
+    if (!target.pinned && pinnedCount >= 12) {
+      alert("الحد الأقصى للشاشة الرئيسية هو 12 نوعًا");
       return prev;
     }
 
     return {
       ...prev,
       expenseCategories: {
-        items: items.map((cat) =>
+        items: mergedItems.map((cat) =>
           cat.id === catId ? { ...cat, pinned: !cat.pinned } : cat
         ),
       },
@@ -1003,15 +1017,26 @@ onClick={() => setSelectedExpense(e)}    style={{
   }}
 >
   ×
-</button>
-        <div style={{ textAlign: "right" }}>
-          <div style={{ fontSize: 18, fontWeight: 900 }}>
-            إدارة أنواع المصروف
-          </div>
-          <div style={{ fontSize: 11, color: "#64748b" }}>
-            التصنيفات الإضافية
-          </div>
-        </div>
+  </button>
+<div
+  style={{
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+    marginBottom: 14,
+  }}
+>
+  
+  <div style={{ textAlign: "right", flex: 1 }}>
+    <div style={{ fontSize: 18, fontWeight: 900 }}>
+      إدارة أنواع المصروف
+    </div>
+    <div style={{ fontSize: 11, color: "#64748b" }}>
+      التصنيفات الإضافية
+    </div>
+  </div>
+</div>
       </div>
 
       <div style={G.card()}>
@@ -1250,7 +1275,7 @@ onClick={() => setSelectedExpense(e)}    style={{
     marginBottom: 18,
   }}
 >
-              {mainExpenseCategories.slice(0, 9).map((catItem) => {
+              {mainExpenseCategories.slice(0, 12).map((catItem) => {
   const cat = catItem.label;
   const active = category === cat;
 
@@ -1267,55 +1292,62 @@ onClick={() => setSelectedExpense(e)}    style={{
   setCategory(cat);
 }}
       style={{
-        minHeight: 82,
-        borderRadius: 16,
-        border: active
-          ? "1px solid #e8c96a"
-          : "1px solid rgba(148,163,184,0.28)",
-        background: active
-          ? "linear-gradient(180deg, rgba(232,201,106,0.18), rgba(15,23,42,0.95))"
-          : "linear-gradient(180deg, rgba(30,41,59,0.95), rgba(15,23,42,0.95))",
-        color: active ? "#e8c96a" : "#cbd5e1",
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        justifyContent: "center",
-        gap: 8,
-        cursor: "pointer",
-        fontFamily: "inherit",
-        fontWeight: active ? 900 : 700,
+        minHeight: catItem.isOther ? 56 : 82,
+width: catItem.isOther ? 56 : "auto",
+borderRadius: catItem.isOther ? 18 : 16,
+border: active
+  ? "1px solid #e8c96a"
+  : "1px solid rgba(148,163,184,0.28)",
+background: catItem.isOther
+  ? "linear-gradient(180deg, rgba(15,23,42,0.95), rgba(30,41,59,0.95))"
+  : active
+  ? "linear-gradient(180deg, rgba(232,201,106,0.18), rgba(15,23,42,0.95))"
+  : "linear-gradient(180deg, rgba(30,41,59,0.95), rgba(15,23,42,0.95))",
+color: active ? "#e8c96a" : "#cbd5e1",
+display: "flex",
+flexDirection: "column",
+alignItems: "center",
+justifyContent: "center",
+gap: catItem.isOther ? 2 : 8,
+cursor: "pointer",
+fontFamily: "inherit",
+fontWeight: active ? 900 : 700,
         boxShadow: active
           ? "0 10px 26px rgba(232,201,106,0.14)"
           : "none",
       }}
     >
       <span style={{ fontSize: 26, lineHeight: 1 }}>
-        {catItem.icon || CAT_ICONS[cat] || "📌"}
-      </span>
+{catItem.isOther ? "⚙️" : catItem.icon || CAT_ICONS[cat] || "📌"}      </span>
       <span style={{ fontSize: 12 }}>
-        {cat}
-      </span>
+{catItem.isOther ? "إدارة" : cat}      </span>
     </button>
   );
 })}
             </div>
-            <button
+          <button
   type="button"
   onClick={() => setShowCategoryManager(true)}
+  title="إدارة أنواع المصروف"
   style={{
-    width: "100%",
-    minHeight: 44,
-    borderRadius: 14,
-    border: "1px solid rgba(232,201,106,0.45)",
-    background: "rgba(30,41,59,0.85)",
-    color: "#e8c96a",
-    fontFamily: "inherit",
+alignSelf: "flex-end",    width: 38,
+    height: 38,
+    padding: 0,
+    borderRadius: 12,
+    border: "none",
+    background: "transparent",
+    color: "#94a3b8",
+    fontSize: 19,
     fontWeight: 900,
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
     cursor: "pointer",
-    marginBottom: 14,
+    marginTop: 10,
+    marginBottom: 6,
   }}
 >
-  {otherExpenseCategory.icon} إدارة أنواع المصروف
+  ⚙️
 </button>
 
             <label style={{ fontSize: 11, color: "#64748b" }}>طريقة الدفع</label>
