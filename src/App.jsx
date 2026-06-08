@@ -958,21 +958,30 @@ onClick={() => setSelectedExpense(e)}    style={{
   >
     <div
       style={{
+        position: "relative",
         background: "#0c1525",
         borderRadius: "22px 22px 0 0",
         border: "1px solid #1e293b",
         padding: "22px 18px 34px",
         width: "100%",
         maxWidth: 440,
+        maxHeight: "82vh",
+        overflowY: "auto",
         direction: "rtl",
       }}
     >
       <div
-        style={{
+       style={{
+          position: "sticky",
+          top: 0,
+          zIndex: 20,
+          background: "#0c1525",
           display: "flex",
           justifyContent: "space-between",
           alignItems: "center",
           marginBottom: 14,
+          paddingBottom: 12,
+          borderBottom: "1px solid rgba(148,163,184,0.12)",
         }}
       >
        <button
