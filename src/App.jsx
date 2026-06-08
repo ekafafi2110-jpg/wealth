@@ -298,6 +298,12 @@ function Overview({ state, setState }) {
 const [overBudgetAssetKey, setOverBudgetAssetKey] = useState("cash");
 const [overBudgetLiabilityName, setOverBudgetLiabilityName] = useState("تجاوز سقف الصرف");
 const [overBudgetDueDate, setOverBudgetDueDate] = useState("");
+const [isUnusualExpense, setIsUnusualExpense] = useState(false);
+const [unusualFundingMode, setUnusualFundingMode] = useState("asset");
+const [unusualCapAmount, setUnusualCapAmount] = useState("");
+const [unusualAssetKey, setUnusualAssetKey] = useState("cash");
+const [unusualLiabilityName, setUnusualLiabilityName] = useState("مصروف غير اعتيادي");
+const [unusualDueDate, setUnusualDueDate] = useState("");
   const cards = state.currentLiabilities.filter((x) => x.type === "card");
   const recent = [...state.expenses].slice(-5).reverse();
   const dueCurrentLiabilities = (state.currentLiabilities || []).filter((l) => {
@@ -1158,8 +1164,10 @@ flexDirection: "column",
           <div
             style={{
               background: "#0c1525",
-              borderRadius: "22px 22px 0 0",
-              border: "1px solid #1e293b",
+padding: "18px 18px 22px",
+maxHeight: "92vh",
+overflowY: "auto",
+overscrollBehavior: "contain",              border: "1px solid #1e293b",
               padding: "22px 18px 44px",
               width: "100%",
               maxWidth: 440,
@@ -1196,6 +1204,143 @@ flexDirection: "column",
               placeholder="المبلغ"
               style={{ ...G.inp(), marginBottom: 10, fontSize: 22 }}
             />
+            <div
+  style={{
+    marginBottom: 10,
+    border: isUnusualExpense
+      ? "1px solid rgba(232,201,106,0.55)"
+      : "1px solid rgba(148,163,184,0.18)",
+    background: isUnusualExpense
+      ? "rgba(232,201,106,0.08)"
+      : "rgba(15,23,42,0.45)",
+    borderRadius: 14,
+    padding: 10,
+  }}
+>
+  <button
+    type="button"
+    onClick={() => setIsUnusualExpense((v) => !v)}
+    style={{
+      width: "100%",
+      border: "none",
+      background: "transparent",
+      color: isUnusualExpense ? "#e8c96a" : "#94a3b8",
+      fontSize: 13,
+      fontWeight: 900,
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "space-between",
+      cursor: "pointer",
+      fontFamily: "inherit",
+      padding: 0,
+    }}
+  >
+    <span>⚠️ غير اعتيادي</span>
+    <span style={{ fontSize: 11 }}>
+      {isUnusualExpense ? "مفعّل" : "اختياري"}
+    </span>
+  </button>
+
+  {isUnusualExpense && (
+    <div style={{ marginTop: 10 }}>
+      <div
+        style={{
+          fontSize: 11,
+          color: "#cbd5e1",
+          marginBottom: 8,
+          textAlign: "right",
+        }}
+      >
+        توزيع المصروف غير الاعتيادي
+      </div>
+
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "1fr 1fr",
+          gap: 8,
+          marginBottom: 10,
+        }}
+      >
+        {[
+          ["asset", "كله من أصل"],
+          ["liability", "كله التزام"],
+          ["cap_asset", "جزء من السقف + أصل"],
+          ["cap_liability", "جزء من السقف + التزام"],
+        ].map(([value, label]) => (
+          <button
+            key={value}
+            type="button"
+            onClick={() => setUnusualFundingMode(value)}
+            style={{
+              border:
+                unusualFundingMode === value
+                  ? "1px solid #e8c96a"
+                  : "1px solid rgba(148,163,184,0.25)",
+              background:
+                unusualFundingMode === value
+                  ? "rgba(232,201,106,0.14)"
+                  : "#1e293b",
+              color: unusualFundingMode === value ? "#e8c96a" : "#f8fafc",
+              borderRadius: 12,
+              padding: "9px 8px",
+              fontSize: 11,
+              fontWeight: 800,
+              cursor: "pointer",
+              fontFamily: "inherit",
+            }}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {(unusualFundingMode === "cap_asset" ||
+        unusualFundingMode === "cap_liability") && (
+        <input
+          type="number"
+          value={unusualCapAmount}
+          onChange={(e) => setUnusualCapAmount(e.target.value)}
+          placeholder="المبلغ من السقف"
+          style={{ ...G.inp(), marginBottom: 8 }}
+        />
+      )}
+
+      {(unusualFundingMode === "asset" ||
+        unusualFundingMode === "cap_asset") && (
+        <select
+          value={unusualAssetKey}
+          onChange={(e) => setUnusualAssetKey(e.target.value)}
+          style={{ ...G.inp(), marginBottom: 8 }}
+        >
+          {assetSources.map((asset) => (
+            <option key={asset.key} value={asset.key}>
+              {asset.label}
+            </option>
+          ))}
+        </select>
+      )}
+
+      {(unusualFundingMode === "liability" ||
+        unusualFundingMode === "cap_liability") && (
+        <>
+          <input
+            value={unusualLiabilityName}
+            onChange={(e) => setUnusualLiabilityName(e.target.value)}
+            placeholder="اسم الالتزام"
+            style={{ ...G.inp(), marginBottom: 8 }}
+          />
+          <input
+            type="date"
+            value={unusualDueDate}
+            onChange={(e) => setUnusualDueDate(e.target.value)}
+            style={{ ...G.inp(), marginBottom: 0 }}
+          />
+        </>
+      )}
+    </div>
+  )}
+</div>
 {expectedOverBudget > 0 && (
   <div
     style={{
@@ -1303,8 +1448,8 @@ flexDirection: "column",
             <div
   style={{
     display: "grid",
-    gridTemplateColumns: "repeat(4, 1fr)",
-    gap: 12,
+    gridTemplateColumns: "repeat(5, 1fr)",
+    gap: 8,
     marginBottom: 18,
   }}
 >
@@ -1325,9 +1470,9 @@ flexDirection: "column",
   setCategory(cat);
 }}
       style={{
-        minHeight: catItem.isOther ? 56 : 82,
-width: catItem.isOther ? 56 : "auto",
-borderRadius: catItem.isOther ? 18 : 16,
+        minHeight: catItem.isOther ? 34 : 56,
+width: catItem.isOther ? 34 : "auto",
+borderRadius: catItem.isOther ? 12 : 12,
 border: active
   ? "1px solid #e8c96a"
   : "1px solid rgba(148,163,184,0.28)",
@@ -1341,7 +1486,7 @@ display: "flex",
 flexDirection: "column",
 alignItems: "center",
 justifyContent: "center",
-gap: catItem.isOther ? 2 : 8,
+gap: catItem.isOther ? 0 : 3,
 cursor: "pointer",
 fontFamily: "inherit",
 fontWeight: active ? 900 : 700,
@@ -1350,9 +1495,9 @@ fontWeight: active ? 900 : 700,
           : "none",
       }}
     >
-      <span style={{ fontSize: 26, lineHeight: 1 }}>
+      <span style={{ fontSize: 16, lineHeight: 1 }}>
 {catItem.isOther ? "⚙️" : catItem.icon || CAT_ICONS[cat] || "📌"}      </span>
-      <span style={{ fontSize: 12 }}>
+      <span style={{ fontSize: 10 }}>
 {catItem.isOther ? "إدارة" : cat}      </span>
     </button>
   );
