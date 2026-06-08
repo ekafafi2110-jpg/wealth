@@ -566,52 +566,76 @@ setOverBudgetDueDate("");
     return next;
   });
 }
+function getExpenseCategoryIconByName(name) {
+  const text = String(name || "").trim().toLowerCase();
+
+  const rules = [
+    { words: ["مدرس", "مدارس", "تعليم", "دراسة", "جامعة", "روضة"], icon: "🏫" },
+    { words: ["سيارة", "سياره", "صيانة سيارة", "كراج", "ميكانيك"], icon: "🚗" },
+    { words: ["بيت", "منزل", "شقة", "ايجار", "إيجار", "صيانة بيت"], icon: "🏠" },
+    { words: ["مطعم", "مطاعم", "اكل", "أكل", "غداء", "عشاء", "فطور"], icon: "🍽️" },
+    { words: ["قهوة", "كوفي", "كافيه", "شاي"], icon: "☕" },
+    { words: ["ملابس", "لبس", "حذاء", "أحذية", "احذية"], icon: "👕" },
+    { words: ["هدية", "هدايا", "مناسبة", "عيد"], icon: "🎁" },
+    { words: ["دواء", "علاج", "طبيب", "مستشفى", "صيدلية", "أسنان", "اسنان"], icon: "💊" },
+    { words: ["بنزين", "وقود", "ديزل"], icon: "⛽" },
+    { words: ["فاتورة", "فواتير", "كهرباء", "ماء", "انترنت", "جوال", "هاتف"], icon: "🧾" },
+    { words: ["سفر", "رحلة", "فندق", "طيران", "تذاكر"], icon: "✈️" },
+    { words: ["ترفيه", "سينما", "لعب", "العاب", "ألعاب"], icon: "🎮" },
+    { words: ["مواصلات", "تاكسي", "اوبر", "أوبر", "كريم", "باص"], icon: "🚕" },
+    { words: ["تسوق", "شراء", "سوق", "طلبات"], icon: "🛒" },
+    { words: ["اشتراك", "نتفلكس", "شاهد", "تطبيق", "برنامج"], icon: "📱" },
+    { words: ["رياضة", "نادي", "جيم", "سباحة"], icon: "🏋️" },
+    { words: ["حلاق", "صالون", "تجميل"], icon: "💈" },
+    { words: ["تبرع", "صدقة", "زكاة"], icon: "🤲" },
+  ];
+
+  const matchedRule = rules.find((rule) =>
+    rule.words.some((word) => text.includes(word))
+  );
+
+  return matchedRule?.icon || "📌";
+}
+
 function addExtraExpenseCategory() {
-  const label = window.prompt("أدخل اسم نوع المصروف الجديد");
+  const label = prompt("اكتب اسم نوع المصروف الجديد");
+  const cleanLabel = String(label || "").trim();
 
-  if (!label || !label.trim()) return;
-
-  const cleanLabel = label.trim();
-
-  const currentItems =
-    state.expenseCategories?.items ||
-    [
-      ...(state.expenseCategories?.main || []),
-      ...(state.expenseCategories?.extra || []),
-    ];
-
-  const exists = currentItems.some((cat) => cat.label === cleanLabel);
-
-  if (exists) {
-    alert("هذا النوع موجود مسبقًا");
-    return;
-  }
+  if (!cleanLabel) return;
 
   setState((prev) => {
-    const prevItems =
+    const items =
       prev.expenseCategories?.items ||
       [
         ...(prev.expenseCategories?.main || []),
         ...(prev.expenseCategories?.extra || []),
       ];
 
+    const exists = items.some(
+      (item) => String(item.label || "").trim() === cleanLabel
+    );
+
+    if (exists) {
+      alert("هذا النوع موجود مسبقًا");
+      return prev;
+    }
+
+    const newCategory = {
+      id: `extra-${Date.now()}`,
+      label: cleanLabel,
+      icon: getExpenseCategoryIconByName(cleanLabel),
+      color: "#94a3b8",
+      pinned: false,
+    };
+
     return {
       ...prev,
       expenseCategories: {
-        items: [
-          ...prevItems,
-          {
-            id: `custom_${Date.now()}`,
-            label: cleanLabel,
-            icon: "📌",
-            color: "#94a3b8",
-            pinned: false,
-          },
-        ],
+        items: [...items, newCategory],
       },
     };
   });
-} 
+}
 function toggleExpenseCategoryPinned(catId) {
   setState((prev) => {
     const savedItems =
@@ -979,9 +1003,12 @@ onClick={() => setSelectedExpense(e)}    style={{
         padding: "22px 18px 34px",
         width: "100%",
         maxWidth: 440,
-        maxHeight: "82vh",
-        overflowY: "auto",
-        direction: "rtl",
+        height: "82vh",
+maxHeight: "82vh",
+overflow: "hidden",
+direction: "rtl",
+display: "flex",
+flexDirection: "column",
       }}
     >
       <div
@@ -1039,8 +1066,14 @@ onClick={() => setSelectedExpense(e)}    style={{
 </div>
       </div>
 
-      <div style={G.card()}>
-  {allExpenseCategories.filter((cat) => !cat.isOther).length === 0 ? (
+<div
+  style={{
+    ...G.card(),
+    flex: 1,
+    overflowY: "auto",
+    marginBottom: 14,
+  }}
+>  {allExpenseCategories.filter((cat) => !cat.isOther).length === 0 ? (
     <div
       style={{
         textAlign: "center",
@@ -1325,30 +1358,39 @@ fontWeight: active ? 900 : 700,
   );
 })}
             </div>
-          <button
-  type="button"
-  onClick={() => setShowCategoryManager(true)}
-  title="إدارة أنواع المصروف"
+          <div
   style={{
-alignSelf: "flex-end",    width: 38,
-    height: 38,
-    padding: 0,
-    borderRadius: 12,
-    border: "none",
-    background: "transparent",
-    color: "#94a3b8",
-    fontSize: 19,
-    fontWeight: 900,
-    display: "inline-flex",
-    alignItems: "center",
-    justifyContent: "center",
-    cursor: "pointer",
-    marginTop: 10,
-    marginBottom: 6,
+    width: "100%",
+    display: "flex",
+    justifyContent: "flex-start",
+    direction: "ltr",
+    marginTop: 6,
+    marginBottom: 2,
   }}
 >
-  ⚙️
-</button>
+  <button
+    type="button"
+    onClick={() => setShowCategoryManager(true)}
+    title="إدارة أنواع المصروف"
+    style={{
+      width: 38,
+      height: 38,
+      padding: 0,
+      borderRadius: 12,
+      border: "none",
+      background: "transparent",
+      color: "#94a3b8",
+      fontSize: 19,
+      fontWeight: 900,
+      display: "inline-flex",
+      alignItems: "center",
+      justifyContent: "center",
+      cursor: "pointer",
+    }}
+  >
+    ⚙️
+  </button>
+</div>
 
             <label style={{ fontSize: 11, color: "#64748b" }}>طريقة الدفع</label>
             <select
