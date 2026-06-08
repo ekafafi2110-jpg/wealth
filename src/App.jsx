@@ -1637,17 +1637,19 @@ fontWeight: active ? 900 : 700,
               value={paymentMethod}
 onChange={(e) => {
   const value = e.target.value;
-  setPaymentMethod(value);
 
   if (value === "emergency") {
+    setIsUnusualExpense(false);
+    setUnusualFundingMode("");
     setShowUnusualPicker(true);
     return;
   }
 
+  setPaymentMethod(value);
   setIsUnusualExpense(false);
+  setUnusualFundingMode("");
   setShowUnusualPicker(false);
 }}
-
 style={{ ...G.inp(), marginBottom: 10 }}
             >
               <option value="cash">نقدا</option>
