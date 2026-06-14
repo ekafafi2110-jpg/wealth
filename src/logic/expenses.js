@@ -55,22 +55,26 @@ const today = now.slice(0, 10);
     }
   }
 
-  const overBudget = Math.max(0, amount - budgetCovered);
+  const fundedOutsideCap = Math.max(0, amount - budgetCovered);
+  const overBudget = isEmergency ? 0 : fundedOutsideCap;
   const isOverBudget = overBudget > 0;
   const emergencyAssetAmount = isEmergency
     ? emergencyMode === "asset"
       ? amount
       : emergencyMode === "mix" && emergencyRemainderSource === "asset"
-      ? overBudget
+      ? fundedOutsideCap
       : 0
     : 0;
   const emergencyLiabilityAmount = isEmergency
     ? emergencyMode === "liability"
       ? amount
       : emergencyMode === "mix" && emergencyRemainderSource === "liability"
-      ? overBudget
+      ? fundedOutsideCap
       : 0
     : 0;
+  const expenseAmount = isEmergency
+    ? Math.max(0, amount - emergencyLiabilityAmount)
+    : amount;
 
   if (isEmergency && emergencyAssetAmount > 0) {
     const deduction = deductFromAsset(
@@ -96,7 +100,8 @@ const today = now.slice(0, 10);
 
   const expense = {
     id: Date.now(),
-    amount,
+    amount: expenseAmount,
+    originalAmount: amount,
     category: expenseData.category,
     paymentMethod: expenseData.paymentMethod,
     cardId: expenseData.cardId || null,
@@ -110,6 +115,7 @@ createdAt: new Date().toISOString(),
       ? {
           mode: emergencyMode,
           capAmount: budgetCovered,
+          outsideCapAmount: fundedOutsideCap,
           remainderSource: emergencyRemainderSource,
           assetKey: emergencyAssetAmount > 0 ? emergencyFunding.assetKey || "cash" : "",
           assetAmount: emergencyAssetAmount,
@@ -158,8 +164,9 @@ createdAt: new Date().toISOString(),
       (Number(card.payableBuffer || 0) + budgetCovered).toFixed(2)
     );
 
-    card.uncoveredDebt = Number(
-      (Number(card.uncoveredDebt || 0) + overBudget).toFixed(2)
+    card.uncoveredDebt = Math.max(
+      0,
+      Number((Number(card.balance || 0) - Number(card.payableBuffer || 0)).toFixed(2))
     );
 
     card.status = "pending";
@@ -202,7 +209,7 @@ createdAt: now,
     amount: emergencyLiabilityAmount,
     balance: emergencyLiabilityAmount,
     payableBuffer: 0,
-    uncoveredDebt: emergencyLiabilityAmount,
+    uncoveredDebt: 0,
     dueDate: emergencyFunding.dueDate || "",
     dueDay: emergencyFunding.dueDate
       ? new Date(emergencyFunding.dueDate).getDate()

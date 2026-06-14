@@ -89,6 +89,9 @@ const G = {
     border: `1px solid ${b || "#1e293b"}`,
     padding: "14px 16px",
     marginBottom: 12,
+    color: "#f8fafc",
+    fontFamily: "inherit",
+    fontSize: 14,
   }),
   row: {
     display: "flex",
@@ -96,12 +99,16 @@ const G = {
     alignItems: "center",
     padding: "10px 0",
     borderBottom: "1px solid #1a2540",
+    color: "#f8fafc",
+    fontSize: 13,
   },
   lrow: {
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
     padding: "10px 0",
+    color: "#f8fafc",
+    fontSize: 13,
   },
   btn: (bg, col = "#fff", ex = {}) => ({
     background: bg,
@@ -323,7 +330,10 @@ function rebalanceCurrentLiabilityCoverage(state) {
       item.type === "card" ? item.balance || 0 : item.balance || item.amount || 0
     );
     const covered = Math.max(0, Number(item.payableBuffer || 0));
-    const uncovered = Math.max(0, Number(item.uncoveredDebt || 0));
+    const uncovered = Math.min(
+      Math.max(0, Number(item.uncoveredDebt || 0)),
+      Math.max(0, balance - covered)
+    );
     const coverable = Math.max(0, Math.min(uncovered, balance - covered));
     const moveAmount = Math.min(availableCap, coverable);
 
@@ -344,7 +354,7 @@ function rebalanceCurrentLiabilityCoverage(state) {
   return next;
 }
 
-function Overview({ state, setState, onOpenReports }) {
+function Overview({ state, setState, onOpenReports, onOpenDueLiabilities }) {
   const budget = calcBudget(state);
   const [showExpense, setShowExpense] = useState(false);
   const [selectedExpense, setSelectedExpense] = useState(null);
@@ -429,6 +439,16 @@ const otherExpenseCategory =
 
 const mainExpenseCategories = pinnedExpenseCategories;
   const enteredAmount = Number(amount || 0);
+  const selectedExpenseTotal = Number(
+    selectedExpense?.originalAmount ?? selectedExpense?.amount ?? 0
+  );
+  const selectedExpenseRecorded = Number(selectedExpense?.amount || 0);
+  const selectedExpenseDebt = Number(
+    selectedExpense?.emergencyFunding?.liabilityAmount || 0
+  );
+  const selectedExpenseAsset = Number(
+    selectedExpense?.emergencyFunding?.assetAmount || 0
+  );
 const expectedOverBudget = paymentMethod === "emergency" ? 0 : Math.max(
   0,
   enteredAmount - Number(budget.remainingCap || 0)
@@ -673,7 +693,12 @@ setUnusualDueDate("");
         );
         card.uncoveredDebt = Math.max(
           0,
-          Number((Number(card.uncoveredDebt || 0) - overBudget).toFixed(2))
+          Number(
+            Math.min(
+              Number(card.uncoveredDebt || 0) - overBudget,
+              Number(card.balance || 0) - Number(card.payableBuffer || 0)
+            ).toFixed(2)
+          )
         );
 
         if (Number(card.balance || 0) <= 0) {
@@ -836,19 +861,31 @@ function toggleExpenseCategoryPinned(catId) {
     <div style={G.scr}>
             <div style={G.card()}>
               {dueCurrentLiabilities.length > 0 && (
-  <div
+  <button
+    type="button"
+    onClick={onOpenDueLiabilities}
     style={{
-      background: "#3b0d0d",
-      border: "1px solid #ef4444",
+      background: "rgba(239,68,68,0.10)",
+      border: "1px solid rgba(248,113,113,0.35)",
       color: "#fecaca",
-      padding: 12,
-      borderRadius: 12,
-      marginBottom: 14,
+      padding: "7px 10px",
+      borderRadius: 999,
+      marginBottom: 12,
       textAlign: "right",
+      fontSize: 0,
+      fontWeight: 800,
+      cursor: "pointer",
+      fontFamily: "inherit",
+      display: "inline-flex",
+      alignItems: "center",
+      gap: 6,
+      maxWidth: "100%",
     }}
   >
+    <span style={{ fontSize: 11 }}>!</span>
+    <span style={{ fontSize: 11 }}>{dueCurrentLiabilities.length} مستحق هذا الشهر</span>
     ⚠️ لديك {dueCurrentLiabilities.length} التزام جاري مستحق هذا الشهر
-  </div>
+  </button>
 )}
         <div style={{ textAlign: "right", marginBottom: 12, color: "#94a3b8" }}>
           🎯 سقف الصرف الشهري
@@ -940,6 +977,40 @@ function toggleExpenseCategoryPinned(catId) {
       )}
 
       <div style={G.card()}>
+        {selectedExpenseTotal !== selectedExpenseRecorded && (
+          <div
+            style={{
+              background: "#111827",
+              border: "1px solid rgba(232,201,106,0.22)",
+              borderRadius: 12,
+              padding: 10,
+              marginBottom: 10,
+            }}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+              <span style={{ color: "#94a3b8", fontSize: 11 }}>إجمالي المصروف</span>
+              <b>{selectedExpenseTotal.toFixed(2)} د.أ</b>
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+              <span style={{ color: "#94a3b8", fontSize: 11 }}>من سقف الصرف</span>
+              <b style={{ color: "#86efac" }}>
+                {Number(selectedExpense.budgetCovered || 0).toFixed(2)} د.أ
+              </b>
+            </div>
+            {selectedExpenseDebt > 0 && (
+              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+                <span style={{ color: "#94a3b8", fontSize: 11 }}>سجل كدين</span>
+                <b style={{ color: "#fecaca" }}>{selectedExpenseDebt.toFixed(2)} د.أ</b>
+              </div>
+            )}
+            {selectedExpenseAsset > 0 && (
+              <div style={{ display: "flex", justifyContent: "space-between" }}>
+                <span style={{ color: "#94a3b8", fontSize: 11 }}>ممَول من أصل</span>
+                <b style={{ color: "#e8c96a" }}>{selectedExpenseAsset.toFixed(2)} د.أ</b>
+              </div>
+            )}
+          </div>
+        )}
         <div style={{ textAlign: "right", marginBottom: 12, color: "#94a3b8" }}>
           📊 توزيع المصاريف
         </div>
@@ -1095,6 +1166,40 @@ onClick={() => setSelectedExpense(e)}    style={{
       </div>
 
       <div style={G.card()}>
+        {selectedExpenseTotal !== selectedExpenseRecorded && (
+          <div
+            style={{
+              background: "#111827",
+              border: "1px solid rgba(232,201,106,0.22)",
+              borderRadius: 12,
+              padding: 10,
+              marginBottom: 10,
+            }}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+              <span style={{ color: "#94a3b8", fontSize: 11 }}>إجمالي المصروف</span>
+              <b>{selectedExpenseTotal.toFixed(2)} د.أ</b>
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+              <span style={{ color: "#94a3b8", fontSize: 11 }}>من سقف الصرف</span>
+              <b style={{ color: "#86efac" }}>
+                {Number(selectedExpense.budgetCovered || 0).toFixed(2)} د.أ
+              </b>
+            </div>
+            {selectedExpenseDebt > 0 && (
+              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+                <span style={{ color: "#94a3b8", fontSize: 11 }}>سجل كدين</span>
+                <b style={{ color: "#fecaca" }}>{selectedExpenseDebt.toFixed(2)} د.أ</b>
+              </div>
+            )}
+            {selectedExpenseAsset > 0 && (
+              <div style={{ display: "flex", justifyContent: "space-between" }}>
+                <span style={{ color: "#94a3b8", fontSize: 11 }}>ممَول من أصل</span>
+                <b style={{ color: "#e8c96a" }}>{selectedExpenseAsset.toFixed(2)} د.أ</b>
+              </div>
+            )}
+          </div>
+        )}
         <div style={G.row}>
           <span style={{ color: "#94a3b8" }}>المبلغ</span>
           <b>{Number(selectedExpense.amount || 0).toFixed(2)} د.أ</b>
@@ -2254,6 +2359,51 @@ function ReportsScreen({ state }) {
     }));
   };
 
+  const getPostponeParts = (item) => {
+    const source =
+      item.newDueDate ||
+      item.dueDate ||
+      new Date().toISOString().slice(0, 10);
+    const [year, month, day] = String(source).split("-");
+    return {
+      year: year || String(new Date().getFullYear()),
+      month: month || "01",
+      day: day || "01",
+    };
+  };
+  const setPostponePart = (liabilityId, part, value) => {
+    setState((prev) => ({
+      ...prev,
+      currentLiabilities: prev.currentLiabilities.map((liability) => {
+        if (liability.id !== liabilityId) return liability;
+        const parts = getPostponeParts(liability);
+        const nextParts = { ...parts, [part]: value };
+        return {
+          ...liability,
+          newDueDate: `${nextParts.year}-${nextParts.month}-${nextParts.day}`,
+        };
+      }),
+    }));
+  };
+  const confirmPostponeDate = (liabilityId) => {
+    setState((prev) => ({
+      ...prev,
+      currentLiabilities: prev.currentLiabilities.map((liability) =>
+        liability.id === liabilityId
+          ? {
+              ...liability,
+              dueDate: liability.newDueDate || liability.dueDate,
+              dueDay: Number(
+                String(liability.newDueDate || liability.dueDate || "")
+                  .split("-")[2] || liability.dueDay || 1
+              ),
+              newDueDate: "",
+              paymentMethod: "",
+            }
+          : liability
+      ),
+    }));
+  };
   const coveredCurrentTotal = pendingCurrent.reduce(
     (sum, item) => sum + getCoveredAmount(item),
     0
@@ -2981,7 +3131,7 @@ function AssetsScreen({ state, setState, onAddExtraCash }) {
   );
 }
 
-function LiabilitiesScreen({ state, setState }) {
+function LiabilitiesScreen({ state, setState, focusDueOnly = false }) {
   const [showStructuralDetails, setShowStructuralDetails] = useState(false);
 const [showCurrentDetails, setShowCurrentDetails] = useState(false);
 
@@ -3007,7 +3157,10 @@ const getDueValue = (item) => {
   return 999999999;
 };
 
-const sortedCurrent = [...currentList].sort(
+const sortedCurrent = [...currentList]
+  .filter((item) => item.status !== "paid")
+  .filter((item) => !focusDueOnly || isDueThisMonth(item))
+  .sort(
   (a, b) => getDueValue(b) - getDueValue(a)
 );
   const structuralTotal = calcStructuralTotal(state);
@@ -3060,6 +3213,12 @@ const [openCurrentId, setOpenCurrentId] = useState(null);
 const [liabilityAssetKey, setLiabilityAssetKey] = useState("cash");
 const [editCardName, setEditCardName] = useState("");
 const [editCardBalance, setEditCardBalance] = useState("");
+
+useEffect(() => {
+  if (focusDueOnly) {
+    setShowCurrentDetails(true);
+  }
+}, [focusDueOnly]);
 
 const addCreditCard = () => {
   if (!cardName.trim()) return alert("أدخل اسم البطاقة");
@@ -3171,14 +3330,60 @@ const prepareEditCreditCard = (id) => {
   setEditCardBalance(String(card.balance || card.amount || 0));
 };
 
+  const getPostponeParts = (item) => {
+    const source =
+      item.newDueDate ||
+      item.dueDate ||
+      new Date().toISOString().slice(0, 10);
+    const [year, month, day] = String(source).split("-");
+    return {
+      year: year || String(new Date().getFullYear()),
+      month: month || "01",
+      day: day || "01",
+    };
+  };
+  const setPostponePart = (liabilityId, part, value) => {
+    setState((prev) => ({
+      ...prev,
+      currentLiabilities: prev.currentLiabilities.map((liability) => {
+        if (liability.id !== liabilityId) return liability;
+        const parts = getPostponeParts(liability);
+        const nextParts = { ...parts, [part]: value };
+        return {
+          ...liability,
+          newDueDate: `${nextParts.year}-${nextParts.month}-${nextParts.day}`,
+        };
+      }),
+    }));
+  };
+  const confirmPostponeDate = (liabilityId) => {
+    setState((prev) => ({
+      ...prev,
+      currentLiabilities: prev.currentLiabilities.map((liability) =>
+        liability.id === liabilityId
+          ? {
+              ...liability,
+              dueDate: liability.newDueDate || liability.dueDate,
+              dueDay: Number(
+                String(liability.newDueDate || liability.dueDate || "")
+                  .split("-")[2] || liability.dueDay || 1
+              ),
+              newDueDate: "",
+              paymentMethod: "",
+            }
+          : liability
+      ),
+    }));
+  };
+
   const totalCurrent = pendingCurrent.reduce((sum, l) => {
     if (l.type === "card") return sum + Number(l.balance || 0);
-    return sum + Number(l.amount || 0);
+    return sum + Number(l.balance ?? l.amount ?? 0);
   }, 0);
 
   const getLiabilityAmount = (l) => {
     if (l.type === "card") return Number(l.balance || 0);
-    return Number(l.amount || 0);
+    return Number(l.balance ?? l.amount ?? 0);
   };
 
   const getTypeLabel = (l) => {
@@ -3210,7 +3415,8 @@ const prepareEditCreditCard = (id) => {
   const getUncoveredAmount = (item) => {
     const balance = getLiabilityAmount(item);
     const explicit = Number(item.uncoveredDebt || 0);
-    return explicit > 0 ? explicit : Math.max(0, balance - getCoveredAmount(item));
+    const actualGap = Math.max(0, balance - getCoveredAmount(item));
+    return explicit > 0 ? Math.min(explicit, actualGap) : actualGap;
   };
   const getDueText = (item) =>
     item.dueDate ? item.dueDate : item.dueDay ? `يوم ${item.dueDay}` : "غير محدد";
@@ -3272,33 +3478,154 @@ const prepareEditCreditCard = (id) => {
       ],
     }));
   };
-  const payCurrentFromAsset = (liability) => {
-    const amount = getLiabilityAmount(liability);
-    const deduction = deductFromAsset(state, liabilityAssetKey, amount);
-    if (!deduction.success) {
-      alert(deduction.message);
-      return;
-    }
+  const payCurrentFromCap = (liability) => {
+    setState((prev) => {
+      const current = (prev.currentLiabilities || []).find(
+        (item) => item.id === liability.id
+      );
 
-    setState({
-      ...deduction.nextState,
-      currentLiabilities: (deduction.nextState.currentLiabilities || []).map((item) =>
-        item.id === liability.id
-          ? { ...item, balance: 0, status: "paid", paymentMethod: "assets" }
-          : item
-      ),
-      transactions: [
-        ...(deduction.nextState.transactions || []),
-        {
-          id: Date.now(),
-          type: "liability_paid_from_asset",
-          amount,
-          assetKey: liabilityAssetKey,
-          liabilityId: liability.id,
-          date: new Date().toISOString(),
+      if (!current || current.status === "paid") return prev;
+
+      const amount =
+        current.type === "card"
+          ? Number(current.balance || 0)
+          : Number(current.balance ?? current.amount ?? 0);
+      const covered = Math.min(amount, Math.max(0, Number(current.payableBuffer || 0)));
+      const remainingCap = Math.max(
+        0,
+        Number(prev.session?.spendingCap || 0) -
+          Number(prev.session?.coveredSpent || 0)
+      );
+      const availableForPayment = remainingCap + covered;
+      const capCharge = Math.max(0, amount - covered);
+
+      if (amount <= 0) return prev;
+
+      if (availableForPayment < amount) {
+        alert("سقف الصرف لا يغطي هذا السداد");
+        return prev;
+      }
+
+      const now = new Date().toISOString();
+      const expenseId = Date.now();
+      const creditorName = current.name || "دائن";
+      const overBudgetRelief = Math.min(
+        Number(prev.session?.overBudgetSpent || 0),
+        Math.max(0, Number(current.uncoveredDebt || 0)),
+        capCharge
+      );
+
+      return {
+        ...prev,
+        session: {
+          ...prev.session,
+          coveredSpent: Number(
+            (Number(prev.session?.coveredSpent || 0) + capCharge).toFixed(2)
+          ),
+          overBudgetSpent: Math.max(
+            0,
+            Number((Number(prev.session?.overBudgetSpent || 0) - overBudgetRelief).toFixed(2))
+          ),
         },
-      ],
+        expenses: [
+          ...(prev.expenses || []),
+          {
+            id: expenseId,
+            amount,
+            category: "سداد التزام",
+            paymentMethod: "cap_liability",
+            note: `سداد من سقف الصرف - ${current.name || "التزام"}`,
+            date: now.slice(0, 10),
+            createdAt: now,
+            budgetCovered: capCharge,
+            overBudget: 0,
+            isOverBudget: false,
+            liabilityId: current.id,
+            category: "سداد دين",
+            note: creditorName,
+          },
+        ],
+        currentLiabilities: (prev.currentLiabilities || []).map((item) =>
+          item.id === current.id
+            ? {
+                ...item,
+                amount: item.type === "card" ? item.amount : 0,
+                balance: 0,
+                payableBuffer: 0,
+                uncoveredDebt: 0,
+                status: "paid",
+                paymentMethod: "",
+                paidAt: now,
+              }
+            : item
+        ),
+        transactions: [
+          ...(prev.transactions || []),
+          {
+            id: expenseId + 1,
+            type: "liability_paid_from_cap",
+            amount,
+            capCharge,
+            liabilityId: current.id,
+            expenseId,
+            date: now,
+          },
+        ],
+      };
     });
+    setOpenCurrentId(null);
+  };
+  const payCurrentFromAsset = (liability) => {
+    setState((prev) => {
+      const current = (prev.currentLiabilities || []).find(
+        (item) => item.id === liability.id
+      );
+
+      if (!current || current.status === "paid") return prev;
+
+      const amount =
+        current.type === "card"
+          ? Number(current.balance || 0)
+          : Number(current.balance ?? current.amount ?? 0);
+
+      if (amount <= 0) return prev;
+
+      const deduction = deductFromAsset(prev, liabilityAssetKey, amount);
+      if (!deduction.success) {
+        alert(deduction.message);
+        return prev;
+      }
+
+      return {
+        ...deduction.nextState,
+        currentLiabilities: (deduction.nextState.currentLiabilities || []).map((item) =>
+          item.id === liability.id
+            ? {
+                ...item,
+                amount: item.type === "card" ? item.amount : 0,
+                balance: 0,
+                payableBuffer: 0,
+                uncoveredDebt: 0,
+                status: "paid",
+                paymentMethod: "",
+                paidAt: new Date().toISOString(),
+              }
+            : item
+        ),
+        transactions: [
+          ...(deduction.nextState.transactions || []),
+          {
+            id: Date.now(),
+            type: "liability_paid_from_asset",
+            amount,
+            assetKey: liabilityAssetKey,
+            liabilityId: liability.id,
+            date: new Date().toISOString(),
+          },
+        ],
+      };
+    });
+    setOpenCurrentId(null);
   };
 
   return (
@@ -3306,7 +3633,14 @@ const prepareEditCreditCard = (id) => {
       <button
         type="button"
         onClick={() => setShowStructuralDetails((v) => !v)}
-        style={{ ...G.card("#ef444422"), width: "100%", textAlign: "right", cursor: "pointer" }}
+        style={{
+          ...G.card("#ef444422"),
+          width: "100%",
+          textAlign: "right",
+          cursor: "pointer",
+          color: "#f8fafc",
+          fontFamily: "inherit",
+        }}
       >
         <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
           <div>
@@ -3422,6 +3756,7 @@ const prepareEditCreditCard = (id) => {
             Number(state.session?.spendingCap || 0) -
               Number(state.session?.coveredSpent || 0)
           );
+          const capAvailableForPayment = remainingCap + Math.min(covered, amount);
 
           return (
             <div
@@ -3530,6 +3865,16 @@ const prepareEditCreditCard = (id) => {
                       ✓
                     </button>
                   )}
+                  {amount > 0 && capAvailableForPayment >= amount && (
+                    <button
+                      type="button"
+                      title="سداد من سقف الصرف"
+                      onClick={() => payCurrentFromCap(item)}
+                      style={G.iconBtn(false, "#38bdf8")}
+                    >
+                      ⌁
+                    </button>
+                  )}
                   <button
                     type="button"
                     title="سداد من أصل"
@@ -3570,23 +3915,57 @@ const prepareEditCreditCard = (id) => {
                     </button>
                   </>
                 )}
-                {item.paymentMethod === "postpone" && (
-                  <input
-                    type="date"
-                    value={item.newDueDate || ""}
-                    onChange={(e) =>
-                      setState((prev) => ({
-                        ...prev,
-                        currentLiabilities: prev.currentLiabilities.map((liability) =>
-                          liability.id === item.id
-                            ? { ...liability, dueDate: e.target.value, newDueDate: "" }
-                            : liability
-                        ),
-                      }))
-                    }
-                    style={{ ...G.inp(), marginBottom: 0 }}
-                  />
-                )}
+                {item.paymentMethod === "postpone" && (() => {
+                  const parts = getPostponeParts(item);
+                  const currentYear = new Date().getFullYear();
+                  return (
+                    <div
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns: "0.8fr 0.8fr 1fr 42px",
+                        gap: 6,
+                        alignItems: "center",
+                        direction: "rtl",
+                      }}
+                    >
+                      <select
+                        value={parts.day}
+                        onChange={(e) => setPostponePart(item.id, "day", e.target.value)}
+                        style={{ ...G.inp(), marginBottom: 0, padding: "9px 8px", fontSize: 12 }}
+                      >
+                        {Array.from({ length: 31 }, (_, i) => String(i + 1).padStart(2, "0")).map((day) => (
+                          <option key={day} value={day}>{day}</option>
+                        ))}
+                      </select>
+                      <select
+                        value={parts.month}
+                        onChange={(e) => setPostponePart(item.id, "month", e.target.value)}
+                        style={{ ...G.inp(), marginBottom: 0, padding: "9px 8px", fontSize: 12 }}
+                      >
+                        {Array.from({ length: 12 }, (_, i) => String(i + 1).padStart(2, "0")).map((month) => (
+                          <option key={month} value={month}>{month}</option>
+                        ))}
+                      </select>
+                      <select
+                        value={parts.year}
+                        onChange={(e) => setPostponePart(item.id, "year", e.target.value)}
+                        style={{ ...G.inp(), marginBottom: 0, padding: "9px 8px", fontSize: 12 }}
+                      >
+                        {Array.from({ length: 4 }, (_, i) => String(currentYear + i)).map((year) => (
+                          <option key={year} value={year}>{year}</option>
+                        ))}
+                      </select>
+                      <button
+                        type="button"
+                        title="تأكيد التاريخ"
+                        onClick={() => confirmPostponeDate(item.id)}
+                        style={G.iconBtn(false, "#86efac")}
+                      >
+                        ✓
+                      </button>
+                    </div>
+                  );
+                })()}
               </div>
             </div>
           );
@@ -4947,6 +5326,7 @@ export default function App() {
   const [state, setState] = useState(() => loadState() || INITIAL_STATE);
   const [tab, setTab] = useState("overview");
   const [menuOpen, setMenuOpen] = useState(false);
+  const [liabilitiesFocusDueOnly, setLiabilitiesFocusDueOnly] = useState(false);
     const [showExtraCash, setShowExtraCash] = useState(false);
     const [selectedViewMonth, setSelectedViewMonth] = useState("current");
     useEffect(() => {
@@ -5313,6 +5693,7 @@ justifyContent: "flex-end",
               <button
                 key={t.id}
                 onClick={() => {
+                  setLiabilitiesFocusDueOnly(false);
                   setTab(t.id);
                   setMenuOpen(false);
                 }}
@@ -5362,6 +5743,10 @@ boxShadow:
     state={viewState}
     setState={setState}
     onOpenReports={() => setTab("reports")}
+    onOpenDueLiabilities={() => {
+      setLiabilitiesFocusDueOnly(true);
+      setTab("liabilities");
+    }}
   />
 )}
       {tab === "reports" && <ReportsScreen state={viewState} />}
@@ -5373,7 +5758,11 @@ state={viewState}
   />
 )}
      {tab === "liabilities" && (
-  <LiabilitiesScreen state={viewState} setState={setState} />
+  <LiabilitiesScreen
+    state={viewState}
+    setState={setState}
+    focusDueOnly={liabilitiesFocusDueOnly}
+  />
 )}
       {tab === "settings" && (
   <SettingsScreen
