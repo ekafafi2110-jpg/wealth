@@ -1,3 +1,5 @@
+import { deductFromAsset } from "./assets.js";
+
 export function recordExpense(state, expenseData) {
   const now = new Date().toISOString();
 const today = now.slice(0, 10);
@@ -17,9 +19,80 @@ const today = now.slice(0, 10);
   const coveredSpent = Number(next.session.coveredSpent || 0);
   const remainingCap = Math.max(0, spendingCap - coveredSpent);
 
-  const budgetCovered = Math.min(amount, remainingCap);
+  const isEmergency = expenseData.paymentMethod === "emergency";
+  const emergencyFunding = expenseData.emergencyFunding || {};
+  const emergencyMode = emergencyFunding.mode || "";
+  const emergencyRemainderSource = emergencyFunding.remainderSource || "asset";
+
+  let budgetCovered = Math.min(amount, remainingCap);
+
+  if (isEmergency) {
+    if (!["asset", "liability", "mix"].includes(emergencyMode)) {
+      return {
+        success: false,
+        nextState: state,
+        message: "اختر طريقة تمويل المصروف الطارئ",
+      };
+    }
+
+    budgetCovered =
+      emergencyMode === "mix" ? Number(emergencyFunding.capAmount || 0) : 0;
+
+    if (budgetCovered < 0 || budgetCovered > amount) {
+      return {
+        success: false,
+        nextState: state,
+        message: "جزء سقف الصرف غير صحيح",
+      };
+    }
+
+    if (budgetCovered > remainingCap) {
+      return {
+        success: false,
+        nextState: state,
+        message: `المتاح من سقف الصرف فقط ${remainingCap.toFixed(2)} د.أ`,
+      };
+    }
+  }
+
   const overBudget = Math.max(0, amount - budgetCovered);
   const isOverBudget = overBudget > 0;
+  const emergencyAssetAmount = isEmergency
+    ? emergencyMode === "asset"
+      ? amount
+      : emergencyMode === "mix" && emergencyRemainderSource === "asset"
+      ? overBudget
+      : 0
+    : 0;
+  const emergencyLiabilityAmount = isEmergency
+    ? emergencyMode === "liability"
+      ? amount
+      : emergencyMode === "mix" && emergencyRemainderSource === "liability"
+      ? overBudget
+      : 0
+    : 0;
+
+  if (isEmergency && emergencyAssetAmount > 0) {
+    const deduction = deductFromAsset(
+      next,
+      emergencyFunding.assetKey || "cash",
+      emergencyAssetAmount
+    );
+
+    if (!deduction.success) {
+      return deduction;
+    }
+
+    Object.assign(next, deduction.nextState);
+  }
+
+  if (isEmergency && emergencyLiabilityAmount > 0 && !emergencyFunding.dueDate) {
+    return {
+      success: false,
+      nextState: state,
+      message: "أدخل تاريخ استحقاق دين المصروف الطارئ",
+    };
+  }
 
   const expense = {
     id: Date.now(),
@@ -33,6 +106,16 @@ createdAt: new Date().toISOString(),
     budgetCovered,
     overBudget,
     isOverBudget,
+    emergencyFunding: isEmergency
+      ? {
+          mode: emergencyMode,
+          capAmount: budgetCovered,
+          remainderSource: emergencyRemainderSource,
+          assetKey: emergencyAssetAmount > 0 ? emergencyFunding.assetKey || "cash" : "",
+          assetAmount: emergencyAssetAmount,
+          liabilityAmount: emergencyLiabilityAmount,
+        }
+      : null,
   };
 
   next.expenses.push(expense);
@@ -58,7 +141,18 @@ createdAt: new Date().toISOString(),
       };
     }
 
-    card.balance = Number((Number(card.balance || 0) + amount).toFixed(2));
+    const creditLimit = Number(card.creditLimit || 0);
+    const nextCardBalance = Number((Number(card.balance || 0) + amount).toFixed(2));
+
+    if (creditLimit > 0 && nextCardBalance > creditLimit) {
+      return {
+        success: false,
+        nextState: state,
+        message: "المبلغ يتجاوز سقف البطاقة",
+      };
+    }
+
+    card.balance = nextCardBalance;
 
     card.payableBuffer = Number(
       (Number(card.payableBuffer || 0) + budgetCovered).toFixed(2)
@@ -94,13 +188,43 @@ createdAt: new Date().toISOString(),
 
     status: "pending",
     source: "expense_payment",
-    date: new Date().toISOString().split("T")[0],
-createdAt: new Date().toISOString(),
     date: today,
 createdAt: now,
     expenseId: expense.id,
   });
 }
+
+  if (isEmergency && emergencyLiabilityAmount > 0) {
+  next.currentLiabilities.push({
+    id: Date.now() + 1,
+    type: "direct_liability",
+    name: emergencyFunding.liabilityName || "دين مصروف طارئ",
+    amount: emergencyLiabilityAmount,
+    balance: emergencyLiabilityAmount,
+    payableBuffer: 0,
+    uncoveredDebt: emergencyLiabilityAmount,
+    dueDate: emergencyFunding.dueDate || "",
+    dueDay: emergencyFunding.dueDate
+      ? new Date(emergencyFunding.dueDate).getDate()
+      : 1,
+    status: "pending",
+    source: "emergency_expense",
+    date: today,
+createdAt: now,
+    expenseId: expense.id,
+  });
+}
+
+  if (isEmergency && emergencyAssetAmount > 0) {
+    next.transactions.push({
+      id: Date.now() + 3,
+      type: "emergency_expense_covered_from_asset",
+      amount: emergencyAssetAmount,
+      assetKey: emergencyFunding.assetKey || "cash",
+      expenseId: expense.id,
+      date: now,
+    });
+  }
 
   next.transactions.push({
     id: Date.now() + 2,

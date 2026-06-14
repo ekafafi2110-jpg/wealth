@@ -2,7 +2,8 @@ export function calcStructuralTotal(state) {
   const structuralList = state.structuralLiabilities || state.structural || [];
 
   return structuralList.reduce(
-    (sum, item) => sum + Number(item.monthly || 0),
+    (sum, item) =>
+      sum + Number(item.monthlyAmount ?? item.monthly ?? item.amount ?? 0),
     0
   );
 }
