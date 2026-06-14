@@ -70,6 +70,19 @@ const G = {
     zIndex: 50,
   },
   scr: { padding: "14px" },
+  iconBtn: (active, color = "#e8c96a") => ({
+    width: 42,
+    height: 42,
+    borderRadius: 12,
+    border: active ? `1px solid ${color}` : "1px solid #334155",
+    background: active ? "rgba(232,201,106,0.12)" : "#111827",
+    color,
+    cursor: "pointer",
+    fontSize: 17,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+  }),
   card: (b) => ({
     background: "#0f172a",
     borderRadius: 16,
@@ -280,7 +293,58 @@ const grouped = expenseCats.map((cat) => ({
   );
 }
 
-function Overview({ state, setState }) {
+function rebalanceCurrentLiabilityCoverage(state) {
+  const next = structuredClone(state);
+  const currentLiabilities = next.currentLiabilities || [];
+  let availableCap = Math.max(
+    0,
+    Number(next.session?.spendingCap || 0) -
+      Number(next.session?.coveredSpent || 0)
+  );
+
+  if (availableCap <= 0 || !currentLiabilities.length) return next;
+
+  const dueValue = (item) => {
+    if (item.dueDate) {
+      const time = new Date(item.dueDate).getTime();
+      if (Number.isFinite(time)) return time;
+    }
+    return Number(item.dueDay || 31);
+  };
+
+  const ordered = [...currentLiabilities]
+    .filter((item) => item.status !== "paid")
+    .sort((a, b) => dueValue(a) - dueValue(b));
+
+  for (const item of ordered) {
+    if (availableCap <= 0) break;
+
+    const balance = Number(
+      item.type === "card" ? item.balance || 0 : item.balance || item.amount || 0
+    );
+    const covered = Math.max(0, Number(item.payableBuffer || 0));
+    const uncovered = Math.max(0, Number(item.uncoveredDebt || 0));
+    const coverable = Math.max(0, Math.min(uncovered, balance - covered));
+    const moveAmount = Math.min(availableCap, coverable);
+
+    if (moveAmount <= 0) continue;
+
+    item.payableBuffer = Number((covered + moveAmount).toFixed(2));
+    item.uncoveredDebt = Number((uncovered - moveAmount).toFixed(2));
+    availableCap = Number((availableCap - moveAmount).toFixed(2));
+    next.session.coveredSpent = Number(
+      (Number(next.session?.coveredSpent || 0) + moveAmount).toFixed(2)
+    );
+    next.session.overBudgetSpent = Math.max(
+      0,
+      Number((Number(next.session?.overBudgetSpent || 0) - moveAmount).toFixed(2))
+    );
+  }
+
+  return next;
+}
+
+function Overview({ state, setState, onOpenReports }) {
   const budget = calcBudget(state);
   const [showExpense, setShowExpense] = useState(false);
   const [selectedExpense, setSelectedExpense] = useState(null);
@@ -302,11 +366,12 @@ const [isUnusualExpense, setIsUnusualExpense] = useState(false);
 const [showUnusualPicker, setShowUnusualPicker] = useState(false);
 const [unusualFundingMode, setUnusualFundingMode] = useState("asset");
 const [unusualCapAmount, setUnusualCapAmount] = useState("");
+const [unusualRemainderSource, setUnusualRemainderSource] = useState("asset");
 const [unusualAssetKey, setUnusualAssetKey] = useState("cash");
 const [unusualLiabilityName, setUnusualLiabilityName] = useState("مصروف غير اعتيادي");
 const [unusualDueDate, setUnusualDueDate] = useState("");
   const cards = state.currentLiabilities.filter((x) => x.type === "card");
-  const recent = [...state.expenses].slice(-5).reverse();
+  const recent = [...state.expenses].slice(-3).reverse();
   const dueCurrentLiabilities = (state.currentLiabilities || []).filter((l) => {
   if (!l.dueDate || l.status === "paid") return false;
 
@@ -364,7 +429,7 @@ const otherExpenseCategory =
 
 const mainExpenseCategories = pinnedExpenseCategories;
   const enteredAmount = Number(amount || 0);
-const expectedOverBudget = Math.max(
+const expectedOverBudget = paymentMethod === "emergency" ? 0 : Math.max(
   0,
   enteredAmount - Number(budget.remainingCap || 0)
 );
@@ -374,6 +439,65 @@ const expectedOverBudget = Math.max(
   alert("أدخل تاريخ استحقاق الدين المباشر");
   return;
 }
+    if (paymentMethod === "card") {
+      const selectedCard = cards.find((card) => String(card.id) === String(cardId));
+      if (!selectedCard) {
+        alert("اختر بطاقة صحيحة");
+        return;
+      }
+
+      const creditLimit = Number(selectedCard.creditLimit || 0);
+      const nextCardBalance =
+        Number(selectedCard.balance || 0) + Number(amount || 0);
+
+      if (creditLimit > 0 && nextCardBalance > creditLimit) {
+        alert("المبلغ يتجاوز سقف البطاقة");
+        return;
+      }
+    }
+    if (paymentMethod === "emergency") {
+      if (!unusualFundingMode) {
+        alert("اختر طريقة تمويل المصروف الطارئ");
+        return;
+      }
+
+      const emergencyCapAmount =
+        unusualFundingMode === "mix" ? Number(unusualCapAmount || 0) : 0;
+      const emergencyRemainder = Number(amount || 0) - emergencyCapAmount;
+      const needsEmergencyAsset =
+        unusualFundingMode === "asset" ||
+        (unusualFundingMode === "mix" && unusualRemainderSource === "asset");
+      const needsEmergencyLiability =
+        unusualFundingMode === "liability" ||
+        (unusualFundingMode === "mix" && unusualRemainderSource === "liability");
+
+      if (unusualFundingMode === "mix") {
+        if (emergencyCapAmount <= 0 || emergencyCapAmount >= Number(amount || 0)) {
+          alert("أدخل جزءًا صحيحًا من سقف الصرف، أقل من مبلغ المصروف");
+          return;
+        }
+
+        if (emergencyCapAmount > Number(budget.remainingCap || 0)) {
+          alert(`المتاح من سقف الصرف فقط ${Number(budget.remainingCap || 0).toFixed(2)} د.أ`);
+          return;
+        }
+
+        if (emergencyRemainder <= 0) {
+          alert("باقي المصروف غير صحيح");
+          return;
+        }
+      }
+
+      if (needsEmergencyAsset && !unusualAssetKey) {
+        alert("اختر الأصل الذي سيموّل المصروف الطارئ");
+        return;
+      }
+
+      if (needsEmergencyLiability && !unusualDueDate) {
+        alert("أدخل تاريخ استحقاق دين المصروف الطارئ");
+        return;
+      }
+    }
     if (expectedOverBudget > 0) {
   if (
   paymentMethod === "cash" &&
@@ -401,6 +525,18 @@ const expectedOverBudget = Math.max(
       note,
       liabilityName,
       dueDate,
+      emergencyFunding:
+        paymentMethod === "emergency"
+          ? {
+              mode: unusualFundingMode,
+              capAmount:
+                unusualFundingMode === "mix" ? Number(unusualCapAmount || 0) : 0,
+              remainderSource: unusualRemainderSource,
+              assetKey: unusualAssetKey,
+              liabilityName: unusualLiabilityName,
+              dueDate: unusualDueDate,
+            }
+          : null,
     });
 
     if (!result.success) {
@@ -413,7 +549,7 @@ const expectedOverBudget = Math.max(
 const lastExpense =
   nextState.expenses[nextState.expenses.length - 1];
 
-if (lastExpense?.overBudget > 0) {
+if (lastExpense?.overBudget > 0 && paymentMethod !== "emergency") {
   if (paymentMethod !== "card" && paymentMethod !== "liability") {
     if (overBudgetSource === "asset") {
       const deduction = deductFromAsset(
@@ -484,6 +620,14 @@ setState(nextState);
 setOverBudgetAssetKey("cash");
 setOverBudgetLiabilityName("تجاوز سقف الصرف");
 setOverBudgetDueDate("");
+setIsUnusualExpense(false);
+setShowUnusualPicker(false);
+setUnusualFundingMode("asset");
+setUnusualCapAmount("");
+setUnusualRemainderSource("asset");
+setUnusualAssetKey("cash");
+setUnusualLiabilityName("مصروف طارئ");
+setUnusualDueDate("");
   };
   function cancelExpense(expenseId) {
   const ok = window.confirm("هل تريد إلغاء هذا المصروف وعكس أثره المالي؟");
@@ -547,7 +691,8 @@ setOverBudgetDueDate("");
     const assetCoverageTx = (next.transactions || []).find(
       (tx) =>
         tx.expenseId === expenseId &&
-        tx.type === "over_budget_covered_from_asset"
+        (tx.type === "over_budget_covered_from_asset" ||
+          tx.type === "emergency_expense_covered_from_asset")
     );
 
     if (assetCoverageTx?.assetKey && Number(assetCoverageTx.amount || 0) > 0) {
@@ -561,6 +706,8 @@ setOverBudgetDueDate("");
     next.transactions = (next.transactions || []).filter(
       (tx) => tx.expenseId !== expenseId
     );
+
+    next = rebalanceCurrentLiabilityCoverage(next);
 
     next.transactions.push({
       id: Date.now(),
@@ -796,7 +943,13 @@ function toggleExpenseCategoryPinned(catId) {
         <div style={{ textAlign: "right", marginBottom: 12, color: "#94a3b8" }}>
           📊 توزيع المصاريف
         </div>
-        <ExpenseDonut expenses={state.expenses} />
+        <button
+          type="button"
+          onClick={onOpenReports}
+          style={G.btn("#1e293b", "#e8c96a", { width: "100%" })}
+        >
+          عرض التقارير والكشف الكامل
+        </button>
       </div>
 
       <div style={G.card()}>
@@ -1453,7 +1606,7 @@ overscrollBehavior: "contain",              border: "1px solid #1e293b",
     ⚠️ هذا المصروف يتجاوز سقف الصرف بمبلغ{" "}
     {expectedOverBudget.toFixed(2)} د.أ
   </div>
-)}{expectedOverBudget > 0 && paymentMethod === "cash" && (
+)}{false && expectedOverBudget > 0 && paymentMethod === "cash" && (
   <div
     style={{
       background: "#111827",
@@ -1543,12 +1696,12 @@ overscrollBehavior: "contain",              border: "1px solid #1e293b",
             <div
   style={{
     display: "grid",
-    gridTemplateColumns: "repeat(5, 1fr)",
+    gridTemplateColumns: "repeat(3, 1fr)",
     gap: 8,
     marginBottom: 18,
   }}
 >
-              {mainExpenseCategories.slice(0, 12).map((catItem) => {
+              {mainExpenseCategories.slice(0, 8).map((catItem) => {
   const cat = catItem.label;
   const active = category === cat;
 
@@ -1597,11 +1750,33 @@ fontWeight: active ? 900 : 700,
     </button>
   );
 })}
+<button
+  type="button"
+  onClick={() => setShowCategoryManager(true)}
+  style={{
+    minHeight: 56,
+    borderRadius: 12,
+    border: "1px solid rgba(148,163,184,0.28)",
+    background: "linear-gradient(180deg, rgba(15,23,42,0.95), rgba(30,41,59,0.95))",
+    color: "#94a3b8",
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 3,
+    cursor: "pointer",
+    fontFamily: "inherit",
+    fontWeight: 800,
+  }}
+>
+  <span style={{ fontSize: 16, lineHeight: 1 }}>+</span>
+  <span style={{ fontSize: 10 }}>المزيد</span>
+</button>
             </div>
           <div
   style={{
     width: "100%",
-    display: "flex",
+    display: "none",
     justifyContent: "flex-start",
     direction: "ltr",
     marginTop: 6,
@@ -1639,9 +1814,10 @@ onChange={(e) => {
   const value = e.target.value;
 
   if (value === "emergency") {
-    setIsUnusualExpense(false);
-    setUnusualFundingMode("");
-    setShowUnusualPicker(true);
+    setPaymentMethod(value);
+    setIsUnusualExpense(true);
+    setUnusualFundingMode("asset");
+    setShowUnusualPicker(false);
     return;
   }
 
@@ -1660,6 +1836,7 @@ style={{ ...G.inp(), marginBottom: 10 }}
             {paymentMethod === "emergency" && isUnusualExpense && (
   <div
     style={{
+      display: "none",
       marginTop: -4,
       marginBottom: 10,
       padding: "8px 10px",
@@ -1678,6 +1855,156 @@ style={{ ...G.inp(), marginBottom: 10 }}
       : unusualFundingMode === "liability"
       ? "التزام"
       : "مكس"}
+  </div>
+)}
+
+            {paymentMethod === "emergency" && isUnusualExpense && (
+  <div
+    style={{
+      background: "#111827",
+      border: "1px solid rgba(232,201,106,0.28)",
+      borderRadius: 12,
+      padding: 12,
+      marginBottom: 12,
+      direction: "rtl",
+    }}
+  >
+    <div
+      style={{
+        fontSize: 12,
+        color: "#e8c96a",
+        fontWeight: 900,
+        marginBottom: 10,
+        textAlign: "right",
+      }}
+    >
+      تمويل المصروف الطارئ
+    </div>
+
+    <select
+      value={unusualFundingMode}
+      onChange={(e) => setUnusualFundingMode(e.target.value)}
+      style={{ ...G.inp(), marginBottom: 8 }}
+    >
+      <option value="asset">كاملًا من أصل</option>
+      <option value="liability">كاملًا كدين</option>
+      <option value="mix">مكس: جزء من السقف والباقي من أصل أو دين</option>
+    </select>
+
+    <div
+      style={{
+        display: "none",
+        gridTemplateColumns: "1fr",
+        gap: 8,
+        marginBottom: 10,
+      }}
+    >
+      {[
+        ["asset", "كاملًا من أصل"],
+        ["liability", "كاملًا كدين"],
+        ["mix", "مكس: جزء من سقف الصرف والباقي من أصل أو دين"],
+      ].map(([value, label]) => (
+        <button
+          key={value}
+          type="button"
+          onClick={() => setUnusualFundingMode(value)}
+          style={G.btn(
+            unusualFundingMode === value ? "#c9a840" : "#1e293b",
+            unusualFundingMode === value ? "#0f172a" : "#fff",
+            { padding: "10px", textAlign: "right" }
+          )}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+
+    {unusualFundingMode === "mix" && (
+      <>
+        <input
+          type="number"
+          value={unusualCapAmount}
+          onChange={(e) => setUnusualCapAmount(e.target.value)}
+          placeholder="الجزء من سقف الصرف"
+          style={{ ...G.inp(), marginBottom: 8 }}
+        />
+
+        <select
+          value={unusualRemainderSource}
+          onChange={(e) => setUnusualRemainderSource(e.target.value)}
+          style={{ ...G.inp(), marginBottom: 8 }}
+        >
+          <option value="asset">الباقي من أصل</option>
+          <option value="liability">الباقي كدين</option>
+        </select>
+
+        <div
+          style={{
+            display: "none",
+            gridTemplateColumns: "1fr 1fr",
+            gap: 8,
+            marginBottom: 8,
+          }}
+        >
+          <button
+            type="button"
+            onClick={() => setUnusualRemainderSource("asset")}
+            style={G.btn(
+              unusualRemainderSource === "asset" ? "#a855f7" : "#1e293b",
+              "#fff",
+              { padding: "9px" }
+            )}
+          >
+            الباقي من أصل
+          </button>
+          <button
+            type="button"
+            onClick={() => setUnusualRemainderSource("liability")}
+            style={G.btn(
+              unusualRemainderSource === "liability" ? "#ef4444" : "#1e293b",
+              "#fff",
+              { padding: "9px" }
+            )}
+          >
+            الباقي دين
+          </button>
+        </div>
+      </>
+    )}
+
+    {(unusualFundingMode === "asset" ||
+      (unusualFundingMode === "mix" && unusualRemainderSource === "asset")) && (
+      <select
+        value={unusualAssetKey}
+        onChange={(e) => setUnusualAssetKey(e.target.value)}
+        style={{ ...G.inp(), marginBottom: 8 }}
+      >
+        {assetSources.map((s) => (
+          <option key={s.key} value={s.key}>
+            {s.label} — متاح {Number(s.available || 0).toFixed(2)} د.أ
+          </option>
+        ))}
+      </select>
+    )}
+
+    {(unusualFundingMode === "liability" ||
+      (unusualFundingMode === "mix" && unusualRemainderSource === "liability")) && (
+      <>
+        <input
+          value={unusualLiabilityName}
+          onChange={(e) => setUnusualLiabilityName(e.target.value)}
+          placeholder="اسم الدين"
+          style={{ ...G.inp(), marginBottom: 8 }}
+        />
+
+        <input
+          type="date"
+          value={unusualDueDate}
+          onChange={(e) => setUnusualDueDate(e.target.value)}
+          style={{ ...G.inp(), marginBottom: 0 }}
+        />
+      </>
+    )}
   </div>
 )}
 
@@ -1714,6 +2041,71 @@ style={{ ...G.inp(), marginBottom: 10 }}
               </>
             )}
 
+            {expectedOverBudget > 0 && paymentMethod === "cash" && (
+              <div
+                style={{
+                  background: "rgba(239,68,68,0.08)",
+                  border: "1px solid rgba(239,68,68,0.24)",
+                  borderRadius: 12,
+                  padding: 10,
+                  marginBottom: 10,
+                  textAlign: "right",
+                }}
+              >
+                <div
+                  style={{
+                    color: "#fecaca",
+                    fontSize: 11,
+                    fontWeight: 800,
+                    marginBottom: 8,
+                  }}
+                >
+                  تغطية التجاوز: {expectedOverBudget.toFixed(2)} د.أ
+                </div>
+
+                <select
+                  value={overBudgetSource}
+                  onChange={(e) => setOverBudgetSource(e.target.value)}
+                  style={{ ...G.inp(), marginBottom: 8 }}
+                >
+                  <option value="asset">خصم التجاوز من أصل</option>
+                  <option value="liability">تسجيل التجاوز كدين</option>
+                </select>
+
+                {overBudgetSource === "asset" && (
+                  <select
+                    value={overBudgetAssetKey}
+                    onChange={(e) => setOverBudgetAssetKey(e.target.value)}
+                    style={{ ...G.inp(), marginBottom: 0 }}
+                  >
+                    {assetSources.map((s) => (
+                      <option key={s.key} value={s.key}>
+                        {s.label} - متاح {Number(s.available || 0).toFixed(2)} د.أ
+                      </option>
+                    ))}
+                  </select>
+                )}
+
+                {overBudgetSource === "liability" && (
+                  <>
+                    <input
+                      value={overBudgetLiabilityName}
+                      onChange={(e) => setOverBudgetLiabilityName(e.target.value)}
+                      placeholder="اسم دين التجاوز"
+                      style={{ ...G.inp(), marginBottom: 8 }}
+                    />
+
+                    <input
+                      type="date"
+                      value={overBudgetDueDate}
+                      onChange={(e) => setOverBudgetDueDate(e.target.value)}
+                      style={{ ...G.inp(), marginBottom: 0 }}
+                    />
+                  </>
+                )}
+              </div>
+            )}
+
             <input
               value={note}
               onChange={(e) => setNote(e.target.value)}
@@ -1732,6 +2124,223 @@ style={{ ...G.inp(), marginBottom: 10 }}
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function ReportsScreen({ state }) {
+  const expenses = [...(state.expenses || [])].reverse();
+  const total = expenses.reduce((sum, item) => sum + Number(item.amount || 0), 0);
+  const budget = calcBudget(state);
+  const pendingCurrent = [];
+  const getLiabilityAmount = () => 0;
+  const getCoveredAmount = () => 0;
+  const getUncoveredAmount = () => 0;
+
+  const getDueText = (item) => {
+    if (item.dueDate) return item.dueDate;
+    if (item.dueDay) return `يوم ${item.dueDay}`;
+    return "غير محدد";
+  };
+
+  const updateCurrentPaymentMethod = (liability, value) => {
+    setState((prev) => ({
+      ...prev,
+      currentLiabilities: prev.currentLiabilities.map((item) =>
+        item.id === liability.id ? { ...item, paymentMethod: value } : item
+      ),
+    }));
+  };
+
+  const payCurrentFromReserved = (liability) => {
+    const amount = Number(
+      liability.payableBuffer ||
+        liability.dueThisMonth ||
+        liability.monthlyDue ||
+        liability.amount ||
+        liability.balance ||
+        0
+    );
+
+    setState((prev) => ({
+      ...prev,
+      currentLiabilities: prev.currentLiabilities.map((item) =>
+        item.id === liability.id
+          ? {
+              ...item,
+              balance: Math.max(0, Number(item.balance || item.amount || 0) - amount),
+              status: "paid",
+              paymentMethod: "salary",
+              salaryPaidAmount: 0,
+            }
+          : item
+      ),
+      transactions: [
+        ...(prev.transactions || []),
+        {
+          id: Date.now(),
+          type: "liability_paid_from_reserved_cap",
+          name: `سداد التزام - ${liability.name}`,
+          amount,
+          liabilityId: liability.id,
+          date: new Date().toISOString(),
+        },
+      ],
+    }));
+  };
+  const payCurrentFromCap = (liability) => {
+    const amount = getLiabilityAmount(liability);
+    const remainingCap = Math.max(
+      0,
+      Number(state.session?.spendingCap || 0) -
+        Number(state.session?.coveredSpent || 0)
+    );
+
+    if (remainingCap < amount) {
+      alert("الرصيد المتاح من سقف الصرف لا يكفي لسداد هذا الالتزام");
+      return;
+    }
+
+    setState((prev) => ({
+      ...prev,
+      session: {
+        ...prev.session,
+        coveredSpent: Number(
+          (Number(prev.session?.coveredSpent || 0) + amount).toFixed(2)
+        ),
+      },
+      currentLiabilities: prev.currentLiabilities.map((item) =>
+        item.id === liability.id
+          ? {
+              ...item,
+              balance: 0,
+              status: "paid",
+              paymentMethod: "cap",
+              payableBuffer: amount,
+              uncoveredDebt: 0,
+            }
+          : item
+      ),
+      transactions: [
+        ...(prev.transactions || []),
+        {
+          id: Date.now(),
+          type: "liability_paid_from_cap",
+          amount,
+          liabilityId: liability.id,
+          date: new Date().toISOString(),
+        },
+      ],
+    }));
+  };
+
+  const setPostponeDate = (liability, value) => {
+    setState((prev) => ({
+      ...prev,
+      currentLiabilities: prev.currentLiabilities.map((item) =>
+        item.id === liability.id ? { ...item, newDueDate: value } : item
+      ),
+    }));
+  };
+
+  const confirmPostpone = (liability) => {
+    setState((prev) => ({
+      ...prev,
+      currentLiabilities: prev.currentLiabilities.map((item) =>
+        item.id === liability.id
+          ? { ...item, dueDate: item.newDueDate, newDueDate: "" }
+          : item
+      ),
+    }));
+  };
+
+  const coveredCurrentTotal = pendingCurrent.reduce(
+    (sum, item) => sum + getCoveredAmount(item),
+    0
+  );
+  const uncoveredCurrentTotal = pendingCurrent.reduce(
+    (sum, item) => sum + getUncoveredAmount(item),
+    0
+  );
+
+  return (
+    <div style={G.scr}>
+      <div style={G.card()}>
+        <div style={{ textAlign: "right", color: "#94a3b8", fontSize: 12, marginBottom: 10 }}>
+          ملخص المصروفات
+        </div>
+
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "1fr 1fr",
+            gap: 8,
+            marginBottom: 12,
+          }}
+        >
+          <div style={{ background: "#1a2540", borderRadius: 10, padding: 10 }}>
+            <div style={{ fontSize: 10, color: "#64748b" }}>إجمالي المصروف</div>
+            <div style={{ color: "#f8fafc", fontWeight: 900 }}>
+              {total.toFixed(2)}
+            </div>
+          </div>
+
+          <div style={{ background: "#1a2540", borderRadius: 10, padding: 10 }}>
+            <div style={{ fontSize: 10, color: "#64748b" }}>المتبقي من السقف</div>
+            <div style={{ color: "#22c55e", fontWeight: 900 }}>
+              {budget.remainingCap.toFixed(2)}
+            </div>
+          </div>
+        </div>
+
+        <ExpenseDonut expenses={state.expenses} />
+      </div>
+
+      <div style={G.card()}>
+        <div style={{ textAlign: "right", marginBottom: 10, color: "#94a3b8" }}>
+          كشف المصروفات
+        </div>
+
+        {expenses.map((e, i) => (
+          <div key={e.id} style={i < expenses.length - 1 ? G.row : G.lrow}>
+            <div>
+              <div style={{ fontSize: 15, fontWeight: 800 }}>
+                {Number(e.amount || 0).toFixed(2)} د.أ
+              </div>
+              <div style={{ fontSize: 10, color: "#64748b" }}>
+                مغطى: {Number(e.budgetCovered || 0).toFixed(2)} | تجاوز:{" "}
+                {Number(e.overBudget || 0).toFixed(2)}
+              </div>
+            </div>
+
+            <div style={{ textAlign: "right" }}>
+              <div style={{ fontSize: 13 }}>{e.note || e.category}</div>
+              <div
+                style={{
+                  fontSize: 10,
+                  color: CC[e.category] || "#94a3b8",
+                  marginTop: 2,
+                }}
+              >
+                {e.category} | {e.paymentMethod}
+              </div>
+            </div>
+          </div>
+        ))}
+
+        {!expenses.length && (
+          <div
+            style={{
+              textAlign: "center",
+              color: "#475569",
+              padding: "20px 0",
+              fontSize: 13,
+            }}
+          >
+            لا توجد مصروفات بعد
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -2399,7 +3008,7 @@ const getDueValue = (item) => {
 };
 
 const sortedCurrent = [...currentList].sort(
-  (a, b) => getDueValue(a) - getDueValue(b)
+  (a, b) => getDueValue(b) - getDueValue(a)
 );
   const structuralTotal = calcStructuralTotal(state);
 
@@ -2442,9 +3051,13 @@ const dueThisMonthTotal = dueThisMonthList.reduce(
 const futureCurrentList = pendingCurrent.filter((l) => !isDueThisMonth(l));
 const [cardName, setCardName] = useState("");
 const [cardBalance, setCardBalance] = useState("");
+const [cardLimit, setCardLimit] = useState("");
+const [cardDueDate, setCardDueDate] = useState("");
 const [showAddCard, setShowAddCard] = useState(false);
 const [selectedCardId, setSelectedCardId] = useState("");
 const [cardMode, setCardMode] = useState("");
+const [openCurrentId, setOpenCurrentId] = useState(null);
+const [liabilityAssetKey, setLiabilityAssetKey] = useState("cash");
 const [editCardName, setEditCardName] = useState("");
 const [editCardBalance, setEditCardBalance] = useState("");
 
@@ -2452,6 +3065,10 @@ const addCreditCard = () => {
   if (!cardName.trim()) return alert("أدخل اسم البطاقة");
 
   const balance = Number(cardBalance || 0);
+  const creditLimit = Number(cardLimit || 0);
+  if (creditLimit <= 0) return alert("أدخل سقف البطاقة الائتمانية");
+  if (balance > creditLimit) return alert("رصيد البطاقة الحالي لا يجوز أن يتجاوز سقفها");
+  if (!cardDueDate) return alert("أدخل تاريخ استحقاق البطاقة");
   if (balance < 0) return alert("رصيد البطاقة لا يجوز أن يكون سالبًا");
 
   setState((p) => ({
@@ -2464,8 +3081,11 @@ const addCreditCard = () => {
         name: cardName.trim(),
         amount: balance,
         balance,
+        creditLimit,
         payableBuffer: 0,
         uncoveredDebt: balance,
+        dueDate: cardDueDate,
+        dueDay: new Date(cardDueDate).getDate(),
         status: "active",
         source: "manual_card",
         createdAt: new Date().toISOString(),
@@ -2476,6 +3096,8 @@ const addCreditCard = () => {
 
   setCardName("");
   setCardBalance("");
+  setCardLimit("");
+  setCardDueDate("");
   setShowAddCard(false);
 };
 
@@ -2581,6 +3203,479 @@ const prepareEditCreditCard = (id) => {
     return status || "غير محدد";
   };
 
+  const getStructuralAmount = (item) =>
+    Number(item.monthlyAmount ?? item.monthly ?? item.amount ?? 0);
+  const liabilityAssetSources = getAssetSources(state);
+  const getCoveredAmount = (item) => Math.max(0, Number(item.payableBuffer || 0));
+  const getUncoveredAmount = (item) => {
+    const balance = getLiabilityAmount(item);
+    const explicit = Number(item.uncoveredDebt || 0);
+    return explicit > 0 ? explicit : Math.max(0, balance - getCoveredAmount(item));
+  };
+  const getDueText = (item) =>
+    item.dueDate ? item.dueDate : item.dueDay ? `يوم ${item.dueDay}` : "غير محدد";
+  const coveredCurrentTotal = pendingCurrent.reduce(
+    (sum, item) => sum + getCoveredAmount(item),
+    0
+  );
+  const uncoveredCurrentTotal = pendingCurrent.reduce(
+    (sum, item) => sum + getUncoveredAmount(item),
+    0
+  );
+  const updateCurrentPaymentMethod = (liability, value) => {
+    setState((prev) => ({
+      ...prev,
+      currentLiabilities: prev.currentLiabilities.map((item) =>
+        item.id === liability.id ? { ...item, paymentMethod: value } : item
+      ),
+    }));
+  };
+  const payCurrentFromReserved = (liability) => {
+    const amount = Math.min(
+      getLiabilityAmount(liability),
+      Math.max(0, Number(liability.payableBuffer || 0))
+    );
+    if (amount <= 0) return;
+
+    setState((prev) => ({
+      ...prev,
+      currentLiabilities: prev.currentLiabilities.map((item) =>
+        item.id === liability.id
+          ? (() => {
+              const nextBalance = Math.max(
+                0,
+                Number((Number(item.balance || item.amount || 0) - amount).toFixed(2))
+              );
+              return {
+                ...item,
+                balance: nextBalance,
+                amount: item.type === "card" ? item.amount : nextBalance,
+                payableBuffer: Math.max(
+                  0,
+                  Number((Number(item.payableBuffer || 0) - amount).toFixed(2))
+                ),
+                status: nextBalance <= 0 ? "paid" : "pending",
+                paymentMethod: "",
+              };
+            })()
+          : item
+      ),
+      transactions: [
+        ...(prev.transactions || []),
+        {
+          id: Date.now(),
+          type: "liability_paid_from_reserved_cap",
+          amount,
+          liabilityId: liability.id,
+          date: new Date().toISOString(),
+        },
+      ],
+    }));
+  };
+  const payCurrentFromAsset = (liability) => {
+    const amount = getLiabilityAmount(liability);
+    const deduction = deductFromAsset(state, liabilityAssetKey, amount);
+    if (!deduction.success) {
+      alert(deduction.message);
+      return;
+    }
+
+    setState({
+      ...deduction.nextState,
+      currentLiabilities: (deduction.nextState.currentLiabilities || []).map((item) =>
+        item.id === liability.id
+          ? { ...item, balance: 0, status: "paid", paymentMethod: "assets" }
+          : item
+      ),
+      transactions: [
+        ...(deduction.nextState.transactions || []),
+        {
+          id: Date.now(),
+          type: "liability_paid_from_asset",
+          amount,
+          assetKey: liabilityAssetKey,
+          liabilityId: liability.id,
+          date: new Date().toISOString(),
+        },
+      ],
+    });
+  };
+
+  return (
+    <div style={G.scr}>
+      <button
+        type="button"
+        onClick={() => setShowStructuralDetails((v) => !v)}
+        style={{ ...G.card("#ef444422"), width: "100%", textAlign: "right", cursor: "pointer" }}
+      >
+        <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
+          <div>
+            <div style={{ fontSize: 15, color: "#f8fafc", fontWeight: 900, marginBottom: 4 }}>
+              الالتزامات الهيكلية
+            </div>
+            <div style={{ fontSize: 11, color: "#64748b" }}>
+              أقساط ثابتة قادمة من الإعدادات
+            </div>
+          </div>
+          <div style={{ textAlign: "left" }}>
+            <div style={{ fontSize: 22, fontWeight: 900, color: "#ef4444" }}>
+              {structuralTotal.toFixed(2)}
+              <span style={{ fontSize: 11, color: "#64748b" }}> د.أ</span>
+            </div>
+            <div style={{ fontSize: 11, color: "#e8c96a" }}>
+              {showStructuralDetails ? "إخفاء التفاصيل" : "عرض التفاصيل"}
+            </div>
+          </div>
+        </div>
+
+        {showStructuralDetails && (
+          <div style={{ marginTop: 12, borderTop: "1px solid #1e293b", paddingTop: 8 }}>
+            {structuralList.map((item, index) => (
+              <div key={item.id || index} style={index < structuralList.length - 1 ? G.row : G.lrow}>
+                <strong>{getStructuralAmount(item).toFixed(2)} د.أ</strong>
+                <div style={{ textAlign: "right", display: "flex", gap: 10, alignItems: "center" }}>
+                  <div
+                    style={{
+                      width: 36,
+                      height: 36,
+                      borderRadius: 12,
+                      background: "#1e293b",
+                      color: "#e8c96a",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      fontSize: 18,
+                      flexShrink: 0,
+                    }}
+                  >
+                    🏗
+                  </div>
+                  <div>
+                  <div style={{ fontSize: 13 }}>{item.name}</div>
+                  <div style={{ fontSize: 10, color: "#64748b" }}>
+                    يوم السداد: {item.dueDay || "-"}
+                  </div>
+                </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </button>
+
+      <div style={G.card("#ef444422")}>
+        <div
+          onClick={() => setShowCurrentDetails((v) => !v)}
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            gap: 12,
+            marginBottom: 12,
+            cursor: "pointer",
+          }}
+        >
+          <div style={{ textAlign: "right" }}>
+            <div style={{ fontSize: 15, fontWeight: 900 }}>الالتزامات الجارية</div>
+            <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 3 }}>
+              ديون قصيرة الأجل وبطاقات مستحقة
+            </div>
+          </div>
+          <div style={{ textAlign: "left" }}>
+            <div style={{ fontSize: 22, fontWeight: 900, color: "#ef4444" }}>
+              {currentDebtTotal.toFixed(2)}
+              <span style={{ fontSize: 11, color: "#64748b" }}> د.أ</span>
+            </div>
+            <div style={{ fontSize: 10, color: "#94a3b8" }}>
+              {showCurrentDetails ? "إخفاء التفاصيل" : "عرض التفاصيل"}
+            </div>
+          </div>
+        </div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 12 }}>
+          <div style={{ background: "#13251d", borderRadius: 10, padding: 10 }}>
+            <div style={{ fontSize: 10, color: "#86efac" }}>محجوز من السقف</div>
+            <div style={{ color: "#22c55e", fontWeight: 900 }}>
+              {coveredCurrentTotal.toFixed(2)}
+            </div>
+          </div>
+          <div style={{ background: "#2b1111", borderRadius: 10, padding: 10 }}>
+            <div style={{ fontSize: 10, color: "#fecaca" }}>غير مغطى</div>
+            <div style={{ color: "#ef4444", fontWeight: 900 }}>
+              {uncoveredCurrentTotal.toFixed(2)}
+            </div>
+          </div>
+        </div>
+
+        {showCurrentDetails && sortedCurrent.map((item) => {
+          const amount = getLiabilityAmount(item);
+          const covered = getCoveredAmount(item);
+          const uncovered = getUncoveredAmount(item);
+          const coveragePct = amount > 0 ? Math.min(100, (covered / amount) * 100) : 0;
+          const isCard = item.type === "card";
+          const isOpen = openCurrentId === item.id;
+          const creditLimit = Number(item.creditLimit || 0);
+          const availableCredit = Math.max(0, creditLimit - Number(item.balance || 0));
+          const itemIcon = isCard ? "💳" : item.type === "over_budget" ? "⚠" : "🧾";
+          const primaryName = isCard ? item.name || "بطاقة ائتمانية" : item.name || "دائن";
+          const remainingCap = Math.max(
+            0,
+            Number(state.session?.spendingCap || 0) -
+              Number(state.session?.coveredSpent || 0)
+          );
+
+          return (
+            <div
+              key={item.id}
+              style={{
+                background: isOpen ? "#111827" : "#0b1220",
+                border: isOpen ? "1px solid rgba(232,201,106,0.62)" : "1px solid #1e293b",
+                borderRadius: 12,
+                padding: 12,
+                marginBottom: 10,
+                boxShadow: isOpen ? "0 12px 28px rgba(232,201,106,0.10)" : "none",
+              }}
+            >
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
+                <div style={{ textAlign: "right", display: "flex", gap: 10, alignItems: "center" }}>
+                  <div
+                    style={{
+                      width: 36,
+                      height: 36,
+                      borderRadius: 12,
+                      background: isCard ? "#172554" : "#1e293b",
+                      color: isCard ? "#93c5fd" : "#e8c96a",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      fontSize: 18,
+                      flexShrink: 0,
+                    }}
+                  >
+                    {itemIcon}
+                  </div>
+                  <div>
+                  <div style={{ fontSize: 14, fontWeight: 900 }}>{primaryName}</div>
+                  {isCard && (
+                    <div style={{ fontSize: 10, color: "#93c5fd", marginTop: 3 }}>
+                      السقف: {creditLimit.toFixed(2)} · المستخدم: {Number(item.balance || 0).toFixed(2)} · المتاح: {availableCredit.toFixed(2)}
+                    </div>
+                  )}
+                  {!isCard && (
+                    <div style={{ fontSize: 10, color: "#94a3b8", marginTop: 3 }}>
+                      اسم الدائن
+                    </div>
+                  )}
+                  <div style={{ display: openCurrentId === item.id ? "block" : "none", fontSize: 10, color: "#94a3b8", marginTop: 3 }}>
+                    {getTypeLabel(item)} · الاستحقاق: {getDueText(item)}
+                  </div>
+                </div>
+                </div>
+                <div style={{ textAlign: "left" }}>
+                  <div style={{ fontSize: 17, fontWeight: 900, color: "#f8fafc" }}>
+                    {amount.toFixed(2)}
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setOpenCurrentId(openCurrentId === item.id ? null : item.id)
+                      }
+                      style={{
+                        marginRight: 8,
+                        width: 30,
+                        height: 30,
+                        borderRadius: 10,
+                        border: "1px solid #334155",
+                        background: "#111827",
+                        color: "#e8c96a",
+                        cursor: "pointer",
+                        fontWeight: 900,
+                      }}
+                    >
+                      ⋯
+                    </button>
+                  </div>
+                  <div style={{ fontSize: 10, color: "#64748b" }}>د.أ</div>
+                </div>
+              </div>
+
+              <div style={{ display: openCurrentId === item.id ? "block" : "none", height: 7, background: "#1e293b", borderRadius: 999, overflow: "hidden", marginTop: 10 }}>
+                <div style={{ width: `${coveragePct}%`, height: "100%", background: "linear-gradient(90deg,#22c55e,#e8c96a)" }} />
+              </div>
+
+              <div style={{ display: openCurrentId === item.id ? "grid" : "none", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 10 }}>
+                <div style={{ fontSize: 11, color: "#86efac" }}>
+                  مغطى ومحجوز: <b>{covered.toFixed(2)}</b>
+                </div>
+                <div style={{ fontSize: 11, color: "#fecaca" }}>
+                  غير مغطى: <b>{uncovered.toFixed(2)}</b>
+                </div>
+              </div>
+
+              <div style={{ display: openCurrentId === item.id ? "block" : "none", marginTop: 10 }}>
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "flex-start",
+                    gap: 8,
+                    marginBottom: 8,
+                    direction: "ltr",
+                  }}
+                >
+                  {covered > 0 && (
+                    <button
+                      type="button"
+                      title="سداد من المحجوز"
+                      onClick={() => payCurrentFromReserved(item)}
+                      style={G.iconBtn(false, "#86efac")}
+                    >
+                      ✓
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    title="سداد من أصل"
+                    onClick={() => updateCurrentPaymentMethod(item, item.paymentMethod === "assets" ? "" : "assets")}
+                    style={G.iconBtn(item.paymentMethod === "assets", "#e8c96a")}
+                  >
+                    ◈
+                  </button>
+                  <button
+                    type="button"
+                    title="تأجيل الاستحقاق"
+                    onClick={() => updateCurrentPaymentMethod(item, item.paymentMethod === "postpone" ? "" : "postpone")}
+                    style={G.iconBtn(item.paymentMethod === "postpone", "#cbd5e1")}
+                  >
+                    ◷
+                  </button>
+                </div>
+
+                {item.paymentMethod === "assets" && (
+                  <>
+                    <select
+                      value={liabilityAssetKey}
+                      onChange={(e) => setLiabilityAssetKey(e.target.value)}
+                      style={{ ...G.inp(), marginBottom: 8 }}
+                    >
+                      {liabilityAssetSources.map((asset) => (
+                        <option key={asset.key} value={asset.key}>
+                          {asset.label} - متاح {Number(asset.available || 0).toFixed(2)} د.أ
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={() => payCurrentFromAsset(item)}
+                      style={G.btn("#1e293b", "#e8c96a", { width: "100%", padding: "9px" })}
+                    >
+                      تأكيد السداد من الأصل
+                    </button>
+                  </>
+                )}
+                {item.paymentMethod === "postpone" && (
+                  <input
+                    type="date"
+                    value={item.newDueDate || ""}
+                    onChange={(e) =>
+                      setState((prev) => ({
+                        ...prev,
+                        currentLiabilities: prev.currentLiabilities.map((liability) =>
+                          liability.id === item.id
+                            ? { ...liability, dueDate: e.target.value, newDueDate: "" }
+                            : liability
+                        ),
+                      }))
+                    }
+                    style={{ ...G.inp(), marginBottom: 0 }}
+                  />
+                )}
+              </div>
+            </div>
+          );
+        })}
+
+        {!sortedCurrent.length && (
+          <div style={{ textAlign: "center", color: "#64748b", padding: "18px 0", fontSize: 13 }}>
+            لا توجد التزامات جارية
+          </div>
+        )}
+      </div>
+
+      <div style={{ ...G.card(), display: "none" }}>
+        <div style={{ fontSize: 13, fontWeight: 900, marginBottom: 10, textAlign: "right" }}>
+          إدارة البطاقات الائتمانية
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+          <button type="button" onClick={() => setCardMode(cardMode === "add" ? "" : "add")} style={G.btn("#1e293b", "#cbd5e1", { width: "100%" })}>
+            إضافة بطاقة
+          </button>
+          <button type="button" onClick={() => setCardMode(cardMode === "delete" ? "" : "delete")} style={G.btn("#2b1111", "#fecaca", { width: "100%" })}>
+            حذف بطاقة
+          </button>
+        </div>
+        {cardMode === "add" && (
+          <div style={{ marginTop: 12 }}>
+            <input
+              value={cardName}
+              onChange={(e) => setCardName(e.target.value)}
+              placeholder="اسم البطاقة"
+              style={{ ...G.inp(), marginBottom: 8 }}
+            />
+            <input
+              type="number"
+              value={cardLimit}
+              onChange={(e) => setCardLimit(e.target.value)}
+              placeholder="سقف البطاقة"
+              style={{ ...G.inp(), marginBottom: 8 }}
+            />
+            <input
+              type="number"
+              value={cardBalance}
+              onChange={(e) => setCardBalance(e.target.value)}
+              placeholder="الرصيد المستخدم حاليًا"
+              style={{ ...G.inp(), marginBottom: 8 }}
+            />
+            <input
+              type="date"
+              value={cardDueDate}
+              onChange={(e) => setCardDueDate(e.target.value)}
+              style={{ ...G.inp(), marginBottom: 8 }}
+            />
+            <button
+              type="button"
+              onClick={addCreditCard}
+              style={G.btn("#17341f", "#86efac", { width: "100%" })}
+            >
+              حفظ البطاقة
+            </button>
+          </div>
+        )}
+        {cardMode === "delete" && (
+          <div style={{ marginTop: 12 }}>
+            <select
+              value={selectedCardId}
+              onChange={(e) => setSelectedCardId(e.target.value)}
+              style={{ ...G.inp(), marginBottom: 8 }}
+            >
+              <option value="">اختر البطاقة</option>
+              {currentList
+                .filter((item) => item.type === "card")
+                .map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.name} - الرصيد: {Number(item.balance || 0).toFixed(2)}
+                  </option>
+                ))}
+            </select>
+            <button
+              type="button"
+              onClick={deleteSelectedCreditCard}
+              style={G.btn("#2b1111", "#fecaca", { width: "100%" })}
+            >
+              حذف البطاقة المختارة
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
   return (
 <div style={G.scr}>
         <div style={{ ...G.card("#ef444422"), textAlign: "center" }}>
@@ -3127,6 +4222,12 @@ function clampSpendingCapAfterStructuralChange(nextState) {
   const [structuralName, setStructuralName] = useState("");
 const [structuralMonthly, setStructuralMonthly] = useState("");
 const [structuralDueDay, setStructuralDueDay] = useState("");
+const [settingsCardName, setSettingsCardName] = useState("");
+const [settingsCardLimit, setSettingsCardLimit] = useState("");
+const [settingsCardBalance, setSettingsCardBalance] = useState("");
+const [settingsCardDueDate, setSettingsCardDueDate] = useState("");
+const [settingsCardMode, setSettingsCardMode] = useState("");
+const [settingsSelectedCardId, setSettingsSelectedCardId] = useState("");
   const updateStockPrice = (stockId, price) => {
   setState((p) => ({
     ...p,
@@ -3210,6 +4311,63 @@ const deleteStructuralLiability = (id) => {
     return clampSpendingCapAfterStructuralChange(next);
   });
 };
+const addSettingsCreditCard = () => {
+  if (!settingsCardName.trim()) return alert("أدخل اسم البطاقة");
+  const creditLimit = Number(settingsCardLimit || 0);
+  const balance = Number(settingsCardBalance || 0);
+  if (creditLimit <= 0) return alert("أدخل سقف البطاقة");
+  if (balance < 0) return alert("الرصيد المستخدم لا يجوز أن يكون سالبًا");
+  if (balance > creditLimit) return alert("الرصيد المستخدم لا يجوز أن يتجاوز سقف البطاقة");
+  if (!settingsCardDueDate) return alert("أدخل تاريخ استحقاق البطاقة");
+
+  setState((p) => ({
+    ...p,
+    currentLiabilities: [
+      ...(p.currentLiabilities || []),
+      {
+        id: Date.now(),
+        type: "card",
+        name: settingsCardName.trim(),
+        amount: balance,
+        balance,
+        creditLimit,
+        payableBuffer: 0,
+        uncoveredDebt: balance,
+        dueDate: settingsCardDueDate,
+        dueDay: new Date(settingsCardDueDate).getDate(),
+        status: "active",
+        source: "manual_card",
+        createdAt: new Date().toISOString(),
+        date: new Date().toISOString().split("T")[0],
+      },
+    ],
+  }));
+
+  setSettingsCardName("");
+  setSettingsCardLimit("");
+  setSettingsCardBalance("");
+  setSettingsCardDueDate("");
+  setSettingsCardMode("");
+};
+
+const deleteSettingsCreditCard = () => {
+  if (!settingsSelectedCardId) return alert("اختر البطاقة");
+  const card = (state.currentLiabilities || []).find(
+    (item) => String(item.id) === String(settingsSelectedCardId)
+  );
+  if (!card) return;
+  if (Number(card.balance || 0) > 0) {
+    return alert("لا يمكن حذف بطاقة عليها رصيد. يجب تصفير الرصيد أولًا.");
+  }
+  setState((p) => ({
+    ...p,
+    currentLiabilities: (p.currentLiabilities || []).filter(
+      (item) => String(item.id) !== String(settingsSelectedCardId)
+    ),
+  }));
+  setSettingsSelectedCardId("");
+  setSettingsCardMode("");
+};
 
   return (
     <div style={G.scr}>
@@ -3255,6 +4413,55 @@ const deleteStructuralLiability = (id) => {
 
 <div style={{ fontSize: 12, color: "#94a3b8", marginBottom: 12 }}>
   أقصى سقف صرف مسموح من الراتب: {maxSpendingCap.toFixed(2)}
+</div>
+<div style={{ borderTop: "1px solid #1a2540", paddingTop: 12, marginTop: 8 }}>
+  <div style={{ textAlign: "right", color: "#94a3b8", fontWeight: 800, marginBottom: 10, fontSize: 13 }}>
+    إدارة البطاقات الائتمانية
+  </div>
+  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 10 }}>
+    <button
+      type="button"
+      onClick={() => setSettingsCardMode(settingsCardMode === "add" ? "" : "add")}
+      style={G.btn("#1e293b", "#cbd5e1", { width: "100%" })}
+    >
+      إضافة بطاقة
+    </button>
+    <button
+      type="button"
+      onClick={() => setSettingsCardMode(settingsCardMode === "delete" ? "" : "delete")}
+      style={G.btn("#2b1111", "#fecaca", { width: "100%" })}
+    >
+      حذف بطاقة
+    </button>
+  </div>
+  {settingsCardMode === "add" && (
+    <div>
+      <input value={settingsCardName} onChange={(e) => setSettingsCardName(e.target.value)} placeholder="اسم البطاقة" style={{ ...G.inp(), marginBottom: 8 }} />
+      <input type="number" value={settingsCardLimit} onChange={(e) => setSettingsCardLimit(e.target.value)} placeholder="سقف البطاقة" style={{ ...G.inp(), marginBottom: 8 }} />
+      <input type="number" value={settingsCardBalance} onChange={(e) => setSettingsCardBalance(e.target.value)} placeholder="الرصيد المستخدم حاليًا" style={{ ...G.inp(), marginBottom: 8 }} />
+      <input type="date" value={settingsCardDueDate} onChange={(e) => setSettingsCardDueDate(e.target.value)} style={{ ...G.inp(), marginBottom: 8 }} />
+      <button type="button" onClick={addSettingsCreditCard} style={G.btn("#17341f", "#86efac", { width: "100%" })}>
+        حفظ البطاقة
+      </button>
+    </div>
+  )}
+  {settingsCardMode === "delete" && (
+    <div>
+      <select value={settingsSelectedCardId} onChange={(e) => setSettingsSelectedCardId(e.target.value)} style={{ ...G.inp(), marginBottom: 8 }}>
+        <option value="">اختر البطاقة</option>
+        {(state.currentLiabilities || [])
+          .filter((item) => item.type === "card")
+          .map((item) => (
+            <option key={item.id} value={item.id}>
+              {item.name} - الرصيد: {Number(item.balance || 0).toFixed(2)}
+            </option>
+          ))}
+      </select>
+      <button type="button" onClick={deleteSettingsCreditCard} style={G.btn("#2b1111", "#fecaca", { width: "100%" })}>
+        حذف البطاقة المختارة
+      </button>
+    </div>
+  )}
 </div>
 <div
   style={{
@@ -3851,6 +5058,7 @@ function handleCloseMonth() {
   
   const tabs = [
     { id: "overview", label: "الرئيسية" },
+    { id: "reports", label: "التقارير" },
     { id: "assets", label: "الأصول" },
     { id: "liabilities", label: "الخصوم" },
     { id: "settings", label: "الإعدادات" },
@@ -4149,7 +5357,14 @@ boxShadow:
 </>
 </div>
 
-{tab === "overview" && <Overview state={viewState} setState={setState} />}
+{tab === "overview" && (
+  <Overview
+    state={viewState}
+    setState={setState}
+    onOpenReports={() => setTab("reports")}
+  />
+)}
+      {tab === "reports" && <ReportsScreen state={viewState} />}
       {tab === "assets" && (
   <AssetsScreen
 state={viewState}
