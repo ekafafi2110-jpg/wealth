@@ -1,5 +1,28 @@
+@import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap');
+
+:root {
+  --bg-page: #FAF7F2;
+  --bg-card: #FFFDF8;
+  --bg-secondary: #F0EBE0;
+  --border-soft: #EDE5D5;
+  --gold-primary: #C9A84C;
+  --gold-dark: #B8922E;
+  --gold-light: #FDF0D5;
+  --gold-border: #E8C97A;
+  --text-heading: #5C4A1E;
+  --text-body: #3D3020;
+  --text-muted: #7A6A50;
+  --text-faint: #B0A080;
+  --text-disabled: #C8BAA0;
+  --red-bg: #FFF5F5;
+  --red-border: #F5AEAE;
+  --green-bg: #F2FAF5;
+  --green-border: #96D9B0;
+}
+
 * {
   box-sizing: border-box;
+  font-family: 'Tajawal', sans-serif;
 }
 
 html,
@@ -11,6 +34,71 @@ body,
 }
 
 body {
-  background: #080f1a;
-  font-family: "Segoe UI", Tahoma, Arial, sans-serif;
+  background: var(--bg-page);
+  color: var(--text-body);
+  font-family: 'Tajawal', sans-serif;
+}
+
+::-webkit-scrollbar {
+  width: 4px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--gold-border);
+  border-radius: 4px;
+}
+
+input,
+select,
+textarea {
+  background: var(--bg-secondary) !important;
+  border: 1px solid var(--border-soft) !important;
+  border-radius: 10px;
+  color: var(--text-body) !important;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  border-color: var(--gold-primary) !important;
+  outline: none !important;
+}
+
+button:hover {
+  opacity: 0.88;
+}
+
+.section-label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--text-faint);
+  margin-bottom: 10px;
+}
+
+.tab-page-motion {
+  animation: tabPageIn 0.24s ease backwards;
+}
+
+@keyframes tabPageIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tab-page-motion {
+    animation: none;
+  }
 }

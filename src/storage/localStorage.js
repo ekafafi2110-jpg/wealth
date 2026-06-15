@@ -1,4 +1,5 @@
-const STORAGE_KEY = "wealth-tracker-v1";
+const STORAGE_KEY = "wealth-tracker-v2";
+const LEGACY_STORAGE_KEYS = ["wealth-tracker-v1"];
 
 export function saveState(state) {
   try {
@@ -23,4 +24,5 @@ export function loadState() {
 
 export function clearState() {
   localStorage.removeItem(STORAGE_KEY);
+  LEGACY_STORAGE_KEYS.forEach((key) => localStorage.removeItem(key));
 }

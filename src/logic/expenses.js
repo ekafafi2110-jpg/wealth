@@ -20,11 +20,12 @@ const today = now.slice(0, 10);
   const remainingCap = Math.max(0, spendingCap - coveredSpent);
 
   const isEmergency = expenseData.paymentMethod === "emergency";
+  const isAssetPayment = expenseData.paymentMethod === "asset";
   const emergencyFunding = expenseData.emergencyFunding || {};
   const emergencyMode = emergencyFunding.mode || "";
   const emergencyRemainderSource = emergencyFunding.remainderSource || "asset";
 
-  let budgetCovered = Math.min(amount, remainingCap);
+  let budgetCovered = isAssetPayment ? 0 : Math.min(amount, remainingCap);
 
   if (isEmergency) {
     if (!["asset", "liability", "mix"].includes(emergencyMode)) {
@@ -56,7 +57,7 @@ const today = now.slice(0, 10);
   }
 
   const fundedOutsideCap = Math.max(0, amount - budgetCovered);
-  const overBudget = isEmergency ? 0 : fundedOutsideCap;
+  const overBudget = isEmergency || isAssetPayment ? 0 : fundedOutsideCap;
   const isOverBudget = overBudget > 0;
   const emergencyAssetAmount = isEmergency
     ? emergencyMode === "asset"
@@ -75,6 +76,16 @@ const today = now.slice(0, 10);
   const expenseAmount = isEmergency
     ? Math.max(0, amount - emergencyLiabilityAmount)
     : amount;
+
+  if (isAssetPayment) {
+    const deduction = deductFromAsset(next, expenseData.assetKey || "cash", amount);
+
+    if (!deduction.success) {
+      return deduction;
+    }
+
+    Object.assign(next, deduction.nextState);
+  }
 
   if (isEmergency && emergencyAssetAmount > 0) {
     const deduction = deductFromAsset(
@@ -228,6 +239,17 @@ createdAt: now,
       type: "emergency_expense_covered_from_asset",
       amount: emergencyAssetAmount,
       assetKey: emergencyFunding.assetKey || "cash",
+      expenseId: expense.id,
+      date: now,
+    });
+  }
+
+  if (isAssetPayment) {
+    next.transactions.push({
+      id: Date.now() + 3,
+      type: "expense_paid_from_asset",
+      amount,
+      assetKey: expenseData.assetKey || "cash",
       expenseId: expense.id,
       date: now,
     });

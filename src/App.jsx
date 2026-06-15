@@ -33,20 +33,20 @@ const CAT_ICONS = {
   أخرى: "•••",
 };
 const CC = {
-  طعام: "#f59e0b",
-  مواصلات: "#3b82f6",
-  تسوق: "#a855f7",
-  صحة: "#22c55e",
-  ترفيه: "#ec4899",
-  فواتير: "#64748b",
-  بنزين: "#f97316",
-  ملابس: "#38bdf8",
-هدايا: "#f472b6",
-قرطاسية: "#a78bfa",
-"أقساط مدارس": "#facc15",
-"صيانة سيارة": "#fb923c",
-"صيانة بيت": "#34d399",
-  أخرى: "#94a3b8",
+  طعام: "#E8A44A",
+  مواصلات: "#A78BF5",
+  تسوق: "#F5C96A",
+  صحة: "#F07A7A",
+  ترفيه: "#60C698",
+  فواتير: "#7BBFF5",
+  بنزين: "#E8A44A",
+  ملابس: "#7BBFF5",
+هدايا: "#A78BF5",
+قرطاسية: "#F5C96A",
+"أقساط مدارس": "#F5C96A",
+"صيانة سيارة": "#E8A44A",
+"صيانة بيت": "#60C698",
+  أخرى: "#B0A080",
 };
 
 const ICONS = {
@@ -60,33 +60,89 @@ const ICONS = {
   transfer: "⇄",
 };
 
+const CATEGORY_TILE_STYLE = {
+  طعام: { bg: "#FFF0D5", icon: "#E8A44A" },
+  ترفيه: { bg: "#EDF9F3", icon: "#60C698" },
+  فواتير: { bg: "#EEF5FE", icon: "#7BBFF5" },
+  صحة: { bg: "#FFF0F0", icon: "#F07A7A" },
+  مواصلات: { bg: "#F3F0FF", icon: "#A78BF5" },
+};
+
+const getCategoryTileStyle = (category) =>
+  CATEGORY_TILE_STYLE[category] || { bg: "var(--gold-light)", icon: "var(--gold-dark)" };
+
+const SUMMARY_CARD_STYLE = {
+  total: {
+    background: "#FFFBF0",
+    border: "1.5px solid var(--gold-border)",
+    value: "var(--gold-dark)",
+  },
+  danger: {
+    background: "var(--red-bg)",
+    border: "1.5px solid var(--red-border)",
+    value: "#D95555",
+  },
+  success: {
+    background: "var(--green-bg)",
+    border: "1.5px solid var(--green-border)",
+    value: "#2A9E60",
+  },
+};
+
+const summaryCard = (type) => ({
+  background: SUMMARY_CARD_STYLE[type].background,
+  border: SUMMARY_CARD_STYLE[type].border,
+  borderRadius: 14,
+  padding: "11px 10px",
+  textAlign: "center",
+});
+
+const summaryValue = (type) => ({
+  color: SUMMARY_CARD_STYLE[type].value,
+  fontSize: 17,
+  fontWeight: 800,
+  fontVariantNumeric: "tabular-nums",
+});
+
+const labelText = {
+  fontSize: 10,
+  fontWeight: 700,
+  color: "var(--text-muted)",
+};
+
+const sectionHeading = {
+  fontSize: 12,
+  fontWeight: 800,
+  color: "var(--text-heading)",
+};
+
 const G = {
   app: {
     minHeight: "100vh",
-    background: "#080f1a",
-    fontFamily: "'Segoe UI', Tahoma, Arial, sans-serif",
+    background: "var(--bg-page)",
+    fontFamily: "'Tajawal', sans-serif",
     direction: "rtl",
-    color: "#f8fafc",
+    color: "var(--text-body)",
     maxWidth: 440,
     margin: "0 auto",
     position: "relative",
-    paddingBottom: 90,
+    paddingBottom: 82,
   },
   hdr: {
-    background: "#0c1525",
-    borderBottom: "1px solid #1e293b",
+    background: "linear-gradient(135deg, var(--bg-card) 0%, #FDF5E6 100%)",
+    borderBottom: "1px solid var(--border-soft)",
     padding: "14px 16px 0",
     position: "sticky",
     top: 0,
     zIndex: 50,
   },
   scr: { padding: "14px" },
-  iconBtn: (active, color = "#e8c96a") => ({
+  iconBtn: (active, color = "var(--gold-primary)") => ({
     width: 42,
     height: 42,
     borderRadius: 12,
-    border: active ? `1px solid ${color}` : "1px solid #334155",
-    background: active ? "rgba(232,201,106,0.12)" : "#111827",
+    border: active ? `1px solid ${color}` : "1px solid var(--border-soft)",
+    background: active ? "var(--gold-light)" : "var(--bg-card)",
     color,
     cursor: "pointer",
     fontSize: 17,
@@ -94,23 +150,24 @@ const G = {
     alignItems: "center",
     justifyContent: "center",
   }),
-  card: (b) => ({
-    background: "#0f172a",
-    borderRadius: 16,
-    border: `1px solid ${b || "#1e293b"}`,
+  card: () => ({
+    background: "var(--bg-card)",
+    borderRadius: 18,
+    border: "1px solid var(--border-soft)",
     padding: "14px 16px",
-    marginBottom: 12,
-    color: "#f8fafc",
+    marginBottom: 14,
+    color: "var(--text-body)",
     fontFamily: "inherit",
     fontSize: 14,
+    boxShadow: "none",
   }),
   row: {
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
     padding: "10px 0",
-    borderBottom: "1px solid #1a2540",
-    color: "#f8fafc",
+    borderBottom: "1px solid var(--border-soft)",
+    color: "var(--text-body)",
     fontSize: 13,
   },
   lrow: {
@@ -118,34 +175,211 @@ const G = {
     justifyContent: "space-between",
     alignItems: "center",
     padding: "10px 0",
-    color: "#f8fafc",
+    color: "var(--text-body)",
     fontSize: 13,
   },
   btn: (bg, col = "#fff", ex = {}) => ({
     background: bg,
-    border: "none",
+    border: bg === "transparent" ? "1.5px solid var(--gold-border)" : "none",
     borderRadius: 12,
-    padding: "12px 20px",
-    color: col,
+    padding: bg === "transparent" ? "9px 18px" : "10px 20px",
+    color: String(bg).includes("gold-primary") ? "#fff" : bg === "transparent" ? "var(--gold-dark)" : col,
     fontWeight: 700,
     fontSize: 14,
     cursor: "pointer",
     fontFamily: "inherit",
+    transition: "opacity 0.15s ease",
     ...ex,
   }),
   inp: (w = "100%") => ({
     width: w,
-    background: "#1e293b",
-    border: "1px solid #334155",
+    background: "var(--bg-secondary)",
+    border: "1px solid var(--border-soft)",
     borderRadius: 10,
     padding: "10px 12px",
-    color: "#f8fafc",
+    color: "var(--text-body)",
     fontSize: 14,
     fontFamily: "inherit",
     textAlign: "right",
     outline: "none",
   }),
 };
+
+const NAV_ICONS = {
+  overview: (
+    <path d="M4 11.5 12 5l8 6.5V20a1 1 0 0 1-1 1h-4.5v-6h-5v6H5a1 1 0 0 1-1-1v-8.5Z" />
+  ),
+  reports: (
+    <>
+      <path d="M5 19V9" />
+      <path d="M12 19V5" />
+      <path d="M19 19v-7" />
+      <path d="M4 19h16" />
+    </>
+  ),
+  assets: (
+    <>
+      <path d="M4 8.5 12 4l8 4.5-8 4.5L4 8.5Z" />
+      <path d="m4 13 8 4.5L20 13" />
+      <path d="m4 17 8 4.5L20 17" />
+    </>
+  ),
+  liabilities: (
+    <>
+      <path d="M6 4h12v16H6z" />
+      <path d="M9 8h6" />
+      <path d="M9 12h6" />
+      <path d="M9 16h3" />
+    </>
+  ),
+  settings: (
+    <>
+      <path d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Z" />
+      <path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.05.05a2 2 0 0 1-2.83 2.83l-.05-.05A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 1.55V21a2 2 0 0 1-4 0v-.05A1.7 1.7 0 0 0 9 19.4a1.7 1.7 0 0 0-1.88.34l-.05.05a2 2 0 1 1-2.83-2.83l.05-.05A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.55-1H3a2 2 0 0 1 0-4h.05A1.7 1.7 0 0 0 4.6 9a1.7 1.7 0 0 0-.34-1.88l-.05-.05a2 2 0 1 1 2.83-2.83l.05.05A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-1.55V3a2 2 0 0 1 4 0v.05A1.7 1.7 0 0 0 15 4.6a1.7 1.7 0 0 0 1.88-.34l.05-.05a2 2 0 1 1 2.83 2.83l-.05.05A1.7 1.7 0 0 0 19.4 9a1.7 1.7 0 0 0 1.55 1H21a2 2 0 0 1 0 4h-.05A1.7 1.7 0 0 0 19.4 15Z" />
+    </>
+  ),
+};
+
+function NavIcon({ id, active = false }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width={active ? "21" : "20"}
+      height={active ? "21" : "20"}
+      aria-hidden="true"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={active ? "2" : "1.85"}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      {NAV_ICONS[id] || NAV_ICONS.overview}
+    </svg>
+  );
+}
+
+function FloatingBottomBar({ tabs, activeTab, onSelect }) {
+  return (
+    <nav
+      aria-label="التنقل الرئيسي"
+      style={{
+        position: "fixed",
+        left: "50%",
+        bottom: 0,
+        transform: "translateX(-50%)",
+        width: "100%",
+        maxWidth: 440,
+        zIndex: 520,
+        direction: "rtl",
+        background: "var(--bg-card)",
+        borderTop: "1px solid var(--border-soft)",
+        padding: "4px 0 calc(1px + env(safe-area-inset-bottom))",
+      }}
+    >
+      <div
+        style={{
+          display: "flex",
+          alignItems: "stretch",
+          justifyContent: "space-around",
+        }}
+      >
+        {tabs.map((item) => {
+          const active = item.id === activeTab;
+
+          return (
+            <button
+              key={item.id}
+              type="button"
+              aria-label={item.label}
+              title={item.label}
+              aria-current={active ? "page" : undefined}
+              onClick={() => onSelect(item.id)}
+              style={{
+                position: "relative",
+                flex: "1 1 0",
+                border: "none",
+                borderTop: active ? "2.5px solid #FACC15" : "2.5px solid transparent",
+                marginTop: active ? -2.5 : 0,
+                background: active
+                  ? "linear-gradient(180deg, rgba(254,249,195,0.95), rgba(255,253,248,0))"
+                  : "transparent",
+                color: "#211A12",
+                cursor: "pointer",
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 1,
+                minWidth: 0,
+                minHeight: 44,
+                padding: "3px 2px 2px",
+                transition: "color 0.18s ease, border-color 0.18s ease, background 0.18s ease, opacity 0.15s ease",
+                WebkitTapHighlightColor: "transparent",
+              }}
+            >
+              {active && (
+                <span
+                  aria-hidden="true"
+                  style={{
+                    position: "absolute",
+                    top: -3,
+                    left: "50%",
+                    width: 36,
+                    height: 28,
+                    transform: "translateX(-50%)",
+                    background:
+                      "radial-gradient(circle at 50% 0%, rgba(250,204,21,0.58), rgba(250,204,21,0.22) 42%, rgba(250,204,21,0) 72%)",
+                    pointerEvents: "none",
+                  }}
+                />
+              )}
+              {active && (
+                <span
+                  aria-hidden="true"
+                  style={{
+                    position: "absolute",
+                    top: 0,
+                    left: "50%",
+                    width: 24,
+                    height: 3,
+                    borderRadius: 99,
+                    transform: "translateX(-50%)",
+                    background: "#FACC15",
+                    boxShadow: "0 0 12px rgba(250,204,21,0.9)",
+                    pointerEvents: "none",
+                  }}
+                />
+              )}
+              <span
+                style={{
+                  position: "relative",
+                  zIndex: 1,
+                  color: active ? "#111111" : "#2B2418",
+                  filter: active ? "drop-shadow(0 0 5px rgba(250,204,21,0.52))" : "none",
+                  lineHeight: 1,
+                }}
+              >
+                <NavIcon id={item.id} active={active} />
+              </span>
+              <span
+                style={{
+                  position: "relative",
+                  zIndex: 1,
+                  color: active ? "#111111" : "#2B2418",
+                  fontSize: 8.5,
+                  fontWeight: 800,
+                  lineHeight: 1.15,
+                }}
+              >
+                {item.label}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </nav>
+  );
+}
 
 function Tag({ label, col }) {
   return (
@@ -166,7 +400,7 @@ function Tag({ label, col }) {
 
 function SpendBar({ spent, cap }) {
   const pct = cap > 0 ? Math.min(100, Math.round((spent / cap) * 100)) : 0;
-  const col = pct >= 100 ? "#ef4444" : pct >= 70 ? "#f59e0b" : "#22c55e";
+  const col = pct >= 100 ? "#F07A7A" : pct >= 70 ? "#E8A44A" : "#60C698";
 
   return (
     <div>
@@ -178,16 +412,16 @@ function SpendBar({ spent, cap }) {
           marginBottom: 5,
         }}
       >
-        <span style={{ color: "#64748b" }}>
+        <span style={{ color: "var(--text-faint)" }}>
           {spent.toFixed(2)} / {cap.toFixed(2)} د.أ
         </span>
         <span style={{ color: col, fontWeight: 700 }}>{pct}%</span>
       </div>
       <div
         style={{
-          background: "#1e293b",
-          borderRadius: 99,
-          height: 10,
+          background: "var(--bg-secondary)",
+          borderRadius: 4,
+          height: 7,
           overflow: "hidden",
         }}
       >
@@ -196,7 +430,7 @@ function SpendBar({ spent, cap }) {
             height: "100%",
             width: `${pct}%`,
             background: col,
-            borderRadius: 99,
+            borderRadius: 4,
           }}
         />
       </div>
@@ -219,8 +453,8 @@ function formatDate(value) {
 const incomeEntryStyle = (isIncome) =>
   isIncome
     ? {
-        background: "rgba(34,197,94,0.12)",
-        border: "1px solid rgba(34,197,94,0.42)",
+        background: "var(--green-bg)",
+        border: "1px solid var(--green-border)",
         borderRadius: 12,
         padding: "9px 10px",
         marginBottom: 8,
@@ -298,6 +532,7 @@ function summarizeAssetReasons(state, month) {
   const labels = {
     over_budget_covered_from_asset: "تجاوز سقف",
     emergency_expense_covered_from_asset: "مصروف طارئ",
+    expense_paid_from_asset: "مصروف من أصل",
     liability_paid_from_asset: "سداد التزام",
   };
   const transferLabels = {
@@ -379,7 +614,7 @@ const grouped = expenseCats.map((cat) => ({
   value: (expenses || [])
     .filter((e) => e.category === cat)
     .reduce((sum, e) => sum + Number(e.amount || 0), 0),
-  color: CC[cat] || "#94a3b8",
+  color: CC[cat] || "var(--text-muted)",
   })).filter((x) => x.value > 0);
   const total = grouped.reduce((sum, x) => sum + x.value, 0);
   const sortedGrouped = [...grouped].sort((a, b) => b.value - a.value);
@@ -389,7 +624,7 @@ const grouped = expenseCats.map((cat) => ({
       <div
         style={{
           textAlign: "center",
-          color: "#475569",
+          color: "var(--text-disabled)",
           padding: "24px 0",
           fontSize: 13,
         }}
@@ -414,17 +649,17 @@ const grouped = expenseCats.map((cat) => ({
                 <span style={{ color: item.color, fontSize: 11, fontWeight: 900 }}>
                   {item.value.toFixed(2)}
                 </span>
-                <span style={{ color: "#cbd5e1", fontSize: 12 }}>
+                <span style={{ color: "var(--text-body)", fontSize: 12 }}>
                   {item.name} · {pct}%
                 </span>
               </div>
-              <div style={{ height: 10, background: "#111827", borderRadius: 99, overflow: "hidden" }}>
+              <div style={{ height: 7, background: "var(--bg-secondary)", borderRadius: 4, overflow: "hidden" }}>
                 <div
                   style={{
                     width: `${width}%`,
                     height: "100%",
                     background: item.color,
-                    borderRadius: 99,
+                    borderRadius: 4,
                   }}
                 />
               </div>
@@ -444,7 +679,7 @@ const grouped = expenseCats.map((cat) => ({
               data={grouped}
               cx="50%"
               cy="50%"
-              innerRadius={54}
+              innerRadius={58}
               outerRadius={80}
               dataKey="value"
               paddingAngle={3}
@@ -467,10 +702,10 @@ const grouped = expenseCats.map((cat) => ({
             pointerEvents: "none",
           }}
         >
-          <div style={{ fontSize: 18, fontWeight: 800 }}>
+          <div style={{ fontSize: 17, fontWeight: 800, color: "var(--gold-dark)", fontVariantNumeric: "tabular-nums" }}>
             {total.toFixed(0)}
           </div>
-          <div style={{ fontSize: 10, color: "#64748b" }}>د.أ</div>
+          <div style={{ fontSize: 9, color: "var(--text-faint)" }}>د.أ</div>
         </div>
       </div>
 
@@ -489,20 +724,18 @@ const grouped = expenseCats.map((cat) => ({
             style={{
               display: "flex",
               alignItems: "center",
-              gap: 4,
-              fontSize: 11,
-              color: "#94a3b8",
+              gap: 5,
             }}
           >
-            <span style={{ color: d.color, fontWeight: 700 }}>
+            <span style={{ color: "var(--text-body)", fontSize: 12, fontWeight: 700 }}>
               {total ? Math.round((d.value / total) * 100) : 0}%
             </span>
-            <span>{d.name}</span>
+            <span style={{ fontSize: 12, color: "var(--text-muted)" }}>{d.name}</span>
             <span
               style={{
-                width: 7,
-                height: 7,
-                borderRadius: 2,
+                width: 10,
+                height: 10,
+                borderRadius: "50%",
                 background: d.color,
                 display: "inline-block",
               }}
@@ -601,6 +834,7 @@ const [unusualRemainderSource, setUnusualRemainderSource] = useState("asset");
 const [unusualAssetKey, setUnusualAssetKey] = useState("cash");
 const [unusualLiabilityName, setUnusualLiabilityName] = useState("مصروف غير اعتيادي");
 const [unusualDueDate, setUnusualDueDate] = useState("");
+const [assetPaymentKey, setAssetPaymentKey] = useState("cash");
   const cards = state.currentLiabilities.filter((x) => x.type === "card");
   const recent = [...state.expenses].slice(-3).reverse();
   const dueCurrentLiabilities = (state.currentLiabilities || []).filter((l) => {
@@ -621,9 +855,9 @@ const [unusualDueDate, setUnusualDueDate] = useState("");
   { id: "shopping", label: "تسوق", icon: "🛒", color: "#a855f7", pinned: true },
   { id: "health", label: "صحة", icon: "💚", color: "#22c55e", pinned: true },
   { id: "entertainment", label: "ترفيه", icon: "🎮", color: "#ec4899", pinned: true },
-  { id: "bills", label: "فواتير", icon: "🧾", color: "#64748b", pinned: true },
+  { id: "bills", label: "فواتير", icon: "🧾", color: "var(--text-faint)", pinned: true },
   { id: "fuel", label: "بنزين", icon: "⛽", color: "#f97316", pinned: true },
-  { id: "other", label: "أخرى", icon: "•••", color: "#94a3b8", isOther: true, pinned: true },
+  { id: "other", label: "أخرى", icon: "•••", color: "var(--text-muted)", isOther: true, pinned: true },
 ];
 
 const savedExpenseCategories =
@@ -653,7 +887,7 @@ const otherExpenseCategory =
     id: "other",
     label: "أخرى",
     icon: "•••",
-    color: "#94a3b8",
+    color: "var(--text-muted)",
     isOther: true,
     pinned: true,
   };
@@ -670,10 +904,21 @@ const mainExpenseCategories = pinnedExpenseCategories;
   const selectedExpenseAsset = Number(
     selectedExpense?.emergencyFunding?.assetAmount || 0
   );
-const expectedOverBudget = paymentMethod === "emergency" ? 0 : Math.max(
+const hasSpendingCap = Number(budget.remainingCap || 0) > 0;
+const expectedOverBudget = ["emergency", "asset"].includes(paymentMethod) ? 0 : Math.max(
   0,
   enteredAmount - Number(budget.remainingCap || 0)
 );
+
+useEffect(() => {
+  if (!hasSpendingCap && paymentMethod === "cash") {
+    setPaymentMethod("asset");
+  }
+
+  if (!hasSpendingCap && unusualFundingMode === "mix") {
+    setUnusualFundingMode("asset");
+  }
+}, [hasSpendingCap, paymentMethod, unusualFundingMode]);
 
   const submitExpense = () => {
     if (paymentMethod === "liability" && !dueDate) {
@@ -695,6 +940,10 @@ const expectedOverBudget = paymentMethod === "emergency" ? 0 : Math.max(
         alert("المبلغ يتجاوز سقف البطاقة");
         return;
       }
+    }
+    if (paymentMethod === "asset" && !assetPaymentKey) {
+      alert("اختر الأصل الذي سيدفع المصروف");
+      return;
     }
     if (paymentMethod === "emergency") {
       if (!unusualFundingMode) {
@@ -766,6 +1015,7 @@ const expectedOverBudget = paymentMethod === "emergency" ? 0 : Math.max(
       note,
       liabilityName,
       dueDate,
+      assetKey: assetPaymentKey,
       emergencyFunding:
         paymentMethod === "emergency"
           ? {
@@ -857,8 +1107,9 @@ setState(nextState);
     setNote("");
     setLiabilityName("");
     setDueDate("");
-    setOverBudgetSource("liability");
+setOverBudgetSource("liability");
 setOverBudgetAssetKey("cash");
+setAssetPaymentKey("cash");
 setOverBudgetLiabilityName("تجاوز سقف الصرف");
 setOverBudgetDueDate("");
 setIsUnusualExpense(false);
@@ -938,7 +1189,8 @@ setUnusualDueDate("");
       (tx) =>
         tx.expenseId === expenseId &&
         (tx.type === "over_budget_covered_from_asset" ||
-          tx.type === "emergency_expense_covered_from_asset")
+          tx.type === "emergency_expense_covered_from_asset" ||
+          tx.type === "expense_paid_from_asset")
     );
 
     if (assetCoverageTx?.assetKey && Number(assetCoverageTx.amount || 0) > 0) {
@@ -1024,7 +1276,7 @@ function addExtraExpenseCategory() {
       id: `extra-${Date.now()}`,
       label: cleanLabel,
       icon: getExpenseCategoryIconByName(cleanLabel),
-      color: "#94a3b8",
+      color: "var(--text-muted)",
       pinned: false,
     };
 
@@ -1108,7 +1360,7 @@ function toggleExpenseCategoryPinned(catId) {
     ⚠️ لديك {dueCurrentLiabilities.length} التزام جاري مستحق هذا الشهر
   </button>
 )}
-        <div style={{ textAlign: "right", marginBottom: 12, color: "#94a3b8" }}>
+        <div style={{ textAlign: "right", marginBottom: 12, color: "var(--text-muted)" }}>
           🎯 سقف الصرف الشهري
         </div>
 
@@ -1122,17 +1374,17 @@ function toggleExpenseCategoryPinned(catId) {
             marginTop: 12,
           }}
         >
-          <div style={{ background: "#1a2540", borderRadius: 10, padding: 10 }}>
-            <div style={{ fontSize: 10, color: "#64748b" }}>المتبقي</div>
-            <div style={{ color: "#22c55e", fontWeight: 800 }}>
+          <div style={summaryCard("success")}>
+            <div style={{ fontSize: 10, color: "var(--text-faint)" }}>المتبقي</div>
+            <div style={summaryValue("success")}>
               {budget.remainingCap.toFixed(2)}
             </div>
           </div>
 
           {budget.overBudgetSpent > 0 && (
-  <div style={{ background: "#1a0808", borderRadius: 10, padding: 10 }}>
-    <div style={{ fontSize: 10, color: "#64748b" }}>التجاوز</div>
-    <div style={{ color: "#ef4444", fontWeight: 800 }}>
+  <div style={summaryCard("danger")}>
+    <div style={{ fontSize: 10, color: "var(--text-faint)" }}>التجاوز</div>
+    <div style={summaryValue("danger")}>
       {budget.overBudgetSpent.toFixed(2)}
     </div>
   </div>
@@ -1152,11 +1404,11 @@ function toggleExpenseCategoryPinned(catId) {
             borderRadius: "50%",
             border: state.session.isOpen
               ? "1px solid rgba(232,201,106,0.65)"
-              : "1px solid #334155",
+              : "1px solid var(--border-soft)",
             background: state.session.isOpen
-              ? "linear-gradient(135deg,#c9a840,#e8c96a)"
-              : "#1e293b",
-            color: state.session.isOpen ? "#0f172a" : "#64748b",
+              ? "linear-gradient(135deg,var(--gold-primary),var(--gold-border))"
+              : "var(--bg-secondary)",
+            color: state.session.isOpen ? "var(--text-heading)" : "var(--text-faint)",
             boxShadow: state.session.isOpen
               ? "0 14px 34px rgba(201,168,64,0.28)"
               : "none",
@@ -1251,7 +1503,7 @@ function toggleExpenseCategoryPinned(catId) {
               <div style={{ color: "#86efac", fontSize: 12, fontWeight: 900 }}>
                 فائض راتب ينتظر التوجيه
               </div>
-              <div style={{ color: "#cbd5e1", fontSize: 18, fontWeight: 900 }}>
+              <div style={{ color: "var(--text-body)", fontSize: 18, fontWeight: 900 }}>
                 {Number(state.session.pendingSurplus || 0).toFixed(2)} د.أ
               </div>
             </div>
@@ -1263,7 +1515,7 @@ function toggleExpenseCategoryPinned(catId) {
         {selectedExpenseTotal !== selectedExpenseRecorded && (
           <div
             style={{
-              background: "#111827",
+              background: "var(--bg-secondary)",
               border: "1px solid rgba(232,201,106,0.22)",
               borderRadius: 12,
               padding: 10,
@@ -1271,36 +1523,36 @@ function toggleExpenseCategoryPinned(catId) {
             }}
           >
             <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-              <span style={{ color: "#94a3b8", fontSize: 11 }}>إجمالي المصروف</span>
+              <span style={{ color: "var(--text-muted)", fontSize: 11 }}>إجمالي المصروف</span>
               <b>{selectedExpenseTotal.toFixed(2)} د.أ</b>
             </div>
             <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-              <span style={{ color: "#94a3b8", fontSize: 11 }}>من سقف الصرف</span>
+              <span style={{ color: "var(--text-muted)", fontSize: 11 }}>من سقف الصرف</span>
               <b style={{ color: "#86efac" }}>
                 {Number(selectedExpense.budgetCovered || 0).toFixed(2)} د.أ
               </b>
             </div>
             {selectedExpenseDebt > 0 && (
               <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-                <span style={{ color: "#94a3b8", fontSize: 11 }}>سجل كدين</span>
+                <span style={{ color: "var(--text-muted)", fontSize: 11 }}>سجل كدين</span>
                 <b style={{ color: "#fecaca" }}>{selectedExpenseDebt.toFixed(2)} د.أ</b>
               </div>
             )}
             {selectedExpenseAsset > 0 && (
               <div style={{ display: "flex", justifyContent: "space-between" }}>
-                <span style={{ color: "#94a3b8", fontSize: 11 }}>ممَول من أصل</span>
-                <b style={{ color: "#e8c96a" }}>{selectedExpenseAsset.toFixed(2)} د.أ</b>
+                <span style={{ color: "var(--text-muted)", fontSize: 11 }}>ممَول من أصل</span>
+                <b style={{ color: "var(--gold-border)" }}>{selectedExpenseAsset.toFixed(2)} د.أ</b>
               </div>
             )}
           </div>
         )}
-        <div style={{ textAlign: "right", marginBottom: 12, color: "#94a3b8" }}>
+        <div style={{ textAlign: "right", marginBottom: 12, color: "var(--text-muted)" }}>
           📊 توزيع المصاريف
         </div>
       </div>}
 
       <div style={G.card()}>
-        <div style={{ textAlign: "right", marginBottom: 10, color: "#94a3b8" }}>
+        <div style={{ textAlign: "right", marginBottom: 10, color: "var(--text-muted)" }}>
           آخر المصاريف
         </div>
 
@@ -1324,7 +1576,7 @@ function toggleExpenseCategoryPinned(catId) {
 onClick={() => setSelectedExpense(e)}    style={{
       background: "transparent",
       border: "none",
-      color: "#e8c96a",
+      color: "var(--gold-border)",
       fontSize: 16,
       cursor: "pointer",
       padding: 0,
@@ -1334,13 +1586,13 @@ onClick={() => setSelectedExpense(e)}    style={{
   </button>
 
   <div style={{ fontSize: 15, fontWeight: 700 }}>
-    <span style={{ color: e.isIncomeEntry ? "#86efac" : "#f8fafc" }}>
+    <span style={{ color: e.isIncomeEntry ? "#2A9E60" : "var(--text-heading)" }}>
       {e.isIncomeEntry ? "+" : ""}
       {incomeEntryAmount(e).toFixed(2)} د.أ
     </span>
   </div>
 </div>
-              <div style={{ fontSize: 10, color: e.isIncomeEntry ? "#86efac" : "#64748b" }}>
+              <div style={{ fontSize: 10, color: e.isIncomeEntry ? "#2A9E60" : "var(--text-faint)" }}>
                 {incomeEntryMeta(e)}
               </div>
             </div>
@@ -1350,7 +1602,7 @@ onClick={() => setSelectedExpense(e)}    style={{
               <div
                 style={{
                   fontSize: 10,
-                  color: e.isIncomeEntry ? "#22c55e" : CC[e.category] || "#94a3b8",
+                  color: e.isIncomeEntry ? "#2A9E60" : CC[e.category] || "var(--text-muted)",
                   marginTop: 2,
                 }}
               >
@@ -1364,7 +1616,7 @@ onClick={() => setSelectedExpense(e)}    style={{
           <div
             style={{
               textAlign: "center",
-              color: "#475569",
+              color: "var(--text-disabled)",
               padding: "20px 0",
               fontSize: 13,
             }}
@@ -1403,9 +1655,9 @@ onClick={() => setSelectedExpense(e)}    style={{
     <div
       style={{
         position: "relative",
-        background: "#0c1525",
+        background: "var(--bg-card)",
         borderRadius: "22px 22px 0 0",
-        border: "1px solid #1e293b",
+        border: "1px solid var(--border-soft)",
         padding: "22px 18px 34px",
         width: "100%",
         maxWidth: 440,
@@ -1419,7 +1671,7 @@ onClick={() => setSelectedExpense(e)}    style={{
           position: "sticky",
           top: 0,
           zIndex: 20,
-          background: "#0c1525",
+          background: "var(--bg-card)",
           display: "flex",
           justifyContent: "space-between",
           alignItems: "center",
@@ -1433,7 +1685,7 @@ onClick={() => setSelectedExpense(e)}    style={{
           style={{
             background: "transparent",
             border: "none",
-            color: "#94a3b8",
+            color: "var(--text-muted)",
             fontSize: 24,
             cursor: "pointer",
           }}
@@ -1445,7 +1697,7 @@ onClick={() => setSelectedExpense(e)}    style={{
           <div style={{ fontSize: 18, fontWeight: 900 }}>
             إدارة المصروف
           </div>
-          <div style={{ fontSize: 11, color: "#64748b" }}>
+          <div style={{ fontSize: 11, color: "var(--text-faint)" }}>
             تفاصيل العملية
           </div>
         </div>
@@ -1455,7 +1707,7 @@ onClick={() => setSelectedExpense(e)}    style={{
         {selectedExpenseTotal !== selectedExpenseRecorded && (
           <div
             style={{
-              background: "#111827",
+              background: "var(--bg-secondary)",
               border: "1px solid rgba(232,201,106,0.22)",
               borderRadius: 12,
               padding: 10,
@@ -1463,52 +1715,52 @@ onClick={() => setSelectedExpense(e)}    style={{
             }}
           >
             <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-              <span style={{ color: "#94a3b8", fontSize: 11 }}>إجمالي المصروف</span>
+              <span style={{ color: "var(--text-muted)", fontSize: 11 }}>إجمالي المصروف</span>
               <b>{selectedExpenseTotal.toFixed(2)} د.أ</b>
             </div>
             <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-              <span style={{ color: "#94a3b8", fontSize: 11 }}>من سقف الصرف</span>
+              <span style={{ color: "var(--text-muted)", fontSize: 11 }}>من سقف الصرف</span>
               <b style={{ color: "#86efac" }}>
                 {Number(selectedExpense.budgetCovered || 0).toFixed(2)} د.أ
               </b>
             </div>
             {selectedExpenseDebt > 0 && (
               <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-                <span style={{ color: "#94a3b8", fontSize: 11 }}>سجل كدين</span>
+                <span style={{ color: "var(--text-muted)", fontSize: 11 }}>سجل كدين</span>
                 <b style={{ color: "#fecaca" }}>{selectedExpenseDebt.toFixed(2)} د.أ</b>
               </div>
             )}
             {selectedExpenseAsset > 0 && (
               <div style={{ display: "flex", justifyContent: "space-between" }}>
-                <span style={{ color: "#94a3b8", fontSize: 11 }}>ممَول من أصل</span>
-                <b style={{ color: "#e8c96a" }}>{selectedExpenseAsset.toFixed(2)} د.أ</b>
+                <span style={{ color: "var(--text-muted)", fontSize: 11 }}>ممَول من أصل</span>
+                <b style={{ color: "var(--gold-border)" }}>{selectedExpenseAsset.toFixed(2)} د.أ</b>
               </div>
             )}
           </div>
         )}
         <div style={G.row}>
-          <span style={{ color: "#94a3b8" }}>المبلغ</span>
+          <span style={{ color: "var(--text-muted)" }}>المبلغ</span>
           <b>{Number(selectedExpense.amount || 0).toFixed(2)} د.أ</b>
         </div>
 
         <div style={G.row}>
-          <span style={{ color: "#94a3b8" }}>التصنيف</span>
+          <span style={{ color: "var(--text-muted)" }}>التصنيف</span>
           <b>{selectedExpense.category}</b>
         </div>
 
         <div style={G.row}>
-          <span style={{ color: "#94a3b8" }}>طريقة الدفع</span>
+          <span style={{ color: "var(--text-muted)" }}>طريقة الدفع</span>
           <b>{selectedExpense.paymentMethod}</b>
         </div>
 
         <div style={G.row}>
-          <span style={{ color: "#94a3b8" }}>المغطى من السقف</span>
+          <span style={{ color: "var(--text-muted)" }}>المغطى من السقف</span>
           <b>{Number(selectedExpense.budgetCovered || 0).toFixed(2)} د.أ</b>
         </div>
 
         <div style={G.lrow}>
-          <span style={{ color: "#94a3b8" }}>التجاوز</span>
-          <b style={{ color: Number(selectedExpense.overBudget || 0) > 0 ? "#ef4444" : "#f8fafc" }}>
+          <span style={{ color: "var(--text-muted)" }}>التجاوز</span>
+          <b style={{ color: Number(selectedExpense.overBudget || 0) > 0 ? "#ef4444" : "var(--text-heading)" }}>
             {Number(selectedExpense.overBudget || 0).toFixed(2)} د.أ
           </b>
         </div>
@@ -1542,15 +1794,15 @@ onClick={() => setSelectedExpense(e)}    style={{
       display: "flex",
       alignItems: "flex-end",
       justifyContent: "center",
-      zIndex: 540,
+      zIndex: 1100,
     }}
   >
     <div
       style={{
         position: "relative",
-        background: "#0c1525",
+        background: "var(--bg-card)",
         borderRadius: "22px 22px 0 0",
-        border: "1px solid #1e293b",
+        border: "1px solid var(--border-soft)",
         padding: "22px 18px 34px",
         width: "100%",
         maxWidth: 440,
@@ -1567,7 +1819,7 @@ flexDirection: "column",
           position: "sticky",
           top: 0,
           zIndex: 20,
-          background: "#0c1525",
+          background: "var(--bg-card)",
           display: "flex",
           justifyContent: "space-between",
           alignItems: "center",
@@ -1584,8 +1836,8 @@ flexDirection: "column",
     height: 36,
     borderRadius: 12,
     border: "1px solid rgba(148,163,184,0.28)",
-    background: "#1e293b",
-    color: "#f8fafc",
+    background: "var(--bg-secondary)",
+    color: "var(--text-heading)",
     fontSize: 22,
     cursor: "pointer",
     display: "flex",
@@ -1610,7 +1862,7 @@ flexDirection: "column",
     <div style={{ fontSize: 18, fontWeight: 900 }}>
       إدارة أنواع المصروف
     </div>
-    <div style={{ fontSize: 11, color: "#64748b" }}>
+    <div style={{ fontSize: 11, color: "var(--text-faint)" }}>
       التصنيفات الإضافية
     </div>
   </div>
@@ -1628,7 +1880,7 @@ flexDirection: "column",
     <div
       style={{
         textAlign: "center",
-        color: "#64748b",
+        color: "var(--text-faint)",
         padding: "18px 0",
         fontSize: 13,
       }}
@@ -1651,7 +1903,7 @@ flexDirection: "column",
       style={{
         background: "transparent",
         border: "none",
-        color: "#e8c96a",
+        color: "var(--gold-border)",
         fontSize: 20,
         cursor: "pointer",
         padding: 0,
@@ -1667,7 +1919,7 @@ flexDirection: "column",
         setCategory(catItem.label);
         setShowCategoryManager(false);
       }}
-      style={G.btn("#1e293b", "#e8c96a", {
+      style={G.btn("var(--bg-secondary)", "var(--gold-border)", {
         padding: "7px 10px",
         fontSize: 12,
       })}
@@ -1682,7 +1934,7 @@ flexDirection: "column",
       <button
   type="button"
   onClick={addExtraExpenseCategory}
-  style={G.btn("linear-gradient(135deg,#c9a840,#e8c96a)", "#0f172a", {
+  style={G.btn("linear-gradient(135deg,var(--gold-primary),var(--gold-border))", "var(--text-heading)", {
     width: "100%",
     marginTop: 10,
   })}
@@ -1698,22 +1950,24 @@ flexDirection: "column",
           style={{
             position: "fixed",
             inset: 0,
-            background: "rgba(0,0,0,0.8)",
-            backdropFilter: "blur(8px)",
+            background: "rgba(250,247,242,0.72)",
+            backdropFilter: "blur(6px)",
             display: "flex",
-            alignItems: "flex-end",
+            alignItems: "stretch",
             justifyContent: "center",
-            zIndex: 500,
+            zIndex: 900,
           }}
         >
           <div
             style={{
-              background: "#0c1525",
-padding: "18px 18px 22px",
-maxHeight: "92vh",
-overflowY: "auto",
-overscrollBehavior: "contain",              border: "1px solid #1e293b",
-              padding: "22px 18px 44px",
+              background: "var(--bg-card)",
+              height: "100dvh",
+              maxHeight: "100dvh",
+              overflowY: "auto",
+              overscrollBehavior: "contain",
+              border: "1px solid var(--border-soft)",
+              borderRadius: 0,
+              padding: "16px 18px calc(18px + env(safe-area-inset-bottom))",
               width: "100%",
               maxWidth: 440,
               direction: "rtl",
@@ -1725,16 +1979,23 @@ overscrollBehavior: "contain",              border: "1px solid #1e293b",
                 justifyContent: "space-between",
                 alignItems: "center",
                 marginBottom: 14,
+                position: "sticky",
+                top: 0,
+                zIndex: 5,
+                background: "var(--bg-card)",
+                paddingBottom: 10,
+                borderBottom: "1px solid var(--border-soft)",
               }}
             >
               <button
                 onClick={() => setShowExpense(false)}
-                style={G.btn("#1e293b", "#94a3b8", {
-                  padding: "5px 12px",
-                  borderRadius: 8,
+                style={G.btn("var(--bg-secondary)", "var(--text-muted)", {
+                  padding: "7px 12px",
+                  borderRadius: 10,
+                  fontSize: 12,
                 })}
               >
-                ✕
+                رجوع
               </button>
 
               <span style={{ fontSize: 15, fontWeight: 700 }}>
@@ -1770,7 +2031,7 @@ overscrollBehavior: "contain",              border: "1px solid #1e293b",
       style={{
         width: "100%",
         maxWidth: 420,
-        background: "#0f172a",
+        background: "var(--bg-card)",
         border: "1px solid rgba(148,163,184,0.22)",
         borderRadius: "20px 20px 0 0",
         padding: 16,
@@ -1786,7 +2047,7 @@ overscrollBehavior: "contain",              border: "1px solid #1e293b",
           marginBottom: 14,
         }}
       >
-        <div style={{ fontSize: 15, fontWeight: 900, color: "#f8fafc" }}>
+        <div style={{ fontSize: 15, fontWeight: 900, color: "var(--text-heading)" }}>
           ⚠️ تمويل المصروف
         </div>
 
@@ -1798,8 +2059,8 @@ overscrollBehavior: "contain",              border: "1px solid #1e293b",
             height: 34,
             borderRadius: 12,
             border: "none",
-            background: "#1e293b",
-            color: "#cbd5e1",
+            background: "var(--bg-secondary)",
+            color: "var(--text-body)",
             cursor: "pointer",
             fontSize: 18,
           }}
@@ -1833,13 +2094,13 @@ overscrollBehavior: "contain",              border: "1px solid #1e293b",
               borderRadius: 16,
               border:
                 unusualFundingMode === value
-                  ? "1px solid #e8c96a"
+                  ? "1px solid var(--gold-border)"
                   : "1px solid rgba(148,163,184,0.24)",
               background:
                 unusualFundingMode === value
                   ? "rgba(232,201,106,0.12)"
-                  : "#1e293b",
-              color: unusualFundingMode === value ? "#e8c96a" : "#f8fafc",
+                  : "var(--bg-secondary)",
+              color: unusualFundingMode === value ? "var(--gold-border)" : "var(--text-heading)",
               display: "flex",
               flexDirection: "column",
               alignItems: "center",
@@ -1868,7 +2129,7 @@ overscrollBehavior: "contain",              border: "1px solid #1e293b",
             marginTop: 12,
             border: "none",
             background: "transparent",
-            color: "#94a3b8",
+            color: "var(--text-muted)",
             fontSize: 12,
             cursor: "pointer",
             fontFamily: "inherit",
@@ -1885,7 +2146,7 @@ overscrollBehavior: "contain",              border: "1px solid #1e293b",
       <div
         style={{
           fontSize: 11,
-          color: "#cbd5e1",
+          color: "var(--text-body)",
           marginBottom: 8,
           textAlign: "right",
         }}
@@ -1914,13 +2175,13 @@ overscrollBehavior: "contain",              border: "1px solid #1e293b",
             style={{
               border:
                 unusualFundingMode === value
-                  ? "1px solid #e8c96a"
+                  ? "1px solid var(--gold-border)"
                   : "1px solid rgba(148,163,184,0.25)",
               background:
                 unusualFundingMode === value
                   ? "rgba(232,201,106,0.14)"
-                  : "#1e293b",
-              color: unusualFundingMode === value ? "#e8c96a" : "#f8fafc",
+                  : "var(--bg-secondary)",
+              color: unusualFundingMode === value ? "var(--gold-border)" : "var(--text-heading)",
               borderRadius: 12,
               padding: "9px 8px",
               fontSize: 11,
@@ -1983,12 +2244,12 @@ overscrollBehavior: "contain",              border: "1px solid #1e293b",
 {expectedOverBudget > 0 && (
   <div
     style={{
-      background: "#1a0808",
-      border: "1px solid #ef444433",
-      borderRadius: 10,
+      background: "var(--red-bg)",
+      border: "1.5px solid var(--red-border)",
+      borderRadius: 14,
       padding: "10px 12px",
       marginBottom: 10,
-      color: "#ef4444",
+      color: "#D95555",
       fontSize: 12,
       fontWeight: 700,
       textAlign: "right",
@@ -2000,8 +2261,8 @@ overscrollBehavior: "contain",              border: "1px solid #1e293b",
 )}{false && expectedOverBudget > 0 && paymentMethod === "cash" && (
   <div
     style={{
-      background: "#111827",
-      border: "1px solid #334155",
+      background: "var(--bg-secondary)",
+      border: "1px solid var(--border-soft)",
       borderRadius: 12,
       padding: 12,
       marginBottom: 12,
@@ -2010,7 +2271,7 @@ overscrollBehavior: "contain",              border: "1px solid #1e293b",
     <div
       style={{
         fontSize: 12,
-        color: "#c9a840",
+        color: "var(--gold-primary)",
         fontWeight: 800,
         marginBottom: 10,
         textAlign: "right",
@@ -2030,7 +2291,7 @@ overscrollBehavior: "contain",              border: "1px solid #1e293b",
       <button
         onClick={() => setOverBudgetSource("asset")}
         style={G.btn(
-          overBudgetSource === "asset" ? "#a855f7" : "#1e293b",
+          overBudgetSource === "asset" ? "#a855f7" : "var(--bg-secondary)",
           "#fff",
           { padding: "10px" }
         )}
@@ -2041,7 +2302,7 @@ overscrollBehavior: "contain",              border: "1px solid #1e293b",
       <button
         onClick={() => setOverBudgetSource("liability")}
         style={G.btn(
-          overBudgetSource === "liability" ? "#ef4444" : "#1e293b",
+          overBudgetSource === "liability" ? "#ef4444" : "var(--bg-secondary)",
           "#fff",
           { padding: "10px" }
         )}
@@ -2087,14 +2348,15 @@ overscrollBehavior: "contain",              border: "1px solid #1e293b",
             <div
   style={{
     display: "grid",
-    gridTemplateColumns: "repeat(3, 1fr)",
-    gap: 8,
-    marginBottom: 18,
+    gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+    gap: 7,
+    marginBottom: 12,
   }}
 >
               {mainExpenseCategories.slice(0, 8).map((catItem) => {
   const cat = catItem.label;
   const active = category === cat;
+  const tile = getCategoryTileStyle(cat);
 
   return (
     <button
@@ -2109,34 +2371,43 @@ overscrollBehavior: "contain",              border: "1px solid #1e293b",
   setCategory(cat);
 }}
       style={{
-        minHeight: catItem.isOther ? 34 : 56,
-width: catItem.isOther ? 34 : "auto",
-borderRadius: catItem.isOther ? 12 : 12,
+minHeight: 42,
+width: "auto",
+borderRadius: 10,
 border: active
-  ? "1px solid #e8c96a"
-  : "1px solid rgba(148,163,184,0.28)",
-background: catItem.isOther
-  ? "linear-gradient(180deg, rgba(15,23,42,0.95), rgba(30,41,59,0.95))"
-  : active
-  ? "linear-gradient(180deg, rgba(232,201,106,0.18), rgba(15,23,42,0.95))"
-  : "linear-gradient(180deg, rgba(30,41,59,0.95), rgba(15,23,42,0.95))",
-color: active ? "#e8c96a" : "#cbd5e1",
+  ? "1px solid var(--gold-border)"
+  : "1px solid transparent",
+background: active ? "var(--gold-light)" : "var(--bg-page)",
+color: "var(--text-body)",
 display: "flex",
 flexDirection: "column",
 alignItems: "center",
 justifyContent: "center",
-gap: catItem.isOther ? 0 : 3,
+gap: 3,
+padding: "6px 4px",
 cursor: "pointer",
 fontFamily: "inherit",
-fontWeight: active ? 900 : 700,
-        boxShadow: active
-          ? "0 10px 26px rgba(232,201,106,0.14)"
-          : "none",
+fontWeight: 700,
+        boxShadow: "none",
       }}
     >
-      <span style={{ fontSize: 16, lineHeight: 1 }}>
+      <span
+        style={{
+          width: 24,
+          height: 24,
+          borderRadius: 8,
+          background: catItem.isOther ? "var(--bg-secondary)" : tile.bg,
+          color: catItem.isOther ? "var(--text-muted)" : tile.icon,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          fontSize: 13,
+          lineHeight: 1,
+          flex: "0 0 auto",
+        }}
+      >
 {catItem.isOther ? "⚙️" : catItem.icon || CAT_ICONS[cat] || "📌"}      </span>
-      <span style={{ fontSize: 10 }}>
+      <span style={{ fontSize: 9, color: "var(--text-muted)", textAlign: "center", lineHeight: 1.1 }}>
 {catItem.isOther ? "إدارة" : cat}      </span>
     </button>
   );
@@ -2145,23 +2416,24 @@ fontWeight: active ? 900 : 700,
   type="button"
   onClick={() => setShowCategoryManager(true)}
   style={{
-    minHeight: 56,
-    borderRadius: 12,
-    border: "1px solid rgba(148,163,184,0.28)",
-    background: "linear-gradient(180deg, rgba(15,23,42,0.95), rgba(30,41,59,0.95))",
-    color: "#94a3b8",
+    minHeight: 42,
+    borderRadius: 10,
+    border: "1px solid transparent",
+    background: "var(--bg-page)",
+    color: "var(--text-muted)",
     display: "flex",
     flexDirection: "column",
     alignItems: "center",
     justifyContent: "center",
     gap: 3,
+    padding: "6px 4px",
     cursor: "pointer",
     fontFamily: "inherit",
     fontWeight: 800,
   }}
 >
-  <span style={{ fontSize: 16, lineHeight: 1 }}>+</span>
-  <span style={{ fontSize: 10 }}>المزيد</span>
+  <span style={{ width: 24, height: 24, borderRadius: 8, background: "var(--bg-secondary)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, lineHeight: 1 }}>+</span>
+  <span style={{ fontSize: 9, color: "var(--text-muted)", lineHeight: 1.1 }}>المزيد</span>
 </button>
             </div>
           <div
@@ -2185,7 +2457,7 @@ fontWeight: active ? 900 : 700,
       borderRadius: 12,
       border: "none",
       background: "transparent",
-      color: "#94a3b8",
+      color: "var(--text-muted)",
       fontSize: 19,
       fontWeight: 900,
       display: "inline-flex",
@@ -2198,7 +2470,7 @@ fontWeight: active ? 900 : 700,
   </button>
 </div>
 
-            <label style={{ fontSize: 11, color: "#64748b" }}>طريقة الدفع</label>
+            <label style={{ fontSize: 11, color: "var(--text-faint)" }}>طريقة الدفع</label>
             <select
               value={paymentMethod}
 onChange={(e) => {
@@ -2219,7 +2491,8 @@ onChange={(e) => {
 }}
 style={{ ...G.inp(), marginBottom: 10 }}
             >
-              <option value="cash">نقدا</option>
+              {hasSpendingCap && <option value="cash">نقدا</option>}
+              <option value="asset">من أصل</option>
               <option value="card">بطاقة</option>
               <option value="liability">دين / التزام جديد</option>
               <option value="emergency">مصروف طارئ</option>
@@ -2233,7 +2506,7 @@ style={{ ...G.inp(), marginBottom: 10 }}
       padding: "8px 10px",
       borderRadius: 12,
       background: "rgba(232,201,106,0.08)",
-      color: "#e8c96a",
+      color: "var(--gold-border)",
       fontSize: 12,
       fontWeight: 800,
       textAlign: "right",
@@ -2252,7 +2525,7 @@ style={{ ...G.inp(), marginBottom: 10 }}
             {paymentMethod === "emergency" && isUnusualExpense && (
   <div
     style={{
-      background: "#111827",
+      background: "var(--bg-secondary)",
       border: "1px solid rgba(232,201,106,0.28)",
       borderRadius: 12,
       padding: 12,
@@ -2263,13 +2536,13 @@ style={{ ...G.inp(), marginBottom: 10 }}
     <div
       style={{
         fontSize: 12,
-        color: "#e8c96a",
+        color: "var(--gold-border)",
         fontWeight: 900,
         marginBottom: 10,
         textAlign: "right",
       }}
     >
-      تمويل المصروف الطارئ
+      تمويل المصروف من أصل
     </div>
 
     <select
@@ -2279,7 +2552,9 @@ style={{ ...G.inp(), marginBottom: 10 }}
     >
       <option value="asset">كاملًا من أصل</option>
       <option value="liability">كاملًا كدين</option>
-      <option value="mix">مكس: جزء من السقف والباقي من أصل أو دين</option>
+      {hasSpendingCap && (
+        <option value="mix">مكس: جزء من السقف والباقي من أصل أو دين</option>
+      )}
     </select>
 
     <div
@@ -2300,8 +2575,8 @@ style={{ ...G.inp(), marginBottom: 10 }}
           type="button"
           onClick={() => setUnusualFundingMode(value)}
           style={G.btn(
-            unusualFundingMode === value ? "#c9a840" : "#1e293b",
-            unusualFundingMode === value ? "#0f172a" : "#fff",
+            unusualFundingMode === value ? "var(--gold-primary)" : "var(--bg-secondary)",
+            unusualFundingMode === value ? "var(--text-heading)" : "#fff",
             { padding: "10px", textAlign: "right" }
           )}
         >
@@ -2341,7 +2616,7 @@ style={{ ...G.inp(), marginBottom: 10 }}
             type="button"
             onClick={() => setUnusualRemainderSource("asset")}
             style={G.btn(
-              unusualRemainderSource === "asset" ? "#a855f7" : "#1e293b",
+              unusualRemainderSource === "asset" ? "#a855f7" : "var(--bg-secondary)",
               "#fff",
               { padding: "9px" }
             )}
@@ -2352,7 +2627,7 @@ style={{ ...G.inp(), marginBottom: 10 }}
             type="button"
             onClick={() => setUnusualRemainderSource("liability")}
             style={G.btn(
-              unusualRemainderSource === "liability" ? "#ef4444" : "#1e293b",
+              unusualRemainderSource === "liability" ? "#ef4444" : "var(--bg-secondary)",
               "#fff",
               { padding: "9px" }
             )}
@@ -2409,6 +2684,20 @@ style={{ ...G.inp(), marginBottom: 10 }}
                 {cards.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.name} — الرصيد {Number(c.balance || 0).toFixed(2)}
+                  </option>
+                ))}
+              </select>
+            )}
+
+            {paymentMethod === "asset" && (
+              <select
+                value={assetPaymentKey}
+                onChange={(e) => setAssetPaymentKey(e.target.value)}
+                style={{ ...G.inp(), marginBottom: 10 }}
+              >
+                {assetSources.map((s) => (
+                  <option key={s.key} value={s.key}>
+                    {s.label} — متاح {Number(s.available || 0).toFixed(2)} د.أ
                   </option>
                 ))}
               </select>
@@ -2505,9 +2794,14 @@ style={{ ...G.inp(), marginBottom: 10 }}
             />
 
             <button
+              type="button"
               onClick={submitExpense}
-              style={G.btn("linear-gradient(135deg,#c9a840,#e8c96a)", "#0f172a", {
+              style={G.btn("linear-gradient(135deg,var(--gold-primary),var(--gold-border))", "var(--text-heading)", {
                 width: "100%",
+                minHeight: 44,
+                marginTop: 6,
+                marginBottom: 0,
+                display: "block",
               })}
             >
               ✓ تسجيل المصروف
@@ -2526,8 +2820,19 @@ function ReportsScreen({ state }) {
   const [assetTrendMonths, setAssetTrendMonths] = useState(6);
   const [selectedTrendAssetKey, setSelectedTrendAssetKey] = useState("");
   const [expenseChartMode, setExpenseChartMode] = useState("donut");
+  const [selectedExpense, setSelectedExpense] = useState(null);
   const expenses = [...(state.expenses || [])].reverse();
   const total = expenses.reduce((sum, item) => sum + Number(item.amount || 0), 0);
+  const selectedExpenseTotal = Number(
+    selectedExpense?.originalAmount ?? selectedExpense?.amount ?? 0
+  );
+  const selectedExpenseRecorded = Number(selectedExpense?.amount || 0);
+  const selectedExpenseDebt = Number(
+    selectedExpense?.emergencyFunding?.liabilityAmount || 0
+  );
+  const selectedExpenseAsset = Number(
+    selectedExpense?.emergencyFunding?.assetAmount || 0
+  );
   const overBudgetItems = expenses.filter((item) => Number(item.overBudget || 0) > 0);
   const overBudgetTotal = overBudgetItems.reduce(
     (sum, item) => sum + Number(item.overBudget || 0),
@@ -2605,7 +2910,12 @@ function ReportsScreen({ state }) {
     maxAssetTrendValue
   );
   const assetTrendRange = Math.max(1, maxAssetTrendValue - minAssetTrendValue);
-  const assetChangeColor = assetChange >= 0 ? "#86efac" : "#fecaca";
+  const assetTrendChanges = assetTrendPoints.map((point, index) => {
+    const previous = assetTrendPoints[index - 1];
+    return previous ? Number(point.totalAssets || 0) - Number(previous.totalAssets || 0) : 0;
+  });
+  const bestAssetTrendChange = Math.max(0, ...assetTrendChanges);
+  const assetChangeColor = assetChange > 0 ? "#B8922E" : assetChange < 0 ? "#D95555" : "var(--text-disabled)";
   const pendingCurrent = [];
   const getLiabilityAmount = () => 0;
   const getCoveredAmount = () => 0;
@@ -2802,20 +3112,20 @@ function ReportsScreen({ state }) {
                   borderRadius: 10,
                   border:
                     expenseChartMode === item.id
-                      ? "1px solid rgba(232,201,106,0.75)"
-                      : "1px solid rgba(148,163,184,0.24)",
-                  background: expenseChartMode === item.id ? "#1e293b" : "#111827",
-                  color: expenseChartMode === item.id ? "#e8c96a" : "#94a3b8",
+                      ? "1.5px solid #0284C7"
+                      : "1px solid #7DD3FC",
+                  background: expenseChartMode === item.id ? "linear-gradient(135deg,#38BDF8,#0284C7)" : "#EEF5FE",
+                  color: expenseChartMode === item.id ? "#fff" : "#0369A1",
                   cursor: "pointer",
-                  fontSize: 16,
-                  fontWeight: 900,
+                  fontSize: 15,
+                  fontWeight: 800,
                 }}
               >
                 {item.icon}
               </button>
             ))}
           </div>
-          <div style={{ textAlign: "right", color: "#94a3b8", fontSize: 12 }}>
+          <div style={{ textAlign: "right", ...sectionHeading }}>
             ملخص المصروفات
           </div>
         </div>
@@ -2828,16 +3138,16 @@ function ReportsScreen({ state }) {
             marginBottom: 12,
           }}
         >
-          <div style={{ background: "#1a2540", borderRadius: 10, padding: 10 }}>
-            <div style={{ fontSize: 10, color: "#64748b" }}>إجمالي المصروف</div>
-            <div style={{ color: "#f8fafc", fontWeight: 900 }}>
+          <div style={summaryCard("total")}>
+            <div style={{ fontSize: 10, color: "var(--text-faint)" }}>إجمالي المصروف</div>
+            <div style={summaryValue("total")}>
               {total.toFixed(2)}
             </div>
           </div>
 
-          <div style={{ background: "#1a2540", borderRadius: 10, padding: 10 }}>
-            <div style={{ fontSize: 10, color: "#64748b" }}>المتبقي من السقف</div>
-            <div style={{ color: "#22c55e", fontWeight: 900 }}>
+          <div style={summaryCard("success")}>
+            <div style={{ fontSize: 10, color: "var(--text-faint)" }}>المتبقي من السقف</div>
+            <div style={summaryValue("success")}>
               {budget.remainingCap.toFixed(2)}
             </div>
           </div>
@@ -2847,18 +3157,14 @@ function ReportsScreen({ state }) {
               type="button"
               onClick={() => setShowOverBudgetReport(true)}
               style={{
-                background: "rgba(239,68,68,0.12)",
-                border: "1px solid rgba(239,68,68,0.34)",
-                borderRadius: 10,
-                padding: 10,
-                color: "#fecaca",
-                textAlign: "right",
+                ...summaryCard("danger"),
+                color: "#D95555",
                 cursor: "pointer",
                 fontFamily: "inherit",
               }}
             >
-              <div style={{ fontSize: 10, color: "#fca5a5" }}>التجاوز</div>
-              <div style={{ color: "#fecaca", fontWeight: 900 }}>
+              <div style={{ fontSize: 10, color: "var(--text-faint)" }}>التجاوز</div>
+              <div style={summaryValue("danger")}>
                 {overBudgetTotal.toFixed(2)}
               </div>
             </button>
@@ -2880,8 +3186,8 @@ function ReportsScreen({ state }) {
                 height: 30,
                 borderRadius: 10,
                 border: "1px solid rgba(148,163,184,0.28)",
-                background: showAssetTrendDetails ? "#1e293b" : "#111827",
-                color: "#cbd5e1",
+                background: showAssetTrendDetails ? "var(--bg-secondary)" : "var(--bg-secondary)",
+                color: "var(--text-body)",
                 cursor: "pointer",
                 fontWeight: 900,
               }}
@@ -2904,7 +3210,7 @@ function ReportsScreen({ state }) {
             </div>
           </div>
           <div style={{ textAlign: "right" }}>
-            <div style={{ color: "#c9a840", fontSize: 14, fontWeight: 900 }}>
+            <div style={sectionHeading}>
               تغير الأصول الشهري
             </div>
             <select
@@ -2927,13 +3233,13 @@ function ReportsScreen({ state }) {
         </div>
 
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 12 }}>
-          <div style={{ background: "#111827", borderRadius: 10, padding: 9, textAlign: "right" }}>
-            <div style={{ color: "#64748b", fontSize: 10 }}>الأصول الآن</div>
-            <b>{Number(lastAssetPoint?.totalAssets || 0).toFixed(2)}</b>
+          <div style={{ background: "var(--bg-secondary)", borderRadius: 10, padding: 9, textAlign: "right" }}>
+            <div style={labelText}>الأصول الآن</div>
+            <b style={{ ...summaryValue("total"), color: "var(--text-heading)" }}>{Number(lastAssetPoint?.totalAssets || 0).toFixed(2)}</b>
           </div>
-          <div style={{ background: "#111827", borderRadius: 10, padding: 9, textAlign: "right" }}>
-            <div style={{ color: "#64748b", fontSize: 10 }}>النسبة</div>
-            <b style={{ color: assetChangeColor }}>
+          <div style={{ background: "var(--bg-secondary)", borderRadius: 10, padding: 9, textAlign: "right" }}>
+            <div style={labelText}>النسبة</div>
+            <b style={{ ...summaryValue("total"), color: assetChangeColor }}>
               {assetChange >= 0 ? "+" : ""}
               {assetChangePct.toFixed(1)}%
             </b>
@@ -2947,7 +3253,7 @@ function ReportsScreen({ state }) {
             gridTemplateColumns: `repeat(${Math.max(assetTrendPoints.length, 1)}, 1fr)`,
             gap: 7,
             alignItems: "end",
-            borderTop: "1px solid #1a2540",
+            borderTop: "1px solid var(--border-soft)",
             paddingTop: 10,
           }}
         >
@@ -2961,7 +3267,14 @@ function ReportsScreen({ state }) {
               const pointChange = previous
                 ? Number(point.totalAssets || 0) - Number(previous.totalAssets || 0)
                 : 0;
-              const pointColor = index === 0 ? "#64748b" : pointChange >= 0 ? "#22c55e" : "#ef4444";
+              const pointColor =
+                index === 0
+                  ? "var(--text-disabled)"
+                  : pointChange < 0
+                  ? "#F07A7A"
+                  : pointChange === bestAssetTrendChange && bestAssetTrendChange > 0
+                  ? "#60C698"
+                  : "#E8A44A";
 
               return (
                 <div key={`${point.month}-${index}`} style={{ textAlign: "center" }}>
@@ -2971,18 +3284,18 @@ function ReportsScreen({ state }) {
                       height,
                       minHeight: 18,
                       borderRadius: "8px 8px 4px 4px",
-                      background: `linear-gradient(180deg,${pointColor},#1e293b)`,
-                      border: `1px solid ${pointColor}66`,
+                      background: pointColor,
+                      border: "none",
                     }}
                   />
-                  <div style={{ color: "#94a3b8", fontSize: 9, marginTop: 5 }}>
+                  <div style={{ color: "var(--text-muted)", fontSize: 9, marginTop: 5 }}>
                     {String(point.month || "").slice(5, 7) || "--"}
                   </div>
                 </div>
               );
             })
           ) : (
-            <div style={{ color: "#64748b", fontSize: 12, textAlign: "center" }}>
+            <div style={{ color: "var(--text-faint)", fontSize: 12, textAlign: "center" }}>
               لا توجد لقطات شهرية بعد
             </div>
           )}
@@ -2990,14 +3303,14 @@ function ReportsScreen({ state }) {
       </div>
 
       <div style={G.card()}>
-        <div style={{ textAlign: "right", marginBottom: 10, color: "#94a3b8" }}>
-          كشف المصروفات
-        </div>
-
         <button
           type="button"
           onClick={() => setShowExpenseReport(true)}
-          style={G.btn("#1e293b", "#e8c96a", { width: "100%" })}
+          style={G.btn("linear-gradient(135deg,var(--gold-primary),var(--gold-dark))", "#fff", {
+            width: "100%",
+            fontSize: 13,
+            fontWeight: 800,
+          })}
         >
           كشف المصروفات
         </button>
@@ -3015,13 +3328,13 @@ function ReportsScreen({ state }) {
                 style={{
                   fontSize: 15,
                   fontWeight: 800,
-                  color: e.isIncomeEntry ? "#86efac" : "#f8fafc",
+                  color: e.isIncomeEntry ? "#2A9E60" : "var(--text-heading)",
                 }}
               >
                 {e.isIncomeEntry ? "+" : ""}
                 {incomeEntryAmount(e).toFixed(2)} د.أ
               </div>
-              <div style={{ fontSize: 10, color: e.isIncomeEntry ? "#86efac" : "#64748b" }}>
+              <div style={{ fontSize: 10, color: e.isIncomeEntry ? "#2A9E60" : "var(--text-faint)" }}>
                 {incomeEntryMeta(e)}
               </div>
             </div>
@@ -3031,7 +3344,7 @@ function ReportsScreen({ state }) {
               <div
                 style={{
                   fontSize: 10,
-                  color: e.isIncomeEntry ? "#22c55e" : CC[e.category] || "#94a3b8",
+                  color: e.isIncomeEntry ? "#2A9E60" : CC[e.category] || "var(--text-muted)",
                   marginTop: 2,
                 }}
               >
@@ -3045,7 +3358,7 @@ function ReportsScreen({ state }) {
           <div
             style={{
               textAlign: "center",
-              color: "#475569",
+              color: "var(--text-disabled)",
               padding: "20px 0",
               fontSize: 13,
             }}
@@ -3071,8 +3384,8 @@ function ReportsScreen({ state }) {
         >
           <div
             style={{
-              background: "#0c1525",
-              border: "1px solid #1e293b",
+              background: "var(--bg-card)",
+              border: "1px solid var(--border-soft)",
               borderRadius: "22px 22px 0 0",
               width: "100%",
               maxWidth: 440,
@@ -3091,8 +3404,8 @@ function ReportsScreen({ state }) {
                   height: 34,
                   borderRadius: 10,
                   border: "1px solid rgba(148,163,184,0.28)",
-                  background: "#111827",
-                  color: "#cbd5e1",
+                  background: "var(--bg-secondary)",
+                  color: "var(--text-body)",
                   cursor: "pointer",
                   fontSize: 20,
                 }}
@@ -3100,10 +3413,10 @@ function ReportsScreen({ state }) {
                 ×
               </button>
               <div style={{ textAlign: "right" }}>
-                <div style={{ color: "#c9a840", fontWeight: 900, fontSize: 15 }}>
+                <div style={{ color: "var(--gold-primary)", fontWeight: 900, fontSize: 15 }}>
                   كشف المصروفات
                 </div>
-                <div style={{ color: "#64748b", fontSize: 10 }}>
+                <div style={{ color: "var(--text-faint)", fontSize: 10 }}>
                   {expenses.length} حركة
                 </div>
               </div>
@@ -3118,17 +3431,42 @@ function ReportsScreen({ state }) {
                 }}
               >
                 <div>
-                  <div
-                    style={{
-                      fontSize: 15,
-                      fontWeight: 800,
-                      color: e.isIncomeEntry ? "#86efac" : "#f8fafc",
-                    }}
-                  >
-                    {e.isIncomeEntry ? "+" : ""}
-                    {incomeEntryAmount(e).toFixed(2)} د.أ
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <button
+                      type="button"
+                      title="تفاصيل المصروف"
+                      onClick={() => {
+                        setShowExpenseReport(false);
+                        setSelectedExpense(e);
+                      }}
+                      style={{
+                        width: 28,
+                        height: 28,
+                        borderRadius: 9,
+                        border: "1px solid var(--gold-border)",
+                        background: "var(--gold-light)",
+                        color: "var(--gold-dark)",
+                        cursor: "pointer",
+                        fontSize: 13,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                      }}
+                    >
+                      ✎
+                    </button>
+                    <div
+                      style={{
+                        fontSize: 15,
+                        fontWeight: 800,
+                        color: e.isIncomeEntry ? "#2A9E60" : "var(--text-heading)",
+                      }}
+                    >
+                      {e.isIncomeEntry ? "+" : ""}
+                      {incomeEntryAmount(e).toFixed(2)} د.أ
+                    </div>
                   </div>
-                  <div style={{ fontSize: 10, color: e.isIncomeEntry ? "#86efac" : "#64748b" }}>
+                  <div style={{ fontSize: 10, color: e.isIncomeEntry ? "#2A9E60" : "var(--text-faint)" }}>
                     {incomeEntryMeta(e)}
                   </div>
                 </div>
@@ -3138,7 +3476,7 @@ function ReportsScreen({ state }) {
                   <div
                     style={{
                       fontSize: 10,
-                      color: e.isIncomeEntry ? "#22c55e" : CC[e.category] || "#94a3b8",
+                      color: e.isIncomeEntry ? "#2A9E60" : CC[e.category] || "var(--text-muted)",
                       marginTop: 2,
                     }}
                   >
@@ -3152,7 +3490,7 @@ function ReportsScreen({ state }) {
               <div
                 style={{
                   textAlign: "center",
-                  color: "#475569",
+                  color: "var(--text-disabled)",
                   padding: "20px 0",
                   fontSize: 13,
                 }}
@@ -3160,6 +3498,127 @@ function ReportsScreen({ state }) {
                 لا توجد مصروفات بعد
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {selectedExpense && (
+        <div
+          onClick={(e) => e.target === e.currentTarget && setSelectedExpense(null)}
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.78)",
+            backdropFilter: "blur(8px)",
+            display: "flex",
+            alignItems: "flex-end",
+            justifyContent: "center",
+            zIndex: 559,
+          }}
+        >
+          <div
+            style={{
+              background: "var(--bg-card)",
+              border: "1px solid var(--border-soft)",
+              borderRadius: "22px 22px 0 0",
+              width: "100%",
+              maxWidth: 440,
+              maxHeight: "82vh",
+              overflowY: "auto",
+              padding: "18px 16px 28px",
+              direction: "rtl",
+            }}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+              <button
+                type="button"
+                onClick={() => setSelectedExpense(null)}
+                style={{
+                  width: 34,
+                  height: 34,
+                  borderRadius: 10,
+                  border: "1px solid rgba(148,163,184,0.28)",
+                  background: "var(--bg-secondary)",
+                  color: "var(--text-body)",
+                  cursor: "pointer",
+                  fontSize: 20,
+                }}
+              >
+                ×
+              </button>
+              <div style={{ textAlign: "right" }}>
+                <div style={{ color: "var(--gold-primary)", fontWeight: 900, fontSize: 15 }}>
+                  تفاصيل المصروف
+                </div>
+                <div style={{ color: "var(--text-faint)", fontSize: 10 }}>
+                  عرض من كشف المصروفات
+                </div>
+              </div>
+            </div>
+
+            {selectedExpenseTotal !== selectedExpenseRecorded && (
+              <div
+                style={{
+                  background: "var(--bg-secondary)",
+                  border: "1px solid rgba(232,201,106,0.22)",
+                  borderRadius: 12,
+                  padding: 10,
+                  marginBottom: 10,
+                }}
+              >
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+                  <span style={{ color: "var(--text-muted)", fontSize: 11 }}>إجمالي المصروف</span>
+                  <b>{selectedExpenseTotal.toFixed(2)} د.أ</b>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+                  <span style={{ color: "var(--text-muted)", fontSize: 11 }}>من سقف الصرف</span>
+                  <b style={{ color: "#2A9E60" }}>
+                    {Number(selectedExpense.budgetCovered || 0).toFixed(2)} د.أ
+                  </b>
+                </div>
+                {selectedExpenseDebt > 0 && (
+                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+                    <span style={{ color: "var(--text-muted)", fontSize: 11 }}>سجل كدين</span>
+                    <b style={{ color: "#D95555" }}>{selectedExpenseDebt.toFixed(2)} د.أ</b>
+                  </div>
+                )}
+                {selectedExpenseAsset > 0 && (
+                  <div style={{ display: "flex", justifyContent: "space-between" }}>
+                    <span style={{ color: "var(--text-muted)", fontSize: 11 }}>ممّول من أصل</span>
+                    <b style={{ color: "var(--gold-dark)" }}>{selectedExpenseAsset.toFixed(2)} د.أ</b>
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div style={G.card()}>
+              <div style={G.row}>
+                <span style={{ color: "var(--text-muted)" }}>المبلغ</span>
+                <b>{Number(selectedExpense.amount || 0).toFixed(2)} د.أ</b>
+              </div>
+              <div style={G.row}>
+                <span style={{ color: "var(--text-muted)" }}>التصنيف</span>
+                <b>{selectedExpense.category}</b>
+              </div>
+              <div style={G.row}>
+                <span style={{ color: "var(--text-muted)" }}>طريقة الدفع</span>
+                <b>{selectedExpense.paymentMethod}</b>
+              </div>
+              <div style={G.row}>
+                <span style={{ color: "var(--text-muted)" }}>المغطى من السقف</span>
+                <b>{Number(selectedExpense.budgetCovered || 0).toFixed(2)} د.أ</b>
+              </div>
+              <div style={G.row}>
+                <span style={{ color: "var(--text-muted)" }}>الملاحظة</span>
+                <b>{selectedExpense.note || "بدون ملاحظة"}</b>
+              </div>
+              <div style={G.lrow}>
+                <span style={{ color: "var(--text-muted)" }}>التجاوز</span>
+                <b style={{ color: Number(selectedExpense.overBudget || 0) > 0 ? "#D95555" : "var(--text-heading)" }}>
+                  {Number(selectedExpense.overBudget || 0).toFixed(2)} د.أ
+                </b>
+              </div>
+            </div>
           </div>
         </div>
       )}
@@ -3180,8 +3639,8 @@ function ReportsScreen({ state }) {
         >
           <div
             style={{
-              background: "#0c1525",
-              border: "1px solid #1e293b",
+              background: "var(--bg-card)",
+              border: "1px solid var(--border-soft)",
               borderRadius: "22px 22px 0 0",
               width: "100%",
               maxWidth: 440,
@@ -3200,8 +3659,8 @@ function ReportsScreen({ state }) {
                   height: 34,
                   borderRadius: 10,
                   border: "1px solid rgba(148,163,184,0.28)",
-                  background: "#111827",
-                  color: "#cbd5e1",
+                  background: "var(--bg-secondary)",
+                  color: "var(--text-body)",
                   cursor: "pointer",
                   fontSize: 20,
                 }}
@@ -3212,7 +3671,7 @@ function ReportsScreen({ state }) {
                 <div style={{ color: "#fecaca", fontWeight: 900, fontSize: 15 }}>
                   تفاصيل التجاوز
                 </div>
-                <div style={{ color: "#64748b", fontSize: 10 }}>
+                <div style={{ color: "var(--text-faint)", fontSize: 10 }}>
                   الإجمالي {overBudgetTotal.toFixed(2)} د.أ
                 </div>
               </div>
@@ -3234,10 +3693,10 @@ function ReportsScreen({ state }) {
                     {Number(item.overBudget || 0).toFixed(2)} د.أ
                   </b>
                   <div style={{ textAlign: "right" }}>
-                    <div style={{ color: "#f8fafc", fontSize: 13, fontWeight: 800 }}>
+                    <div style={{ color: "var(--text-heading)", fontSize: 13, fontWeight: 800 }}>
                       {item.category || "مصروف"}
                     </div>
-                    <div style={{ color: "#94a3b8", fontSize: 10 }}>
+                    <div style={{ color: "var(--text-muted)", fontSize: 10 }}>
                       {item.note || "بدون ملاحظة"}
                     </div>
                   </div>
@@ -3246,7 +3705,7 @@ function ReportsScreen({ state }) {
             ))}
 
             {!overBudgetItems.length && (
-              <div style={{ color: "#64748b", fontSize: 12, textAlign: "center", padding: 20 }}>
+              <div style={{ color: "var(--text-faint)", fontSize: 12, textAlign: "center", padding: 20 }}>
                 لا يوجد تجاوز في هذا الشهر
               </div>
             )}
@@ -3270,8 +3729,8 @@ function ReportsScreen({ state }) {
         >
           <div
             style={{
-              background: "#0c1525",
-              border: "1px solid #1e293b",
+              background: "var(--bg-card)",
+              border: "1px solid var(--border-soft)",
               borderRadius: "22px 22px 0 0",
               width: "100%",
               maxWidth: 440,
@@ -3290,8 +3749,8 @@ function ReportsScreen({ state }) {
                   height: 34,
                   borderRadius: 10,
                   border: "1px solid rgba(148,163,184,0.28)",
-                  background: "#111827",
-                  color: "#cbd5e1",
+                  background: "var(--bg-secondary)",
+                  color: "var(--text-body)",
                   cursor: "pointer",
                   fontSize: 20,
                 }}
@@ -3299,10 +3758,10 @@ function ReportsScreen({ state }) {
                 ×
               </button>
               <div style={{ textAlign: "right" }}>
-                <div style={{ color: "#c9a840", fontWeight: 900, fontSize: 15 }}>
+                <div style={{ color: "var(--gold-primary)", fontWeight: 900, fontSize: 15 }}>
                   تفاصيل تغير الأصول
                 </div>
-                <div style={{ color: "#64748b", fontSize: 10 }}>
+                <div style={{ color: "var(--text-faint)", fontSize: 10 }}>
                   {assetTrendMonths} أشهر
                 </div>
               </div>
@@ -3322,11 +3781,11 @@ function ReportsScreen({ state }) {
                         type="button"
                         onClick={() => setSelectedTrendAssetKey(asset.key)}
                         style={{
-                          border: `1px solid ${isSelected ? color : "#1e293b"}`,
-                          background: isSelected ? "rgba(148,163,184,0.08)" : "#0f172a",
+                          border: `1px solid ${isSelected ? color : "var(--bg-secondary)"}`,
+                          background: isSelected ? "rgba(201,168,76,0.12)" : "var(--bg-card)",
                           borderRadius: 12,
                           padding: 9,
-                          color: "#f8fafc",
+                          color: "var(--text-heading)",
                           cursor: "pointer",
                           fontFamily: "inherit",
                           textAlign: "right",
@@ -3338,19 +3797,19 @@ function ReportsScreen({ state }) {
                               {asset.change >= 0 ? "+" : ""}
                               {asset.change.toFixed(2)}
                             </b>
-                            <div style={{ color: "#64748b", fontSize: 10 }}>
+                            <div style={{ color: "var(--text-faint)", fontSize: 10 }}>
                               {asset.change >= 0 ? "نما" : "نقص"}
                             </div>
                           </div>
                           <div>
                             <div style={{ fontSize: 12, fontWeight: 800 }}>{asset.label}</div>
-                            <div style={{ height: 7, background: "#111827", borderRadius: 99, marginTop: 6, overflow: "hidden" }}>
+                            <div style={{ height: 7, background: "var(--bg-secondary)", borderRadius: 4, marginTop: 6, overflow: "hidden" }}>
                               <div
                                 style={{
                                   height: "100%",
                                   width: `${width}%`,
                                   background: color,
-                                  borderRadius: 99,
+                                  borderRadius: 4,
                                 }}
                               />
                             </div>
@@ -3362,40 +3821,40 @@ function ReportsScreen({ state }) {
                 </div>
 
                 {selectedTrendAsset && (
-                  <div style={{ background: "#111827", border: "1px solid #1e293b", borderRadius: 12, padding: 10 }}>
+                  <div style={{ background: "var(--bg-secondary)", border: "1px solid var(--border-soft)", borderRadius: 12, padding: 10 }}>
                     <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
                       <b style={{ color: selectedTrendAsset.change >= 0 ? "#86efac" : "#fecaca" }}>
                         {selectedTrendAsset.change >= 0 ? "+" : ""}
                         {selectedTrendAsset.change.toFixed(2)}
                       </b>
-                      <span style={{ color: "#cbd5e1", fontSize: 12 }}>{selectedTrendAsset.label}</span>
+                      <span style={{ color: "var(--text-body)", fontSize: 12 }}>{selectedTrendAsset.label}</span>
                     </div>
 
                     {selectedTrendAsset.months.map((month) => (
-                      <div key={`${selectedTrendAsset.key}-${month.month}`} style={{ borderTop: "1px solid #1e293b", paddingTop: 7, marginTop: 7 }}>
+                      <div key={`${selectedTrendAsset.key}-${month.month}`} style={{ borderTop: "1px solid var(--border-soft)", paddingTop: 7, marginTop: 7 }}>
                         <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, marginBottom: 5 }}>
                           <span style={{ color: month.change >= 0 ? "#86efac" : "#fecaca" }}>
                             {month.change >= 0 ? "+" : ""}
                             {month.change.toFixed(2)}
                           </span>
-                          <span style={{ color: "#94a3b8" }}>{month.month}</span>
+                          <span style={{ color: "var(--text-muted)" }}>{month.month}</span>
                         </div>
 
                         {month.reasons.real.length > 0 ? (
                           month.reasons.real.map((reason) => (
                             <div key={`${month.month}-${reason.reason}`} style={{ display: "flex", justifyContent: "space-between", fontSize: 11, marginBottom: 4 }}>
                               <span style={{ color: "#fecaca" }}>-{reason.amount.toFixed(2)}</span>
-                              <span style={{ color: "#cbd5e1" }}>{reason.reason}</span>
+                              <span style={{ color: "var(--text-body)" }}>{reason.reason}</span>
                             </div>
                           ))
                         ) : (
-                          <div style={{ color: "#64748b", fontSize: 11, marginBottom: 4 }}>
+                          <div style={{ color: "var(--text-faint)", fontSize: 11, marginBottom: 4 }}>
                             لا يوجد سبب مصروف مباشر مسجل
                           </div>
                         )}
 
                         {month.reasons.transfers.length > 0 && (
-                          <div style={{ marginTop: 6, paddingTop: 6, borderTop: "1px dashed #334155" }}>
+                          <div style={{ marginTop: 6, paddingTop: 6, borderTop: "1px dashed var(--border-soft)" }}>
                             {month.reasons.transfers.map((reason) => (
                               <div key={`${month.month}-${reason.reason}`} style={{ display: "flex", justifyContent: "space-between", fontSize: 11, marginBottom: 4 }}>
                                 <span style={{ color: "#93c5fd" }}>{reason.amount.toFixed(2)}</span>
@@ -3410,7 +3869,7 @@ function ReportsScreen({ state }) {
                 )}
               </>
             ) : (
-              <div style={{ color: "#64748b", fontSize: 12, textAlign: "center", padding: 20 }}>
+              <div style={{ color: "var(--text-faint)", fontSize: 12, textAlign: "center", padding: 20 }}>
                 تحتاج إلى إغلاق شهرين على الأقل للمقارنة
               </div>
             )}
@@ -3516,7 +3975,7 @@ function AssetsScreen({ state, setState, onAddExtraCash, readOnly = false }) {
                 height: 30,
                 borderRadius: 10,
                 border: `1px solid ${color}66`,
-                background: "#111827",
+                background: "var(--bg-secondary)",
                 color,
                 cursor: "pointer",
                 fontWeight: 900,
@@ -3533,8 +3992,8 @@ function AssetsScreen({ state, setState, onAddExtraCash, readOnly = false }) {
               width: 30,
               height: 30,
               borderRadius: 10,
-              border: "1px solid #334155",
-              background: isOpen ? `${color}22` : "#111827",
+              border: "1px solid var(--border-soft)",
+              background: isOpen ? `${color}22` : "var(--bg-secondary)",
               color,
               cursor: "pointer",
               fontWeight: 900,
@@ -3550,7 +4009,7 @@ function AssetsScreen({ state, setState, onAddExtraCash, readOnly = false }) {
           </div>
           <div style={{ fontSize: 21, fontWeight: 900, marginTop: 2 }}>
             {Number(total || 0).toFixed(2)}
-            <span style={{ fontSize: 11, color: "#64748b" }}> د.أ</span>
+            <span style={{ fontSize: 11, color: "var(--text-faint)" }}> د.أ</span>
           </div>
         </div>
       </div>
@@ -3558,7 +4017,7 @@ function AssetsScreen({ state, setState, onAddExtraCash, readOnly = false }) {
   };
 
   const renderEmptyAsset = (text) => (
-    <div style={{ textAlign: "center", color: "#64748b", fontSize: 12, padding: "12px 0 4px" }}>
+    <div style={{ textAlign: "center", color: "var(--text-faint)", fontSize: 12, padding: "12px 0 4px" }}>
       {text}
     </div>
   );
@@ -4108,9 +4567,9 @@ function AssetsScreen({ state, setState, onAddExtraCash, readOnly = false }) {
             width: 44,
             height: 38,
             borderRadius: 12,
-            border: "1px solid #334155",
-            background: "#1e293b",
-            color: "#cbd5e1",
+            border: "1px solid var(--border-soft)",
+            background: "var(--bg-secondary)",
+            color: "var(--text-body)",
             cursor: "pointer",
             fontWeight: 900,
           }}
@@ -4120,20 +4579,20 @@ function AssetsScreen({ state, setState, onAddExtraCash, readOnly = false }) {
       </div>
       )}
 
-      <div style={{ ...G.card("#c9a84022"), textAlign: "right" }}>
-        <div style={{ fontSize: 12, color: "#c9a840" }}>إجمالي الأصول</div>
+      <div style={{ ...G.card("rgba(201,168,76,0.14)"), textAlign: "right" }}>
+        <div style={{ fontSize: 12, color: "var(--gold-primary)" }}>إجمالي الأصول</div>
         <div style={{ fontSize: 32, fontWeight: 900 }}>
           {assets.totalAssets.toFixed(2)}{" "}
-          <span style={{ fontSize: 13, color: "#64748b" }}>د.أ</span>
+          <span style={{ fontSize: 13, color: "var(--text-faint)" }}>د.أ</span>
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 10 }}>
-          <div style={{ background: "#13251d", borderRadius: 10, padding: 9 }}>
-            <div style={{ fontSize: 10, color: "#86efac" }}>ادخار سائل</div>
-            <b>{(Number(state.assets.cash || 0) + bankTotal).toFixed(2)}</b>
+          <div style={summaryCard("success")}>
+            <div style={{ fontSize: 10, color: "var(--text-faint)" }}>ادخار سائل</div>
+            <b style={summaryValue("success")}>{(Number(state.assets.cash || 0) + bankTotal).toFixed(2)}</b>
           </div>
-          <div style={{ background: "#111827", borderRadius: 10, padding: 9 }}>
-            <div style={{ fontSize: 10, color: "#94a3b8" }}>صافي</div>
-            <b style={{ color: "#c9a840" }}>{assets.netWorth.toFixed(2)}</b>
+          <div style={summaryCard("total")}>
+            <div style={{ fontSize: 10, color: "var(--text-muted)" }}>صافي</div>
+            <b style={summaryValue("total")}>{assets.netWorth.toFixed(2)}</b>
           </div>
         </div>
       </div>
@@ -4149,7 +4608,7 @@ function AssetsScreen({ state, setState, onAddExtraCash, readOnly = false }) {
         {openAssetCard === "cash" && (
           <div style={{ ...G.lrow, marginTop: 8 }}>
             <strong>{Number(state.assets.cash || 0).toFixed(2)} د.أ</strong>
-            <span style={{ color: "#94a3b8", fontSize: 12 }}>ادخار نقدي</span>
+            <span style={{ color: "var(--text-muted)", fontSize: 12 }}>ادخار نقدي</span>
           </div>
         )}
       </div>
@@ -4183,7 +4642,7 @@ function AssetsScreen({ state, setState, onAddExtraCash, readOnly = false }) {
           total: stockTotal,
           color: "#a855f7",
         })}
-        <div style={{ fontSize: 10, color: "#94a3b8", textAlign: "right", marginTop: 6 }}>
+        <div style={{ fontSize: 10, color: "var(--text-muted)", textAlign: "right", marginTop: 6 }}>
           {stockUnitsTotal.toFixed(4)} سهم · متوسط {stockAverageCost.toFixed(4)}
         </div>
         {openAssetCard === "stocks" && (
@@ -4195,7 +4654,7 @@ function AssetsScreen({ state, setState, onAddExtraCash, readOnly = false }) {
                 <div key={s.id} style={i < state.assets.stocks.length - 1 ? G.row : G.lrow}>
                   <div>
                     <strong>{value.toFixed(2)} د.أ</strong>
-                    <div style={{ fontSize: 10, color: "#64748b" }}>
+                    <div style={{ fontSize: 10, color: "var(--text-faint)" }}>
                       {Number(s.units || 0).toFixed(4)} سهم · سعر {Number(s.currentPrice || 0).toFixed(4)} · متوسط {Number(s.wac || 0).toFixed(4)}
                     </div>
                   </div>
@@ -4225,7 +4684,7 @@ function AssetsScreen({ state, setState, onAddExtraCash, readOnly = false }) {
                 <div key={g.id} style={i < state.assets.gold.length - 1 ? G.row : G.lrow}>
                   <div>
                     <strong>{value.toFixed(2)} د.أ</strong>
-                    <div style={{ fontSize: 10, color: "#cbd5e1", fontWeight: 700 }}>
+                    <div style={{ fontSize: 10, color: "var(--text-body)", fontWeight: 700 }}>
                       {Number(g.units || 0).toFixed(4)} غ · متوسط {Number(g.wac || 0).toFixed(4)}
                     </div>
                   </div>
@@ -4238,13 +4697,13 @@ function AssetsScreen({ state, setState, onAddExtraCash, readOnly = false }) {
         )}
       </div>
 
-      <div style={assetCardStyle("#94a3b8")}>
+      <div style={assetCardStyle("var(--text-muted)")}>
         {renderAssetHeader({
           id: "silver",
           icon: ICONS.silver,
           title: "الفضة",
           total: silverTotal,
-          color: "#94a3b8",
+          color: "var(--text-muted)",
         })}
         {openAssetCard === "silver" && (
           <div style={{ marginTop: 8 }}>
@@ -4255,7 +4714,7 @@ function AssetsScreen({ state, setState, onAddExtraCash, readOnly = false }) {
                 <div key={s.id} style={i < state.assets.silver.length - 1 ? G.row : G.lrow}>
                   <div>
                     <strong>{value.toFixed(2)} د.أ</strong>
-                    <div style={{ fontSize: 10, color: "#64748b" }}>
+                    <div style={{ fontSize: 10, color: "var(--text-faint)" }}>
                       {Number(s.units || 0).toFixed(4)} غ · سعر {silverPrice.toFixed(4)} · متوسط {Number(s.wac || 0).toFixed(4)}
                     </div>
                   </div>
@@ -4268,13 +4727,13 @@ function AssetsScreen({ state, setState, onAddExtraCash, readOnly = false }) {
         )}
       </div>
 
-      <div style={assetCardStyle("#64748b")}>
+      <div style={assetCardStyle("var(--text-faint)")}>
         {renderAssetHeader({
           id: "custom",
           icon: ICONS.goods,
           title: "بضائع / أخرى",
           total: customTotal,
-          color: "#94a3b8",
+          color: "var(--text-muted)",
         })}
         {openAssetCard === "custom" && (
           <div style={{ marginTop: 8 }}>
@@ -4289,7 +4748,7 @@ function AssetsScreen({ state, setState, onAddExtraCash, readOnly = false }) {
                   <div>
                     <strong>{value.toFixed(2)} د.أ</strong>
                     {c.type === "unit" && (
-                      <div style={{ fontSize: 10, color: "#64748b" }}>
+                      <div style={{ fontSize: 10, color: "var(--text-faint)" }}>
                         {Number(c.units || 0).toFixed(4)} وحدة · سعر {Number(c.price || 0).toFixed(4)}
                       </div>
                     )}
@@ -4320,9 +4779,9 @@ function AssetsScreen({ state, setState, onAddExtraCash, readOnly = false }) {
           <div
             style={{
               position: "relative",
-              background: "#0c1525",
+              background: "var(--bg-card)",
               borderRadius: "22px 22px 0 0",
-              border: "1px solid #1e293b",
+              border: "1px solid var(--border-soft)",
               padding: "22px 18px 44px",
               width: "100%",
               maxWidth: 440,
@@ -4339,7 +4798,7 @@ function AssetsScreen({ state, setState, onAddExtraCash, readOnly = false }) {
             >
               <button
                 onClick={() => setShowAddAsset(false)}
-                style={G.btn("#1e293b", "#94a3b8", {
+                style={G.btn("var(--bg-secondary)", "var(--text-muted)", {
                   padding: "5px 12px",
                   borderRadius: 8,
                 })}
@@ -4409,7 +4868,7 @@ function AssetsScreen({ state, setState, onAddExtraCash, readOnly = false }) {
 
             <button
               onClick={addNewAsset}
-              style={G.btn("linear-gradient(135deg,#c9a840,#e8c96a)", "#0f172a", {
+              style={G.btn("linear-gradient(135deg,var(--gold-primary),var(--gold-border))", "var(--text-heading)", {
                 width: "100%",
               })}
             >
@@ -4435,9 +4894,9 @@ function AssetsScreen({ state, setState, onAddExtraCash, readOnly = false }) {
         >
           <div
             style={{
-              background: "#0c1525",
+              background: "var(--bg-card)",
               borderRadius: "22px 22px 0 0",
-              border: "1px solid #1e293b",
+              border: "1px solid var(--border-soft)",
               padding: "22px 18px 44px",
               width: "100%",
               maxWidth: 440,
@@ -4454,7 +4913,7 @@ function AssetsScreen({ state, setState, onAddExtraCash, readOnly = false }) {
             >
               <button
                 onClick={() => setShowTransfer(false)}
-                style={G.btn("#1e293b", "#94a3b8", {
+                style={G.btn("var(--bg-secondary)", "var(--text-muted)", {
                   padding: "5px 12px",
                   borderRadius: 8,
                 })}
@@ -4467,7 +4926,7 @@ function AssetsScreen({ state, setState, onAddExtraCash, readOnly = false }) {
               </span>
             </div>
 
-            <label style={{ fontSize: 11, color: "#64748b" }}>من أصل</label>
+            <label style={{ fontSize: 11, color: "var(--text-faint)" }}>من أصل</label>
             <select
               value={fromAsset}
               onChange={(e) => setFromAsset(e.target.value)}
@@ -4492,11 +4951,11 @@ function AssetsScreen({ state, setState, onAddExtraCash, readOnly = false }) {
               <button
                 type="button"
                 onClick={addTransferAllocationRow}
-                style={G.btn("#1e293b", "#cbd5e1", { padding: "7px 10px", fontSize: 12 })}
+                style={G.btn("var(--bg-secondary)", "var(--text-body)", { padding: "7px 10px", fontSize: 12 })}
               >
                 +
               </button>
-              <div style={{ fontSize: 12, color: "#94a3b8" }}>توزيع القيمة</div>
+              <div style={{ fontSize: 12, color: "var(--text-muted)" }}>توزيع القيمة</div>
             </div>
 
             {transferAllocations.map((row) => {
@@ -4508,11 +4967,11 @@ function AssetsScreen({ state, setState, onAddExtraCash, readOnly = false }) {
                 <div
                   key={row.id}
                   style={{
-                    border: "1px solid #1e293b",
+                    border: "1px solid var(--border-soft)",
                     borderRadius: 12,
                     padding: 10,
                     marginBottom: 10,
-                    background: "#020617",
+                    background: "var(--bg-card)",
                   }}
                 >
                   <div style={{ display: "grid", gridTemplateColumns: "42px 1fr", gap: 8, marginBottom: 8 }}>
@@ -4613,7 +5072,7 @@ function AssetsScreen({ state, setState, onAddExtraCash, readOnly = false }) {
 
             <button
               onClick={applyTransfer}
-              style={G.btn("linear-gradient(135deg,#c9a840,#e8c96a)", "#0f172a", {
+              style={G.btn("linear-gradient(135deg,var(--gold-primary),var(--gold-border))", "var(--text-heading)", {
                 width: "100%",
               })}
             >
@@ -4893,7 +5352,7 @@ const prepareEditCreditCard = (id) => {
     if (l.type === "card") return "#3b82f6";
     if (l.type === "over_budget") return "#ef4444";
     if (l.type === "personal") return "#f59e0b";
-    return "#94a3b8";
+    return "var(--text-muted)";
   };
 
   const getStatusLabel = (status) => {
@@ -5133,32 +5592,32 @@ const prepareEditCreditCard = (id) => {
           width: "100%",
           textAlign: "right",
           cursor: "pointer",
-          color: "#f8fafc",
+          color: "var(--text-heading)",
           fontFamily: "inherit",
         }}
       >
         <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
           <div>
-            <div style={{ fontSize: 15, color: "#f8fafc", fontWeight: 900, marginBottom: 4 }}>
+            <div style={{ fontSize: 15, color: "var(--text-heading)", fontWeight: 900, marginBottom: 4 }}>
               الالتزامات الهيكلية
             </div>
-            <div style={{ fontSize: 11, color: "#64748b" }}>
+            <div style={{ fontSize: 11, color: "var(--text-faint)" }}>
               أقساط ثابتة قادمة من الإعدادات
             </div>
           </div>
           <div style={{ textAlign: "left" }}>
             <div style={{ fontSize: 22, fontWeight: 900, color: "#ef4444" }}>
               {structuralTotal.toFixed(2)}
-              <span style={{ fontSize: 11, color: "#64748b" }}> د.أ</span>
+              <span style={{ fontSize: 11, color: "var(--text-faint)" }}> د.أ</span>
             </div>
-            <div style={{ fontSize: 11, color: "#e8c96a" }}>
+            <div style={{ fontSize: 11, color: "var(--gold-border)" }}>
               {showStructuralDetails ? "إخفاء التفاصيل" : "عرض التفاصيل"}
             </div>
           </div>
         </div>
 
         {showStructuralDetails && (
-          <div style={{ marginTop: 12, borderTop: "1px solid #1e293b", paddingTop: 8 }}>
+          <div style={{ marginTop: 12, borderTop: "1px solid var(--border-soft)", paddingTop: 8 }}>
             {structuralList.map((item, index) => (
               <div key={item.id || index} style={index < structuralList.length - 1 ? G.row : G.lrow}>
                 <strong>{getStructuralAmount(item).toFixed(2)} د.أ</strong>
@@ -5168,8 +5627,8 @@ const prepareEditCreditCard = (id) => {
                       width: 36,
                       height: 36,
                       borderRadius: 12,
-                      background: "#1e293b",
-                      color: "#e8c96a",
+                      background: "var(--bg-secondary)",
+                      color: "var(--gold-border)",
                       display: "flex",
                       alignItems: "center",
                       justifyContent: "center",
@@ -5181,7 +5640,7 @@ const prepareEditCreditCard = (id) => {
                   </div>
                   <div>
                   <div style={{ fontSize: 13 }}>{item.name}</div>
-                  <div style={{ fontSize: 10, color: "#64748b" }}>
+                  <div style={{ fontSize: 10, color: "var(--text-faint)" }}>
                     يوم السداد: {item.dueDay || "-"}
                   </div>
                 </div>
@@ -5205,31 +5664,31 @@ const prepareEditCreditCard = (id) => {
         >
           <div style={{ textAlign: "right" }}>
             <div style={{ fontSize: 15, fontWeight: 900 }}>الالتزامات الجارية</div>
-            <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 3 }}>
+            <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 3 }}>
               ديون قصيرة الأجل وبطاقات مستحقة
             </div>
           </div>
           <div style={{ textAlign: "left" }}>
             <div style={{ fontSize: 22, fontWeight: 900, color: "#ef4444" }}>
               {currentDebtTotal.toFixed(2)}
-              <span style={{ fontSize: 11, color: "#64748b" }}> د.أ</span>
+              <span style={{ fontSize: 11, color: "var(--text-faint)" }}> د.أ</span>
             </div>
-            <div style={{ fontSize: 10, color: "#94a3b8" }}>
+            <div style={{ fontSize: 10, color: "var(--text-muted)" }}>
               {showCurrentDetails ? "إخفاء التفاصيل" : "عرض التفاصيل"}
             </div>
           </div>
         </div>
 
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 12 }}>
-          <div style={{ background: "#13251d", borderRadius: 10, padding: 10 }}>
-            <div style={{ fontSize: 10, color: "#86efac" }}>محجوز من السقف</div>
-            <div style={{ color: "#22c55e", fontWeight: 900 }}>
+          <div style={summaryCard("success")}>
+            <div style={{ fontSize: 10, color: "var(--text-faint)" }}>محجوز من السقف</div>
+            <div style={summaryValue("success")}>
               {coveredCurrentTotal.toFixed(2)}
             </div>
           </div>
-          <div style={{ background: "#2b1111", borderRadius: 10, padding: 10 }}>
-            <div style={{ fontSize: 10, color: "#fecaca" }}>غير مغطى</div>
-            <div style={{ color: "#ef4444", fontWeight: 900 }}>
+          <div style={summaryCard("danger")}>
+            <div style={{ fontSize: 10, color: "var(--text-faint)" }}>غير مغطى</div>
+            <div style={summaryValue("danger")}>
               {uncoveredCurrentTotal.toFixed(2)}
             </div>
           </div>
@@ -5257,8 +5716,8 @@ const prepareEditCreditCard = (id) => {
             <div
               key={item.id}
               style={{
-                background: isOpen ? "#111827" : "#0b1220",
-                border: isOpen ? "1px solid rgba(232,201,106,0.62)" : "1px solid #1e293b",
+                background: isOpen ? "var(--bg-secondary)" : "var(--bg-secondary)",
+                border: isOpen ? "1px solid rgba(232,201,106,0.62)" : "1px solid var(--border-soft)",
                 borderRadius: 12,
                 padding: 12,
                 marginBottom: 10,
@@ -5272,8 +5731,8 @@ const prepareEditCreditCard = (id) => {
                       width: 36,
                       height: 36,
                       borderRadius: 12,
-                      background: isCard ? "#172554" : "#1e293b",
-                      color: isCard ? "#93c5fd" : "#e8c96a",
+                      background: isCard ? "var(--gold-light)" : "var(--bg-secondary)",
+                      color: isCard ? "#93c5fd" : "var(--gold-border)",
                       display: "flex",
                       alignItems: "center",
                       justifyContent: "center",
@@ -5284,24 +5743,24 @@ const prepareEditCreditCard = (id) => {
                     {itemIcon}
                   </div>
                   <div>
-                  <div style={{ fontSize: 14, fontWeight: 900 }}>{primaryName}</div>
+                  <div style={{ fontSize: 14, fontWeight: 900, color: "var(--text-heading)" }}>{primaryName}</div>
                   {isCard && (
-                    <div style={{ fontSize: 10, color: "#93c5fd", marginTop: 3 }}>
+                    <div style={{ ...labelText, color: "var(--text-muted)", marginTop: 3 }}>
                       السقف: {creditLimit.toFixed(2)} · المستخدم: {Number(item.balance || 0).toFixed(2)} · المتاح: {availableCredit.toFixed(2)}
                     </div>
                   )}
                   {!isCard && (
-                    <div style={{ fontSize: 10, color: "#94a3b8", marginTop: 3 }}>
+                    <div style={{ ...labelText, color: "var(--text-muted)", marginTop: 3 }}>
                       اسم الدائن
                     </div>
                   )}
-                  <div style={{ display: openCurrentId === item.id ? "block" : "none", fontSize: 10, color: "#94a3b8", marginTop: 3 }}>
+                  <div style={{ display: openCurrentId === item.id ? "block" : "none", ...labelText, color: "var(--text-muted)", marginTop: 3 }}>
                     {getTypeLabel(item)} · الاستحقاق: {getDueText(item)}
                   </div>
                 </div>
                 </div>
                 <div style={{ textAlign: "left" }}>
-                  <div style={{ fontSize: 17, fontWeight: 900, color: "#f8fafc" }}>
+                  <div style={{ fontSize: 17, fontWeight: 900, color: "var(--text-heading)" }}>
                     {amount.toFixed(2)}
                     <button
                       type="button"
@@ -5313,9 +5772,9 @@ const prepareEditCreditCard = (id) => {
                         width: 30,
                         height: 30,
                         borderRadius: 10,
-                        border: "1px solid #334155",
-                        background: "#111827",
-                        color: "#e8c96a",
+                        border: "1px solid var(--border-soft)",
+                        background: "var(--bg-secondary)",
+                        color: "var(--gold-border)",
                         cursor: "pointer",
                         fontWeight: 900,
                       }}
@@ -5323,12 +5782,12 @@ const prepareEditCreditCard = (id) => {
                       ⋯
                     </button>
                   </div>
-                  <div style={{ fontSize: 10, color: "#64748b" }}>د.أ</div>
+                  <div style={{ fontSize: 10, color: "var(--text-faint)" }}>د.أ</div>
                 </div>
               </div>
 
-              <div style={{ display: openCurrentId === item.id ? "block" : "none", height: 7, background: "#1e293b", borderRadius: 999, overflow: "hidden", marginTop: 10 }}>
-                <div style={{ width: `${coveragePct}%`, height: "100%", background: "linear-gradient(90deg,#22c55e,#e8c96a)" }} />
+              <div style={{ display: openCurrentId === item.id ? "block" : "none", height: 7, background: "var(--bg-secondary)", borderRadius: 999, overflow: "hidden", marginTop: 10 }}>
+                <div style={{ width: `${coveragePct}%`, height: "100%", background: "linear-gradient(90deg,#22c55e,var(--gold-border))" }} />
               </div>
 
               <div style={{ display: openCurrentId === item.id ? "grid" : "none", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 10 }}>
@@ -5374,7 +5833,7 @@ const prepareEditCreditCard = (id) => {
                     type="button"
                     title="سداد من أصل"
                     onClick={() => updateCurrentPaymentMethod(item, item.paymentMethod === "assets" ? "" : "assets")}
-                    style={G.iconBtn(item.paymentMethod === "assets", "#e8c96a")}
+                    style={G.iconBtn(item.paymentMethod === "assets", "var(--gold-border)")}
                   >
                     ◈
                   </button>
@@ -5382,7 +5841,7 @@ const prepareEditCreditCard = (id) => {
                     type="button"
                     title="تأجيل الاستحقاق"
                     onClick={() => updateCurrentPaymentMethod(item, item.paymentMethod === "postpone" ? "" : "postpone")}
-                    style={G.iconBtn(item.paymentMethod === "postpone", "#cbd5e1")}
+                    style={G.iconBtn(item.paymentMethod === "postpone", "var(--text-body)")}
                   >
                     ◷
                   </button>
@@ -5404,7 +5863,7 @@ const prepareEditCreditCard = (id) => {
                     <button
                       type="button"
                       onClick={() => payCurrentFromAsset(item)}
-                      style={G.btn("#1e293b", "#e8c96a", { width: "100%", padding: "9px" })}
+                      style={G.btn("var(--bg-secondary)", "var(--gold-border)", { width: "100%", padding: "9px" })}
                     >
                       تأكيد السداد من الأصل
                     </button>
@@ -5467,7 +5926,7 @@ const prepareEditCreditCard = (id) => {
         })}
 
         {!sortedCurrent.length && (
-          <div style={{ textAlign: "center", color: "#64748b", padding: "18px 0", fontSize: 13 }}>
+          <div style={{ textAlign: "center", color: "var(--text-faint)", padding: "18px 0", fontSize: 13 }}>
             لا توجد التزامات جارية
           </div>
         )}
@@ -5478,7 +5937,7 @@ const prepareEditCreditCard = (id) => {
           إدارة البطاقات الائتمانية
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-          <button type="button" onClick={() => setCardMode(cardMode === "add" ? "" : "add")} style={G.btn("#1e293b", "#cbd5e1", { width: "100%" })}>
+          <button type="button" onClick={() => setCardMode(cardMode === "add" ? "" : "add")} style={G.btn("var(--bg-secondary)", "var(--text-body)", { width: "100%" })}>
             إضافة بطاقة
           </button>
           <button type="button" onClick={() => setCardMode(cardMode === "delete" ? "" : "delete")} style={G.btn("#2b1111", "#fecaca", { width: "100%" })}>
@@ -5558,7 +6017,7 @@ const prepareEditCreditCard = (id) => {
         </div>
         <div style={{ fontSize: 30, fontWeight: 900, color: "#ef4444" }}>
           {totalCurrent.toFixed(2)}{" "}
-          <span style={{ fontSize: 13, color: "#64748b" }}>د.أ</span>
+          <span style={{ fontSize: 13, color: "var(--text-faint)" }}>د.أ</span>
         </div>
       </div>
      <div style={{ ...G.card(), marginBottom: 12 }}>
@@ -5566,7 +6025,7 @@ const prepareEditCreditCard = (id) => {
     style={{
       fontSize: 14,
       fontWeight: 800,
-      color: "#e5e7eb",
+      color: "var(--text-body)",
       marginBottom: 10,
     }}
   >
@@ -5576,7 +6035,7 @@ const prepareEditCreditCard = (id) => {
   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
     <button
       onClick={() => setCardMode(cardMode === "add" ? "" : "add")}
-      style={G.btn("linear-gradient(135deg,#334155,#0f172a)", "#0f172a", {
+      style={G.btn("linear-gradient(135deg,var(--bg-secondary),var(--border-soft))", "var(--text-heading)", {
         width: "100%",
         fontWeight: 900,
       })}
@@ -5596,7 +6055,7 @@ const prepareEditCreditCard = (id) => {
 
     <button
       onClick={() => setCardMode(cardMode === "edit" ? "" : "edit")}
-      style={G.btn("linear-gradient(135deg,#1e3a8a,#172554)", "#172554", {
+      style={G.btn("linear-gradient(135deg,var(--gold-light),var(--gold-border))", "var(--gold-light)", {
         width: "100%",
         fontWeight: 900,
       })}
@@ -5636,7 +6095,7 @@ const prepareEditCreditCard = (id) => {
 
   {cardMode === "delete" && (
     <div style={{ marginTop: 12 }}>
-      <label style={{ display: "block", fontSize: 12, color: "#94a3b8", marginBottom: 6 }}>
+      <label style={{ display: "block", fontSize: 12, color: "var(--text-muted)", marginBottom: 6 }}>
         اختر البطاقة
       </label>
 
@@ -5674,7 +6133,7 @@ const prepareEditCreditCard = (id) => {
   )}
 
   {cardMode === "edit" && (
-    <div style={{ marginTop: 12, fontSize: 12, color: "#94a3b8" }}>
+    <div style={{ marginTop: 12, fontSize: 12, color: "var(--text-muted)" }}>
       سنضيف تعديل الاسم والسقف في الخطوة التالية بعد تثبيت الإضافة والإلغاء.
     </div>
   )}
@@ -5688,7 +6147,7 @@ const prepareEditCreditCard = (id) => {
     marginBottom: 10,
     fontSize: 13,
     fontWeight: 800,
-    color: "#94a3b8",
+    color: "var(--text-muted)",
     cursor: "pointer",
     display: "flex",
     justifyContent: "space-between",
@@ -5709,14 +6168,14 @@ const prepareEditCreditCard = (id) => {
               <div style={{ fontSize: 15, fontWeight: 800 }}>
                 {Number(s.monthly || 0).toFixed(2)} د.أ
               </div>
-              <div style={{ fontSize: 10, color: "#64748b" }}>
+              <div style={{ fontSize: 10, color: "var(--text-faint)" }}>
                 يوم السداد: {s.dueDay}
               </div>
             </div>
 
             <div style={{ textAlign: "right" }}>
-              <div style={{ fontSize: 13, color: "#cbd5e1" }}>{s.name}</div>
-              <div style={{ fontSize: 10, color: "#475569" }}>
+              <div style={{ fontSize: 13, color: "var(--text-body)" }}>{s.name}</div>
+              <div style={{ fontSize: 10, color: "var(--text-disabled)" }}>
                 قسط شهري طويل الأجل
               </div>
             </div>
@@ -5727,7 +6186,7 @@ const prepareEditCreditCard = (id) => {
           style={{
             marginTop: 10,
             paddingTop: 10,
-            borderTop: "1px solid #1a2540",
+            borderTop: "1px solid var(--border-soft)",
             display: "flex",
             justifyContent: "space-between",
           }}
@@ -5735,7 +6194,7 @@ const prepareEditCreditCard = (id) => {
           <strong style={{ color: "#ef4444" }}>
             {structuralTotal.toFixed(2)} د.أ
           </strong>
-          <span style={{ fontSize: 11, color: "#64748b" }}>
+          <span style={{ fontSize: 11, color: "var(--text-faint)" }}>
             إجمالي الأقساط الشهرية
           </span>
         </div>
@@ -5749,7 +6208,7 @@ const prepareEditCreditCard = (id) => {
     marginBottom: 10,
     fontSize: 13,
     fontWeight: 800,
-    color: "#f8fafc",
+    color: "var(--text-heading)",
     cursor: "pointer",
     display: "flex",
     justifyContent: "space-between",
@@ -5760,19 +6219,19 @@ const prepareEditCreditCard = (id) => {
   <div style={{ fontSize: 13, fontWeight: 900 }}>
     📋 إدارة الالتزامات الجارية {showCurrentDetails ? "▲" : "▼"}
   </div>
-  <div style={{ fontSize: 10, color: "#94a3b8", marginTop: 4 }}>
+  <div style={{ fontSize: 10, color: "var(--text-muted)", marginTop: 4 }}>
     رصيد الدين الكامل والمستحقات الشهرية
   </div>
 </div>
 
 <div style={{ textAlign: "left" }}>
-  <div style={{ fontSize: 11, color: "#94a3b8" }}>
+  <div style={{ fontSize: 11, color: "var(--text-muted)" }}>
     إجمالي رصيد الدين
   </div>
   <div style={{ color: "#ef4444", fontWeight: 900 }}>
     {currentDebtTotal.toFixed(2)} د.أ
   </div>
-  <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 6 }}>
+  <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 6 }}>
     المستحق هذا الشهر
   </div>
   <div style={{ color: "#f59e0b", fontWeight: 900 }}>
@@ -5795,7 +6254,7 @@ const prepareEditCreditCard = (id) => {
                   style={{
                     fontSize: 15,
                     fontWeight: 800,
-                    color: l.status === "paid" ? "#64748b" : "#ef4444",
+                    color: l.status === "paid" ? "var(--text-faint)" : "#ef4444",
                   }}
                 >
                   {amount.toFixed(2)} د.أ
@@ -5815,7 +6274,7 @@ const prepareEditCreditCard = (id) => {
               </div>
               
               <div style={{ textAlign: "right", maxWidth: "58%" }}>
-                <div style={{ fontSize: 13, color: "#cbd5e1" }}>{l.name}</div>
+                <div style={{ fontSize: 13, color: "var(--text-body)" }}>{l.name}</div>
                 {isDueThisMonth(l) && l.status !== "paid" && (
   <div style={{ fontSize: 10, color: "#f59e0b", fontWeight: 700, marginTop: 2 }}>
     مستحق هذا الشهر
@@ -5827,13 +6286,13 @@ const prepareEditCreditCard = (id) => {
                     تاريخ الاستحقاق: {formatDate(l.dueDate)}
                   </div>
                 ) : (
-                  <div style={{ fontSize: 10, color: "#64748b", marginTop: 3 }}>
+                  <div style={{ fontSize: 10, color: "var(--text-faint)", marginTop: 3 }}>
                     يوم الاستحقاق: {l.dueDay || "-"}
                   </div>
                 )}
 
                 {(l.type === "card" || l.type === "direct_liability") && (
-  <div style={{ fontSize: 10, color: "#64748b", marginTop: 3 }}>
+  <div style={{ fontSize: 10, color: "var(--text-faint)", marginTop: 3 }}>
     برسم الدفع: {Number(l.payableBuffer || 0).toFixed(2)}
     <br />
     خارج السقف: {Number(l.uncoveredDebt || 0).toFixed(2)}
@@ -6030,7 +6489,7 @@ paymentMethod: "salary",
           <div
             style={{
               textAlign: "center",
-              color: "#475569",
+              color: "var(--text-disabled)",
               fontSize: 13,
               padding: "20px 0",
             }}
@@ -6154,7 +6613,15 @@ const sectionTitle = (icon, title, action = null) => (
       marginBottom: 10,
     }}
   >
-    <div style={{ color: "#c9a840", fontWeight: 900, fontSize: 14 }}>
+    <div
+      style={{
+        color: "var(--text-faint)",
+        fontWeight: 700,
+        fontSize: 10,
+        letterSpacing: "0.09em",
+        textTransform: "uppercase",
+      }}
+    >
       {icon} {title}
     </div>
     {action}
@@ -6176,7 +6643,7 @@ const collapsibleSectionTitle = (key, icon, title, action = null) => {
         {action}
         {smallIconButton(isOpen ? "−" : "⋯", () =>
           setSettingsSectionsOpen((prev) => ({ ...prev, [key]: !prev[key] }))
-        , "#cbd5e1")}
+        , "var(--text-body)")}
       </div>
       <button
         type="button"
@@ -6186,9 +6653,11 @@ const collapsibleSectionTitle = (key, icon, title, action = null) => {
         style={{
           border: 0,
           background: "transparent",
-          color: "#c9a840",
-          fontWeight: 900,
-          fontSize: 14,
+          color: "var(--text-faint)",
+          fontWeight: 700,
+          fontSize: 10,
+          letterSpacing: "0.09em",
+          textTransform: "uppercase",
           cursor: "pointer",
           fontFamily: "inherit",
         }}
@@ -6198,7 +6667,7 @@ const collapsibleSectionTitle = (key, icon, title, action = null) => {
     </div>
   );
 };
-const smallIconButton = (label, onClick, color = "#cbd5e1") => (
+const smallIconButton = (label, onClick, color = "var(--text-body)") => (
   <button
     type="button"
     title={label}
@@ -6207,12 +6676,13 @@ const smallIconButton = (label, onClick, color = "#cbd5e1") => (
       width: 32,
       height: 32,
       borderRadius: 10,
-      border: `1px solid ${color}55`,
-      background: "#111827",
-      color,
+      border: label === "+" ? "1px solid #0EA5E9" : `1px solid ${color}55`,
+      background: label === "+" ? "linear-gradient(135deg,#38BDF8,#0284C7)" : "var(--bg-secondary)",
+      color: label === "+" ? "#fff" : color,
       cursor: "pointer",
       fontWeight: 900,
-      fontSize: 15,
+      fontSize: label === "+" ? 18 : 15,
+      boxShadow: label === "+" ? "0 6px 14px rgba(2,132,199,0.22)" : "none",
     }}
   >
     {label}
@@ -6234,7 +6704,7 @@ const openingBalanceRow = ({ keyPrefix, item, group, nameField, unitLabel, price
 
   return (
     <div key={`${keyPrefix}-${item.id}`} style={{ display: "grid", gridTemplateColumns: "0.9fr 0.72fr 0.72fr 0.72fr 1fr", gap: 6, marginBottom: 8 }}>
-      <input readOnly value={total.toFixed(2)} placeholder="الإجمالي" style={{ ...G.inp(), padding: "9px 7px", fontSize: 11, color: "#cbd5e1" }} />
+      <input readOnly value={total.toFixed(2)} placeholder="الإجمالي" style={{ ...G.inp(), padding: "9px 7px", fontSize: 11, color: "var(--text-body)" }} />
       <input type="number" value={price} onChange={(e) => updateAssetItem(group, item.id, { [priceField]: Number(e.target.value || 0) })} placeholder="السعر" style={{ ...G.inp(), padding: "9px 7px", fontSize: 11 }} />
       <select value={unitLabel} disabled style={{ ...G.inp(), padding: "9px 6px", fontSize: 11, opacity: 0.9 }}>
         <option value="غم">غم</option>
@@ -6631,7 +7101,7 @@ const saveSettingsCreditCardEdit = () => {
 
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
           <div>
-            <label style={{ fontSize: 10, color: "#64748b" }}>الراتب</label>
+            <label style={{ fontSize: 10, color: "var(--text-faint)" }}>الراتب</label>
             <input
               type="number"
               value={state.settings.salary}
@@ -6642,7 +7112,7 @@ const saveSettingsCreditCardEdit = () => {
             />
           </div>
           <div>
-            <label style={{ fontSize: 10, color: "#64748b" }}>السقف</label>
+            <label style={{ fontSize: 10, color: "var(--text-faint)" }}>السقف</label>
             <input
               type="number"
               value={state.session.spendingCap}
@@ -6667,11 +7137,11 @@ const saveSettingsCreditCardEdit = () => {
           </div>
         </div>
 
-        <div style={{ fontSize: 11, color: "#94a3b8", marginBottom: 12 }}>
+        <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 12 }}>
           الحد: {maxSpendingCap.toFixed(2)} د.أ
         </div>
 
-        <div style={{ borderTop: "1px solid #1a2540", paddingTop: 12, marginTop: 8 }}>
+        <div style={{ borderTop: "1px solid var(--border-soft)", paddingTop: 12, marginTop: 8 }}>
           {collapsibleSectionTitle(
             "cards",
             "💳",
@@ -6691,10 +7161,10 @@ const saveSettingsCreditCardEdit = () => {
                 <div
                   key={card.id}
                   style={{
-                    border: "1px solid #1e293b",
+                    border: "1px solid var(--border-soft)",
                     borderRadius: 12,
                     padding: 10,
-                    background: "linear-gradient(135deg,#172554,#0f172a)",
+                    background: "linear-gradient(135deg,var(--gold-light),var(--bg-card))",
                   }}
                 >
                   <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
@@ -6710,7 +7180,7 @@ const saveSettingsCreditCardEdit = () => {
                       <div style={{ color: "#93c5fd", fontSize: 10 }}>
                         {used.toFixed(2)} / {limit.toFixed(2)} · متاح {available.toFixed(2)}
                       </div>
-                      <div style={{ color: "#cbd5e1", fontSize: 10, marginTop: 2 }}>
+                      <div style={{ color: "var(--text-body)", fontSize: 10, marginTop: 2 }}>
                         {card.dueDay ? `يوم الاستحقاق ${card.dueDay}` : "بلا يوم استحقاق"}
                       </div>
                     </div>
@@ -6719,7 +7189,7 @@ const saveSettingsCreditCardEdit = () => {
               );
             })}
             {!creditCards.length && (
-              <div style={{ color: "#64748b", fontSize: 12, textAlign: "center", padding: 8 }}>
+              <div style={{ color: "var(--text-faint)", fontSize: 12, textAlign: "center", padding: 8 }}>
                 لا توجد بطاقات
               </div>
             )}
@@ -6737,19 +7207,19 @@ const saveSettingsCreditCardEdit = () => {
           setSettingsCardMode("");
         }, "#fecaca")}
       </div>
-      <label style={{ fontSize: 10, color: "#64748b" }}>اسم البطاقة</label>
+      <label style={{ fontSize: 10, color: "var(--text-faint)" }}>اسم البطاقة</label>
       <input value={settingsCardName} onChange={(e) => setSettingsCardName(e.target.value)} placeholder="مثال: فيزا البنك" style={{ ...G.inp(), marginBottom: 8 }} />
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
         <div>
-          <label style={{ fontSize: 10, color: "#64748b" }}>سقف البطاقة</label>
+          <label style={{ fontSize: 10, color: "var(--text-faint)" }}>سقف البطاقة</label>
           <input type="number" value={settingsCardLimit} onChange={(e) => setSettingsCardLimit(e.target.value)} placeholder="0.00" style={{ ...G.inp(), marginBottom: 8 }} />
         </div>
         <div>
-          <label style={{ fontSize: 10, color: "#64748b" }}>المستخدم الآن</label>
+          <label style={{ fontSize: 10, color: "var(--text-faint)" }}>المستخدم الآن</label>
           <input type="number" value={settingsCardBalance} onChange={(e) => setSettingsCardBalance(e.target.value)} placeholder="0.00" style={{ ...G.inp(), marginBottom: 8 }} />
         </div>
       </div>
-      <label style={{ fontSize: 10, color: "#64748b" }}>يوم الاستحقاق الشهري</label>
+      <label style={{ fontSize: 10, color: "var(--text-faint)" }}>يوم الاستحقاق الشهري</label>
       <input
         type="number"
         min="1"
@@ -6786,7 +7256,7 @@ const saveSettingsCreditCardEdit = () => {
 </div>
 <div
   style={{
-    borderTop: "1px solid #1a2540",
+    borderTop: "1px solid var(--border-soft)",
     paddingTop: 12,
     marginTop: 8,
   }}
@@ -6808,7 +7278,7 @@ const saveSettingsCreditCardEdit = () => {
       display: "grid",
       gridTemplateColumns: "34px 0.9fr 1.4fr",
       gap: 6,
-      color: "#64748b",
+      color: "var(--text-faint)",
       fontSize: 10,
       marginBottom: 5,
       padding: "0 4px",
@@ -6823,8 +7293,8 @@ const saveSettingsCreditCardEdit = () => {
     <div
       key={item.id}
       style={{
-        background: "#0f172a",
-        border: "1px solid #1e293b",
+        background: "var(--bg-card)",
+        border: "1px solid var(--border-soft)",
         borderRadius: 12,
         padding: 8,
         marginBottom: 8,
@@ -6858,8 +7328,8 @@ const saveSettingsCreditCardEdit = () => {
   {showStructuralForm && (
   <div
     style={{
-      background: "#111827",
-      border: "1px dashed #334155",
+      background: "var(--bg-secondary)",
+      border: "1px dashed var(--border-soft)",
       borderRadius: 12,
       padding: 10,
       marginTop: 12,
@@ -6884,7 +7354,7 @@ const saveSettingsCreditCardEdit = () => {
     <button
       type="button"
       onClick={addStructuralLiability}
-      style={G.btn("linear-gradient(135deg,#c9a840,#e8c96a)", "#0f172a", {
+      style={G.btn("linear-gradient(135deg,var(--gold-primary),var(--gold-border))", "var(--text-heading)", {
         width: "100%",
         padding: "9px 12px",
         fontSize: 12,
@@ -6916,8 +7386,8 @@ const saveSettingsCreditCardEdit = () => {
           {showOpeningAssetForm && (
           <div
             style={{
-              background: "#111827",
-              border: "1px dashed #334155",
+              background: "var(--bg-secondary)",
+              border: "1px dashed var(--border-soft)",
               borderRadius: 12,
               padding: 10,
               marginBottom: 12,
@@ -7010,7 +7480,7 @@ const saveSettingsCreditCardEdit = () => {
             <button
               type="button"
               onClick={addOpeningAsset}
-              style={G.btn("linear-gradient(135deg,#c9a840,#e8c96a)", "#0f172a", {
+              style={G.btn("linear-gradient(135deg,var(--gold-primary),var(--gold-border))", "var(--text-heading)", {
                 width: "100%",
                 padding: "9px 12px",
                 fontSize: 12,
@@ -7022,7 +7492,7 @@ const saveSettingsCreditCardEdit = () => {
           </div>
           )}
 
-          <div style={{ display: "grid", gridTemplateColumns: "0.9fr 0.72fr 0.72fr 0.72fr 1fr", gap: 6, color: "#64748b", fontSize: 10, marginBottom: 5 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "0.9fr 0.72fr 0.72fr 0.72fr 1fr", gap: 6, color: "var(--text-faint)", fontSize: 10, marginBottom: 5 }}>
             <span>الإجمالي</span>
             <span>السعر</span>
             <span>الوحدة</span>
@@ -7031,8 +7501,8 @@ const saveSettingsCreditCardEdit = () => {
           </div>
 
           <div style={{ display: "grid", gridTemplateColumns: "0.9fr 0.72fr 0.72fr 0.72fr 1fr", gap: 6, marginBottom: 8 }}>
-            <input readOnly value={Number(state.assets.cash || 0).toFixed(2)} placeholder="الإجمالي" style={{ ...G.inp(), padding: "9px 7px", fontSize: 11, color: "#cbd5e1" }} />
-            <input readOnly value="1" placeholder="السعر" style={{ ...G.inp(), padding: "9px 7px", fontSize: 11, color: "#94a3b8" }} />
+            <input readOnly value={Number(state.assets.cash || 0).toFixed(2)} placeholder="الإجمالي" style={{ ...G.inp(), padding: "9px 7px", fontSize: 11, color: "var(--text-body)" }} />
+            <input readOnly value="1" placeholder="السعر" style={{ ...G.inp(), padding: "9px 7px", fontSize: 11, color: "var(--text-muted)" }} />
             <select value="د.أ" disabled style={{ ...G.inp(), padding: "9px 6px", fontSize: 11, opacity: 0.9 }}>
               <option value="د.أ">د.أ</option>
             </select>
@@ -7051,13 +7521,13 @@ const saveSettingsCreditCardEdit = () => {
               placeholder="الرصيد"
               style={{ ...G.inp(), padding: "9px 7px", fontSize: 11 }}
             />
-            <input readOnly value="كاش ادخار" placeholder="الأصل" style={{ ...G.inp(), padding: "9px 7px", fontSize: 11, color: "#cbd5e1" }} />
+            <input readOnly value="كاش ادخار" placeholder="الأصل" style={{ ...G.inp(), padding: "9px 7px", fontSize: 11, color: "var(--text-body)" }} />
           </div>
 
           {(state.assets.banks || []).map((bank) => (
             <div key={`bank-${bank.id}`} style={{ display: "grid", gridTemplateColumns: "0.9fr 0.72fr 0.72fr 0.72fr 1fr", gap: 6, marginBottom: 8 }}>
-              <input readOnly value={Number(bank.balance || 0).toFixed(2)} placeholder="الإجمالي" style={{ ...G.inp(), padding: "9px 7px", fontSize: 11, color: "#cbd5e1" }} />
-              <input readOnly value="1" placeholder="السعر" style={{ ...G.inp(), padding: "9px 7px", fontSize: 11, color: "#94a3b8" }} />
+              <input readOnly value={Number(bank.balance || 0).toFixed(2)} placeholder="الإجمالي" style={{ ...G.inp(), padding: "9px 7px", fontSize: 11, color: "var(--text-body)" }} />
+              <input readOnly value="1" placeholder="السعر" style={{ ...G.inp(), padding: "9px 7px", fontSize: 11, color: "var(--text-muted)" }} />
               <select value="د.أ" disabled style={{ ...G.inp(), padding: "9px 6px", fontSize: 11, opacity: 0.9 }}>
                 <option value="د.أ">د.أ</option>
               </select>
@@ -7128,7 +7598,7 @@ const saveSettingsCreditCardEdit = () => {
             )}
         </div>
         )}
-<div style={{ fontSize: 12, color: "#94a3b8", marginTop: 8 }}>
+<div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 8 }}>
   عدد اللقطات التاريخية المحفوظة: {(state.monthlySnapshots || []).length}
 
   
@@ -7238,9 +7708,9 @@ function ExtraCashModal({ state, onSubmit, onClose, preset = null }) {
     >
       <div
         style={{
-          background: "#0f172a",
+          background: "var(--bg-card)",
           color: "white",
-          border: "1px solid #334155",
+          border: "1px solid var(--border-soft)",
           borderRadius: 16,
           padding: 16,
           width: "100%",
@@ -7262,8 +7732,8 @@ function ExtraCashModal({ state, onSubmit, onClose, preset = null }) {
             padding: 10,
             marginBottom: 12,
             borderRadius: 10,
-            border: "1px solid #334155",
-            background: "#020617",
+            border: "1px solid var(--border-soft)",
+            background: "var(--bg-card)",
             color: "white",
           }}
         />
@@ -7279,8 +7749,8 @@ function ExtraCashModal({ state, onSubmit, onClose, preset = null }) {
             padding: 10,
             marginBottom: 12,
             borderRadius: 10,
-            border: "1px solid #334155",
-            background: "#020617",
+            border: "1px solid var(--border-soft)",
+            background: "var(--bg-card)",
             color: "white",
           }}
         />
@@ -7294,8 +7764,8 @@ function ExtraCashModal({ state, onSubmit, onClose, preset = null }) {
             padding: 10,
             marginBottom: 16,
             borderRadius: 10,
-            border: "1px solid #334155",
-            background: "#020617",
+            border: "1px solid var(--border-soft)",
+            background: "var(--bg-card)",
             color: "white",
           }}
         >
@@ -7328,8 +7798,8 @@ function ExtraCashModal({ state, onSubmit, onClose, preset = null }) {
               padding: 10,
               marginBottom: 10,
               borderRadius: 10,
-              border: "1px solid #334155",
-              background: "#020617",
+              border: "1px solid var(--border-soft)",
+              background: "var(--bg-card)",
               color: "white",
             }}
           >
@@ -7362,8 +7832,8 @@ function ExtraCashModal({ state, onSubmit, onClose, preset = null }) {
               padding: 10,
               marginBottom: 10,
               borderRadius: 10,
-              border: "1px solid #334155",
-              background: "#020617",
+              border: "1px solid var(--border-soft)",
+              background: "var(--bg-card)",
               color: "white",
             }}
           />
@@ -7380,8 +7850,8 @@ function ExtraCashModal({ state, onSubmit, onClose, preset = null }) {
                 width: "100%",
                 padding: 10,
                 borderRadius: 10,
-                border: "1px solid #334155",
-                background: "#020617",
+                border: "1px solid var(--border-soft)",
+                background: "var(--bg-card)",
                 color: "white",
               }}
             />
@@ -7394,8 +7864,8 @@ function ExtraCashModal({ state, onSubmit, onClose, preset = null }) {
                 width: "100%",
                 padding: 10,
                 borderRadius: 10,
-                border: "1px solid #334155",
-                background: "#020617",
+                border: "1px solid var(--border-soft)",
+                background: "var(--bg-card)",
                 color: "white",
               }}
             />
@@ -7423,7 +7893,7 @@ function ExtraCashModal({ state, onSubmit, onClose, preset = null }) {
             style={{
               flex: 1,
               padding: "10px 12px",
-              border: "1px solid #334155",
+              border: "1px solid var(--border-soft)",
               borderRadius: 10,
               background: "transparent",
               color: "white",
@@ -7962,11 +8432,11 @@ function handleCloseMonth() {
 
   
   const tabs = [
-    { id: "overview", label: "الرئيسية" },
+    { id: "settings", label: "الإعدادات" },
     { id: "reports", label: "التقارير" },
+    { id: "overview", label: "الرئيسية" },
     { id: "assets", label: "الأصول" },
     { id: "liabilities", label: "الخصوم" },
-    { id: "settings", label: "الإعدادات" },
   ];
   const snapshots = state.monthlySnapshots || [];
   const currentMonthLabel = formatMonthKey(state.currentMonth || new Date().toISOString().slice(0, 7));
@@ -7979,13 +8449,6 @@ const isSnapshotView = Boolean(selectedViewSnapshot);
 const visibleTabs = isSnapshotView
   ? tabs.filter((item) => ["overview", "reports", "assets"].includes(item.id))
   : tabs;
-const tabIcon = (id) => {
-  if (id === "overview") return "⌂";
-  if (id === "reports") return "◔";
-  if (id === "assets") return "◇";
-  if (id === "liabilities") return "▣";
-  return "⚙";
-};
 useEffect(() => {
   if (isSnapshotView && !["overview", "reports", "assets"].includes(tab)) {
     setTab("overview");
@@ -8031,30 +8494,34 @@ useEffect(() => {
         <div
   style={{
     position: "relative",
-    display: "grid",
-    gridTemplateColumns: "1fr 150px",
+    display: "flex",
+    justifyContent: "space-between",
     alignItems: "center",
     marginBottom: 12,
     minHeight: 44,
+    direction: "ltr",
   }}
 >
   <div
     style={{
       display: "flex",
-      justifyContent: "center",
+      justifyContent: "flex-start",
       alignItems: "center",
+      minWidth: 0,
+      direction: "rtl",
     }}
   >
     <select
       value={selectedViewMonth}
       onChange={(e) => setSelectedViewMonth(e.target.value)}
       style={{
-        fontSize: 11,
-        color: "#cbd5e1",
-        background: "#1e293b",
-        padding: "4px 10px",
-        borderRadius: 8,
-        border: "1px solid #334155",
+        fontSize: 12,
+        color: "#8A6820",
+        background: "var(--gold-light)",
+        padding: "6px 12px",
+        borderRadius: 20,
+        border: "1px solid var(--gold-border)",
+        fontWeight: 600,
         outline: "none",
       }}
     >
@@ -8072,9 +8539,9 @@ useEffect(() => {
       <span
         style={{
           marginRight: 6,
-          color: "#fbbf24",
-          background: "rgba(251,191,36,0.1)",
-          border: "1px solid rgba(251,191,36,0.28)",
+          color: "#8A6820",
+          background: "var(--gold-light)",
+          border: "1px solid var(--gold-border)",
           borderRadius: 999,
           padding: "3px 7px",
           fontSize: 9,
@@ -8092,29 +8559,30 @@ useEffect(() => {
       alignItems: "center",
       justifyContent: "flex-end",
       gap: 8,
+      direction: "rtl",
     }}
   >
     <div style={{ textAlign: "right" }}>
-      <div style={{ fontSize: 13, fontWeight: 700 }}>
+      <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text-heading)" }}>
         مدير الثروة الذكي
       </div>
-      <div style={{ fontSize: 10, color: "#64748b" }}>
+      <div style={{ fontSize: 10, color: "var(--text-faint)", fontWeight: 700, letterSpacing: "0.09em", textTransform: "uppercase" }}>
         Smart Wealth Tracker
       </div>
     </div>
 
     <div
       style={{
-        width: 32,
-        height: 32,
-        background: "linear-gradient(135deg,#c9a840,#e8c96a)",
-        borderRadius: 9,
+        width: 36,
+        height: 36,
+        background: "linear-gradient(135deg, var(--gold-primary), var(--gold-dark))",
+        borderRadius: 10,
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
         fontSize: 16,
         fontWeight: 800,
-        color: "#0f172a",
+        color: "#fff",
       }}
     >
       ◈
@@ -8162,9 +8630,9 @@ useEffect(() => {
           width: "min(78vw, 360px)",
           height: "100dvh",
           zIndex: 650,
-          background: "#020617",
+          background: "var(--bg-card)",
 animation: "drawerIn 0.28s ease-out",
-          borderLeft: "1px solid rgba(201,168,64,0.22)",
+          borderLeft: "1px solid var(--gold-border)",
           boxShadow: "-18px 0 42px rgba(0,0,0,0.45)",
           padding: "22px 18px",
           direction: "rtl",
@@ -8189,7 +8657,7 @@ justifyContent: "flex-end",
               borderRadius: 12,
               border: "none",
               background: "transparent",
-              color: "#cbd5e1",
+              color: "var(--text-body)",
               fontSize: 30,
               cursor: "pointer",
             }}
@@ -8198,10 +8666,10 @@ justifyContent: "flex-end",
           </button>
 
           <div style={{ textAlign: "right" }}>
-            <div style={{ color: "#f8fafc", fontWeight: 900, fontSize: 18 }}>
+            <div style={{ color: "var(--text-heading)", fontWeight: 900, fontSize: 18 }}>
               مدير الثروة
             </div>
-            <div style={{ color: "#94a3b8", fontSize: 11 }}>
+            <div style={{ color: "var(--text-muted)", fontSize: 11 }}>
               Smart Wealth Tracker
             </div>
           </div>
@@ -8243,7 +8711,7 @@ border:
   tab === t.id
     ? "1px solid rgba(232,201,106,0.55)"
     : "1px solid transparent",
-color: tab === t.id ? "#f8fafc" : "#cbd5e1",
+color: tab === t.id ? "var(--text-heading)" : "var(--text-body)",
 fontFamily: "inherit",
 fontSize: 16,
 fontWeight: tab === t.id ? 900 : 700,
@@ -8267,108 +8735,66 @@ boxShadow:
 </>}
 </div>
 
-{tab === "overview" && (
-  <Overview
-    state={viewState}
-    setState={setState}
-    readOnly={isSnapshotView}
-    onOpenReports={() => setTab("reports")}
-    onOpenDueLiabilities={() => {
-      if (isSnapshotView) return;
-      setLiabilitiesFocusDueOnly(true);
-      setTab("liabilities");
-    }}
-    onAllocateSurplus={(amount) => {
-      setExtraCashPreset({
-        amount,
-        lockedAmount: true,
-        lockedNote: true,
-        note: "فائض راتب",
-        source: "salary_surplus",
-      });
-      setShowExtraCash(true);
-    }}
-  />
-)}
-      {tab === "reports" && <ReportsScreen state={viewState} />}
-      {tab === "assets" && (
-  <AssetsScreen
-    state={viewState}
-    setState={setState}
-    readOnly={isSnapshotView}
-    onAddExtraCash={() => {
-      setExtraCashPreset(null);
-      setShowExtraCash(true);
-    }}
-  />
-)}
-     {!isSnapshotView && tab === "liabilities" && (
-  <LiabilitiesScreen
-    state={viewState}
-    setState={setState}
-    focusDueOnly={liabilitiesFocusDueOnly}
-  />
-)}
-      {!isSnapshotView && tab === "settings" && (
-  <SettingsScreen
-    state={state}
-    setState={setState}
-    onCloseMonth={handleCloseMonth}
-  />
-)}
-      <div
-        style={{
-          position: "fixed",
-          bottom: 0,
-          left: "50%",
-          transform: "translateX(-50%)",
-          width: "100%",
-          maxWidth: 440,
-          background: "rgba(12,21,37,0.96)",
-          borderTop: "1px solid #1e293b",
-          padding: "7px 8px calc(7px + env(safe-area-inset-bottom))",
-          display: "grid",
-          gridTemplateColumns: `repeat(${visibleTabs.length}, 1fr)`,
-          gap: 4,
-          zIndex: 520,
-          backdropFilter: "blur(10px)",
-        }}
-      >
-        {visibleTabs.map((item) => {
-          const active = tab === item.id;
+      <main key={`${tab}-${selectedViewMonth}`} className="tab-page-motion">
+        {tab === "overview" && (
+          <Overview
+            state={viewState}
+            setState={setState}
+            readOnly={isSnapshotView}
+            onOpenReports={() => setTab("reports")}
+            onOpenDueLiabilities={() => {
+              if (isSnapshotView) return;
+              setLiabilitiesFocusDueOnly(true);
+              setTab("liabilities");
+            }}
+            onAllocateSurplus={(amount) => {
+              setExtraCashPreset({
+                amount,
+                lockedAmount: true,
+                lockedNote: true,
+                note: "فائض راتب",
+                source: "salary_surplus",
+              });
+              setShowExtraCash(true);
+            }}
+          />
+        )}
+        {tab === "reports" && <ReportsScreen state={viewState} />}
+        {tab === "assets" && (
+          <AssetsScreen
+            state={viewState}
+            setState={setState}
+            readOnly={isSnapshotView}
+            onAddExtraCash={() => {
+              setExtraCashPreset(null);
+              setShowExtraCash(true);
+            }}
+          />
+        )}
+        {!isSnapshotView && tab === "liabilities" && (
+          <LiabilitiesScreen
+            state={viewState}
+            setState={setState}
+            focusDueOnly={liabilitiesFocusDueOnly}
+          />
+        )}
+        {!isSnapshotView && tab === "settings" && (
+          <SettingsScreen
+            state={state}
+            setState={setState}
+            onCloseMonth={handleCloseMonth}
+          />
+        )}
+      </main>
 
-          return (
-            <button
-              key={item.id}
-              type="button"
-              onClick={() => {
-                setLiabilitiesFocusDueOnly(false);
-                setTab(item.id);
-              }}
-              style={{
-                border: active ? "1px solid rgba(232,201,106,0.45)" : "1px solid transparent",
-                background: active ? "rgba(232,201,106,0.12)" : "transparent",
-                color: active ? "#e8c96a" : "#94a3b8",
-                borderRadius: 12,
-                minHeight: 48,
-                padding: "5px 2px",
-                cursor: "pointer",
-                fontFamily: "inherit",
-                display: "flex",
-                flexDirection: "column",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: 2,
-              }}
-            >
-              <span style={{ fontSize: 18, lineHeight: 1 }}>{tabIcon(item.id)}</span>
-              <span style={{ fontSize: 9, fontWeight: active ? 900 : 700, lineHeight: 1.2 }}>
-                {item.label}
-              </span>
-            </button>
-          );
-        })}
-      </div>
+      <FloatingBottomBar
+        tabs={visibleTabs}
+        activeTab={tab}
+        onSelect={(id) => {
+          setLiabilitiesFocusDueOnly(false);
+          setTab(id);
+        }}
+      />
       {!isSnapshotView && showExtraCash && (
   <ExtraCashModal
     state={state}
