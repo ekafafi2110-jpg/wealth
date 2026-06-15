@@ -8160,6 +8160,7 @@ export default function App() {
     const [showExtraCash, setShowExtraCash] = useState(false);
     const [extraCashPreset, setExtraCashPreset] = useState(null);
     const [selectedViewMonth, setSelectedViewMonth] = useState("current");
+  const [monthMenuOpen, setMonthMenuOpen] = useState(false);
     useEffect(() => {
     let active = true;
 
@@ -8832,31 +8833,85 @@ const visibleTabs = isSnapshotView
       direction: "rtl",
     }}
   >
-    <select
-      value={selectedViewMonth}
-      onChange={(e) => setSelectedViewMonth(e.target.value)}
+   <div style={{ position: "relative" }}>
+  <button
+    type="button"
+    onClick={() => setMonthMenuOpen((v) => !v)}
+    style={{
+      fontSize: 12,
+      color: "#8A6820",
+      background: "var(--gold-light)",
+      padding: "6px 12px",
+      borderRadius: 20,
+      border: "1px solid var(--gold-border)",
+      fontWeight: 600,
+      outline: "none",
+      fontFamily: "inherit",
+      cursor: "pointer",
+    }}
+  >
+    {selectedViewMonth === "current"
+      ? currentMonthLabel
+      : formatMonthKey(selectedViewSnapshot?.month)}
+  </button>
+
+  {monthMenuOpen && (
+    <div
       style={{
-        fontSize: 12,
-        color: "#8A6820",
-        background: "var(--gold-light)",
-        padding: "6px 12px",
-        borderRadius: 20,
-        border: "1px solid var(--gold-border)",
-        fontWeight: 600,
-        outline: "none",
+        position: "absolute",
+        top: "calc(100% + 8px)",
+        right: 0,
+        minWidth: 130,
+        background: "var(--bg-card)",
+        border: "1px solid var(--border-soft)",
+        borderRadius: 14,
+        padding: 8,
+        zIndex: 999,
+        direction: "rtl",
+        fontFamily: "inherit",
       }}
     >
-      <option value="current">
-        {currentMonthLabel}
-      </option>
-
-      {snapshots.map((snap) => (
-        <option key={snap.id} value={snap.id}>
-          {formatMonthKey(snap.month)}
-        </option>
+      {[
+        { id: "current", label: currentMonthLabel },
+        ...snapshots.map((snap) => ({
+          id: snap.id,
+          label: formatMonthKey(snap.month),
+        })),
+      ].map((item) => (
+        <button
+          key={item.id}
+          type="button"
+          onClick={() => {
+            setSelectedViewMonth(item.id);
+            setMonthMenuOpen(false);
+          }}
+          style={{
+            width: "100%",
+            display: "block",
+            textAlign: "right",
+            padding: "8px 10px",
+            marginBottom: 4,
+            borderRadius: 10,
+            border:
+              selectedViewMonth === item.id
+                ? "1px solid var(--gold-primary)"
+                : "1px solid transparent",
+            background:
+              selectedViewMonth === item.id
+                ? "var(--gold-light)"
+                : "transparent",
+            color: "var(--text-body)",
+            fontFamily: "inherit",
+            fontWeight: selectedViewMonth === item.id ? 800 : 600,
+            cursor: "pointer",
+          }}
+        >
+          {item.label}
+        </button>
       ))}
-    </select>
-    {selectedViewSnapshot && (
+    </div>
+  )}
+</div>    {selectedViewSnapshot && (
       <span
         style={{
           marginRight: 6,
