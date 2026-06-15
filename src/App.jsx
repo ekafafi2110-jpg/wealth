@@ -49,6 +49,17 @@ const CC = {
   أخرى: "#94a3b8",
 };
 
+const ICONS = {
+  cash: "💵",
+  bank: "🏦",
+  stock: "📊",
+  gold: "🥇",
+  silver: "🪙",
+  goods: "📦",
+  income: "+",
+  transfer: "⇄",
+};
+
 const G = {
   app: {
     minHeight: "100vh",
@@ -192,7 +203,173 @@ function SpendBar({ spent, cap }) {
     </div>
   );
 }
-function ExpenseDonut({ expenses }) {
+
+function formatDate(value) {
+  if (!value) return "غير محدد";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value);
+
+  return new Intl.DateTimeFormat("ar-JO", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  }).format(date);
+}
+
+const incomeEntryStyle = (isIncome) =>
+  isIncome
+    ? {
+        background: "rgba(34,197,94,0.12)",
+        border: "1px solid rgba(34,197,94,0.42)",
+        borderRadius: 12,
+        padding: "9px 10px",
+        marginBottom: 8,
+      }
+    : null;
+
+const incomeEntryAmount = (entry) =>
+  Number(entry?.isIncomeEntry ? entry.originalAmount || 0 : entry?.amount || 0);
+
+const incomeEntryMeta = (entry) =>
+  entry?.isIncomeEntry
+    ? "دخل إلى سقف الصرف"
+    : `مغطى: ${Number(entry?.budgetCovered || 0).toFixed(2)} | تجاوز: ${Number(
+        entry?.overBudget || 0
+      ).toFixed(2)}`;
+
+function assetBreakdownFromAssets(assets = {}, market = {}) {
+  const goldPrice = Number(market.goldGramPrice || 0);
+  const silverPrice = Number(market.silverGramPrice || 0);
+  const rows = [];
+
+  rows.push({
+    key: "cash",
+    label: "كاش ادخار",
+    value: Number(assets.cash || 0),
+  });
+
+  (assets.banks || []).forEach((item) =>
+    rows.push({
+      key: `bank:${item.id}`,
+      label: item.name || "حساب بنكي",
+      value: Number(item.balance || 0),
+    })
+  );
+
+  (assets.gold || []).forEach((item) =>
+    rows.push({
+      key: `gold:${item.id}`,
+      label: item.label || "ذهب",
+      value: Number(item.units || 0) * goldPrice,
+    })
+  );
+
+  (assets.silver || []).forEach((item) =>
+    rows.push({
+      key: `silver:${item.id}`,
+      label: item.label || "فضة",
+      value: Number(item.units || 0) * silverPrice,
+    })
+  );
+
+  (assets.stocks || []).forEach((item) =>
+    rows.push({
+      key: `stock:${item.id}`,
+      label: item.name || "سهم",
+      value: Number(item.units || 0) * Number(item.currentPrice || 0),
+    })
+  );
+
+  (assets.custom || []).forEach((item) =>
+    rows.push({
+      key: `custom:${item.id}`,
+      label: item.name || "أصل",
+      value:
+        item.type === "fixed"
+          ? Number(item.amount || 0)
+          : Number(item.units || 0) * Number(item.price || 0),
+    })
+  );
+
+  return rows;
+}
+
+function summarizeAssetReasons(state, month) {
+  const labels = {
+    over_budget_covered_from_asset: "تجاوز سقف",
+    emergency_expense_covered_from_asset: "مصروف طارئ",
+    liability_paid_from_asset: "سداد التزام",
+  };
+  const transferLabels = {
+    transfer_out: "مناقلة بين الأصول",
+    transfer_to_spending_cap: "مناقلة إلى السقف",
+    transfer_to_cash: "مناقلة بين الأصول",
+    transfer_to_bank: "مناقلة بين الأصول",
+    transfer_in_units: "مناقلة بين الأصول",
+  };
+  const totals = {};
+  const transfers = {};
+
+  const add = (reason, amount) => {
+    const value = Number(amount || 0);
+    if (!reason || value <= 0) return;
+    totals[reason] = Number((Number(totals[reason] || 0) + value).toFixed(2));
+  };
+  const addTransfer = (reason, amount) => {
+    const value = Number(amount || 0);
+    if (!reason || value <= 0) return;
+    transfers[reason] = Number((Number(transfers[reason] || 0) + value).toFixed(2));
+  };
+
+  (state.transactions || []).forEach((tx) => {
+    if (getMonthKey(tx.date) !== month) return;
+    add(labels[tx.type], tx.amount);
+    addTransfer(transferLabels[tx.type], tx.amount);
+  });
+
+  (state.assetHistory || []).forEach((tx) => {
+    if (getMonthKey(tx.date) !== month) return;
+    add(labels[tx.type], tx.amount);
+    addTransfer(transferLabels[tx.type], tx.amount);
+  });
+
+  return {
+    real: Object.entries(totals).map(([reason, amount]) => ({ reason, amount })),
+    transfers: Object.entries(transfers).map(([reason, amount]) => ({ reason, amount })),
+  };
+}
+
+function buildAssetComparisons(points, state) {
+  return points.slice(1).map((point, index) => {
+    const previous = points[index];
+    const before = new Map((previous.breakdown || []).map((item) => [item.key, item]));
+    const after = new Map((point.breakdown || []).map((item) => [item.key, item]));
+    const keys = Array.from(new Set([...before.keys(), ...after.keys()]));
+
+    const changes = keys
+      .map((key) => {
+        const prev = before.get(key);
+        const next = after.get(key);
+        const change = Number(next?.value || 0) - Number(prev?.value || 0);
+        return {
+          key,
+          label: next?.label || prev?.label || "أصل",
+          change,
+        };
+      })
+      .filter((item) => Math.abs(item.change) >= 0.01)
+      .sort((a, b) => Math.abs(b.change) - Math.abs(a.change));
+
+    return {
+      month: point.month,
+      totalChange: Number(point.totalAssets || 0) - Number(previous.totalAssets || 0),
+      changes,
+      reasons: summarizeAssetReasons(state, point.month),
+    };
+  });
+}
+
+function ExpenseDonut({ expenses, mode = "donut" }) {
   const expenseCats = Array.from(
   new Set((expenses || []).map((e) => e.category).filter(Boolean))
 );
@@ -203,8 +380,9 @@ const grouped = expenseCats.map((cat) => ({
     .filter((e) => e.category === cat)
     .reduce((sum, e) => sum + Number(e.amount || 0), 0),
   color: CC[cat] || "#94a3b8",
-})).filter((x) => x.value > 0);
+  })).filter((x) => x.value > 0);
   const total = grouped.reduce((sum, x) => sum + x.value, 0);
+  const sortedGrouped = [...grouped].sort((a, b) => b.value - a.value);
 
   if (!grouped.length) {
     return (
@@ -217,6 +395,42 @@ const grouped = expenseCats.map((cat) => ({
         }}
       >
         لا توجد مصاريف بعد
+      </div>
+    );
+  }
+
+  if (mode === "bars") {
+    const maxValue = Math.max(1, ...sortedGrouped.map((item) => item.value));
+
+    return (
+      <div style={{ display: "grid", gap: 8, marginTop: 4 }}>
+        {sortedGrouped.map((item) => {
+          const pct = total ? Math.round((item.value / total) * 100) : 0;
+          const width = Math.max(8, (item.value / maxValue) * 100);
+
+          return (
+            <div key={item.name} style={{ textAlign: "right" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 8, marginBottom: 4 }}>
+                <span style={{ color: item.color, fontSize: 11, fontWeight: 900 }}>
+                  {item.value.toFixed(2)}
+                </span>
+                <span style={{ color: "#cbd5e1", fontSize: 12 }}>
+                  {item.name} · {pct}%
+                </span>
+              </div>
+              <div style={{ height: 10, background: "#111827", borderRadius: 99, overflow: "hidden" }}>
+                <div
+                  style={{
+                    width: `${width}%`,
+                    height: "100%",
+                    background: item.color,
+                    borderRadius: 99,
+                  }}
+                />
+              </div>
+            </div>
+          );
+        })}
       </div>
     );
   }
@@ -354,7 +568,14 @@ function rebalanceCurrentLiabilityCoverage(state) {
   return next;
 }
 
-function Overview({ state, setState, onOpenReports, onOpenDueLiabilities }) {
+function Overview({
+  state,
+  setState,
+  onOpenReports,
+  onOpenDueLiabilities,
+  onAllocateSurplus,
+  readOnly = false,
+}) {
   const budget = calcBudget(state);
   const [showExpense, setShowExpense] = useState(false);
   const [selectedExpense, setSelectedExpense] = useState(null);
@@ -860,7 +1081,7 @@ function toggleExpenseCategoryPinned(catId) {
  return (
     <div style={G.scr}>
             <div style={G.card()}>
-              {dueCurrentLiabilities.length > 0 && (
+              {!readOnly && dueCurrentLiabilities.length > 0 && (
   <button
     type="button"
     onClick={onOpenDueLiabilities}
@@ -918,25 +1139,42 @@ function toggleExpenseCategoryPinned(catId) {
 )}        </div>
       </div>
 
-      <button
-        onClick={() => setShowExpense(true)}
-        disabled={!state.session.isOpen}
-        style={G.btn(
-          state.session.isOpen
-            ? "linear-gradient(135deg,#c9a840,#e8c96a)"
-            : "#1e293b",
-          state.session.isOpen ? "#0f172a" : "#64748b",
-          {
-            width: "100%",
-            marginBottom: 12,
+      {!readOnly && (
+      <div style={{ display: "flex", justifyContent: "center", margin: "14px 0 16px" }}>
+        <button
+          type="button"
+          title="تسجيل مصروف"
+          onClick={() => setShowExpense(true)}
+          disabled={!state.session.isOpen}
+          style={{
+            width: 76,
+            height: 76,
+            borderRadius: "50%",
+            border: state.session.isOpen
+              ? "1px solid rgba(232,201,106,0.65)"
+              : "1px solid #334155",
+            background: state.session.isOpen
+              ? "linear-gradient(135deg,#c9a840,#e8c96a)"
+              : "#1e293b",
+            color: state.session.isOpen ? "#0f172a" : "#64748b",
+            boxShadow: state.session.isOpen
+              ? "0 14px 34px rgba(201,168,64,0.28)"
+              : "none",
+            cursor: state.session.isOpen ? "pointer" : "not-allowed",
             opacity: state.session.isOpen ? 1 : 0.6,
-          }
-        )}
-      >
-        + تسجيل مصروف
-      </button>
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            fontSize: 34,
+            fontWeight: 900,
+          }}
+        >
+          💸
+        </button>
+      </div>
+      )}
 
-      {!state.session.isOpen && (
+      {!readOnly && !state.session.isOpen && (
         <button
           onClick={() => {
             const structuralTotal = calcStructuralTotal(state);
@@ -954,6 +1192,19 @@ function toggleExpenseCategoryPinned(catId) {
             setState((p) => ({
               ...p,
                 currentLiabilities: rolledCurrentLiabilities,
+              transactions: [
+                ...(p.transactions || []),
+                {
+                  id: Date.now(),
+                  type: "salary_month_opened",
+                  cashFlow: "salary",
+                  amount: Number(p.settings?.salary || 0),
+                  structuralTotal,
+                  spendingCap: Math.floor(net * 0.8),
+                  plannedSavings: net - Math.floor(net * 0.8),
+                  date: new Date().toISOString(),
+                },
+              ],
 
               session: {
                 ...p.session,
@@ -976,7 +1227,39 @@ function toggleExpenseCategoryPinned(catId) {
         </button>
       )}
 
-      <div style={G.card()}>
+      {!readOnly && Number(state.session?.pendingSurplus || 0) > 0 && (
+        <div
+          style={{
+            ...G.card("rgba(34,197,94,0.12)"),
+            border: "1px solid rgba(34,197,94,0.35)",
+            padding: 12,
+          }}
+        >
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center" }}>
+            <button
+              type="button"
+              onClick={() => onAllocateSurplus(Number(state.session.pendingSurplus || 0))}
+              style={G.btn("#17341f", "#86efac", {
+                width: 42,
+                height: 34,
+                padding: 0,
+              })}
+            >
+              ↗
+            </button>
+            <div style={{ textAlign: "right" }}>
+              <div style={{ color: "#86efac", fontSize: 12, fontWeight: 900 }}>
+                فائض راتب ينتظر التوجيه
+              </div>
+              <div style={{ color: "#cbd5e1", fontSize: 18, fontWeight: 900 }}>
+                {Number(state.session.pendingSurplus || 0).toFixed(2)} د.أ
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {false && <div style={G.card()}>
         {selectedExpenseTotal !== selectedExpenseRecorded && (
           <div
             style={{
@@ -1014,14 +1297,7 @@ function toggleExpenseCategoryPinned(catId) {
         <div style={{ textAlign: "right", marginBottom: 12, color: "#94a3b8" }}>
           📊 توزيع المصاريف
         </div>
-        <button
-          type="button"
-          onClick={onOpenReports}
-          style={G.btn("#1e293b", "#e8c96a", { width: "100%" })}
-        >
-          عرض التقارير والكشف الكامل
-        </button>
-      </div>
+      </div>}
 
       <div style={G.card()}>
         <div style={{ textAlign: "right", marginBottom: 10, color: "#94a3b8" }}>
@@ -1029,7 +1305,13 @@ function toggleExpenseCategoryPinned(catId) {
         </div>
 
         {recent.map((e, i) => (
-          <div key={e.id} style={i < recent.length - 1 ? G.row : G.lrow}>
+          <div
+            key={e.id}
+            style={{
+              ...(i < recent.length - 1 ? G.row : G.lrow),
+              ...(incomeEntryStyle(e.isIncomeEntry) || {}),
+            }}
+          >
             <div>
               <div
   style={{
@@ -1052,12 +1334,14 @@ onClick={() => setSelectedExpense(e)}    style={{
   </button>
 
   <div style={{ fontSize: 15, fontWeight: 700 }}>
-    {Number(e.amount || 0).toFixed(2)} د.أ
+    <span style={{ color: e.isIncomeEntry ? "#86efac" : "#f8fafc" }}>
+      {e.isIncomeEntry ? "+" : ""}
+      {incomeEntryAmount(e).toFixed(2)} د.أ
+    </span>
   </div>
 </div>
-              <div style={{ fontSize: 10, color: "#64748b" }}>
-                مغطى: {Number(e.budgetCovered || 0).toFixed(2)} | تجاوز:{" "}
-                {Number(e.overBudget || 0).toFixed(2)}
+              <div style={{ fontSize: 10, color: e.isIncomeEntry ? "#86efac" : "#64748b" }}>
+                {incomeEntryMeta(e)}
               </div>
             </div>
 
@@ -1066,7 +1350,7 @@ onClick={() => setSelectedExpense(e)}    style={{
               <div
                 style={{
                   fontSize: 10,
-                  color: CC[e.category] || "#94a3b8",
+                  color: e.isIncomeEntry ? "#22c55e" : CC[e.category] || "#94a3b8",
                   marginTop: 2,
                 }}
               >
@@ -1090,6 +1374,7 @@ onClick={() => setSelectedExpense(e)}    style={{
         )}
       </div>
 
+      {!readOnly && (
       <button
         onClick={() => {
           clearState();
@@ -1099,8 +1384,9 @@ onClick={() => setSelectedExpense(e)}    style={{
       >
         تصفير البيانات التجريبية
       </button>
+      )}
 
-      {selectedExpense && (
+      {!readOnly && selectedExpense && (
   <div
     onClick={(ev) => ev.target === ev.currentTarget && setSelectedExpense(null)}
     style={{
@@ -2234,16 +2520,99 @@ style={{ ...G.inp(), marginBottom: 10 }}
 }
 
 function ReportsScreen({ state }) {
+  const [showAssetTrendDetails, setShowAssetTrendDetails] = useState(false);
+  const [showExpenseReport, setShowExpenseReport] = useState(false);
+  const [showOverBudgetReport, setShowOverBudgetReport] = useState(false);
+  const [assetTrendMonths, setAssetTrendMonths] = useState(6);
+  const [selectedTrendAssetKey, setSelectedTrendAssetKey] = useState("");
+  const [expenseChartMode, setExpenseChartMode] = useState("donut");
   const expenses = [...(state.expenses || [])].reverse();
   const total = expenses.reduce((sum, item) => sum + Number(item.amount || 0), 0);
+  const overBudgetItems = expenses.filter((item) => Number(item.overBudget || 0) > 0);
+  const overBudgetTotal = overBudgetItems.reduce(
+    (sum, item) => sum + Number(item.overBudget || 0),
+    0
+  );
   const budget = calcBudget(state);
+  const currentAssets = calcAssets(state);
+  const assetTrendByMonth = new Map();
+  (state.monthlySnapshots || []).forEach((snapshot) => {
+    assetTrendByMonth.set(snapshot.month, {
+      month: snapshot.month,
+      totalAssets: Number(snapshot.assetTotals?.totalAssets || 0),
+      netWorth: Number(snapshot.assetTotals?.netWorth || 0),
+      breakdown: assetBreakdownFromAssets(snapshot.assets || {}, state.settings?.market || {}),
+      closed: true,
+    });
+  });
+  assetTrendByMonth.set(state.currentMonth || new Date().toISOString().slice(0, 7), {
+    month: state.currentMonth || new Date().toISOString().slice(0, 7),
+    totalAssets: Number(currentAssets.totalAssets || 0),
+    netWorth: Number(currentAssets.netWorth || 0),
+    breakdown: assetBreakdownFromAssets(state.assets || {}, state.settings?.market || {}),
+    closed: false,
+  });
+  const assetTrend = Array.from(assetTrendByMonth.values()).sort((a, b) =>
+    String(a.month).localeCompare(String(b.month))
+  );
+  const assetTrendPoints = assetTrend.slice(-Number(assetTrendMonths || 6));
+  const assetComparisons = buildAssetComparisons(assetTrendPoints, state);
+  const assetChangeRows = assetComparisons
+    .flatMap((month) =>
+      month.changes.map((change) => ({
+        ...change,
+        month: month.month,
+        reasons: month.reasons,
+      }))
+    )
+    .reduce((map, item) => {
+      const current = map.get(item.key) || {
+        key: item.key,
+        label: item.label,
+        change: 0,
+        months: [],
+      };
+      current.change = Number((current.change + item.change).toFixed(2));
+      current.months.push(item);
+      map.set(item.key, current);
+      return map;
+    }, new Map());
+  const assetDetailRows = Array.from(assetChangeRows.values()).sort(
+    (a, b) => Math.abs(b.change) - Math.abs(a.change)
+  );
+  const selectedTrendAsset =
+    assetDetailRows.find((row) => row.key === selectedTrendAssetKey) || assetDetailRows[0] || null;
+  const maxAssetDetailChange = Math.max(
+    1,
+    ...assetDetailRows.map((row) => Math.abs(Number(row.change || 0)))
+  );
+  const firstAssetPoint = assetTrendPoints[0];
+  const lastAssetPoint = assetTrendPoints[assetTrendPoints.length - 1];
+  const assetChange =
+    firstAssetPoint && lastAssetPoint
+      ? Number(lastAssetPoint.totalAssets || 0) - Number(firstAssetPoint.totalAssets || 0)
+      : 0;
+  const assetChangePct =
+    firstAssetPoint && Number(firstAssetPoint.totalAssets || 0) > 0
+      ? (assetChange / Number(firstAssetPoint.totalAssets || 0)) * 100
+      : 0;
+  const maxAssetTrendValue = Math.max(
+    1,
+    ...assetTrendPoints.map((point) => Number(point.totalAssets || 0))
+  );
+  const minAssetTrendValue = Math.min(
+    ...assetTrendPoints.map((point) => Number(point.totalAssets || 0)),
+    maxAssetTrendValue
+  );
+  const assetTrendRange = Math.max(1, maxAssetTrendValue - minAssetTrendValue);
+  const assetChangeColor = assetChange >= 0 ? "#86efac" : "#fecaca";
   const pendingCurrent = [];
   const getLiabilityAmount = () => 0;
   const getCoveredAmount = () => 0;
   const getUncoveredAmount = () => 0;
 
   const getDueText = (item) => {
-    if (item.dueDate) return item.dueDate;
+    if (item.dueDate) return formatDate(item.dueDate);
     if (item.dueDay) return `يوم ${item.dueDay}`;
     return "غير محدد";
   };
@@ -2416,14 +2785,45 @@ function ReportsScreen({ state }) {
   return (
     <div style={G.scr}>
       <div style={G.card()}>
-        <div style={{ textAlign: "right", color: "#94a3b8", fontSize: 12, marginBottom: 10 }}>
-          ملخص المصروفات
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+          <div style={{ display: "flex", gap: 6 }}>
+            {[
+              { id: "donut", icon: "◔", title: "دائرة المصاريف" },
+              { id: "bars", icon: "▥", title: "أعمدة المصاريف" },
+            ].map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                title={item.title}
+                onClick={() => setExpenseChartMode(item.id)}
+                style={{
+                  width: 32,
+                  height: 32,
+                  borderRadius: 10,
+                  border:
+                    expenseChartMode === item.id
+                      ? "1px solid rgba(232,201,106,0.75)"
+                      : "1px solid rgba(148,163,184,0.24)",
+                  background: expenseChartMode === item.id ? "#1e293b" : "#111827",
+                  color: expenseChartMode === item.id ? "#e8c96a" : "#94a3b8",
+                  cursor: "pointer",
+                  fontSize: 16,
+                  fontWeight: 900,
+                }}
+              >
+                {item.icon}
+              </button>
+            ))}
+          </div>
+          <div style={{ textAlign: "right", color: "#94a3b8", fontSize: 12 }}>
+            ملخص المصروفات
+          </div>
         </div>
 
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "1fr 1fr",
+            gridTemplateColumns: overBudgetTotal > 0 ? "1fr 1fr 1fr" : "1fr 1fr",
             gap: 8,
             marginBottom: 12,
           }}
@@ -2441,9 +2841,152 @@ function ReportsScreen({ state }) {
               {budget.remainingCap.toFixed(2)}
             </div>
           </div>
+
+          {overBudgetTotal > 0 && (
+            <button
+              type="button"
+              onClick={() => setShowOverBudgetReport(true)}
+              style={{
+                background: "rgba(239,68,68,0.12)",
+                border: "1px solid rgba(239,68,68,0.34)",
+                borderRadius: 10,
+                padding: 10,
+                color: "#fecaca",
+                textAlign: "right",
+                cursor: "pointer",
+                fontFamily: "inherit",
+              }}
+            >
+              <div style={{ fontSize: 10, color: "#fca5a5" }}>التجاوز</div>
+              <div style={{ color: "#fecaca", fontWeight: 900 }}>
+                {overBudgetTotal.toFixed(2)}
+              </div>
+            </button>
+          )}
         </div>
 
-        <ExpenseDonut expenses={state.expenses} />
+        <ExpenseDonut expenses={state.expenses} mode={expenseChartMode} />
+      </div>
+
+      <div style={G.card()}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <button
+              type="button"
+              title="تفاصيل التغير"
+              onClick={() => setShowAssetTrendDetails((v) => !v)}
+              style={{
+                width: 30,
+                height: 30,
+                borderRadius: 10,
+                border: "1px solid rgba(148,163,184,0.28)",
+                background: showAssetTrendDetails ? "#1e293b" : "#111827",
+                color: "#cbd5e1",
+                cursor: "pointer",
+                fontWeight: 900,
+              }}
+            >
+              ⓘ
+            </button>
+            <div
+              style={{
+                color: assetChangeColor,
+                fontSize: 12,
+                fontWeight: 900,
+                background: assetChange >= 0 ? "rgba(34,197,94,0.12)" : "rgba(239,68,68,0.12)",
+                border: `1px solid ${assetChange >= 0 ? "rgba(34,197,94,0.35)" : "rgba(239,68,68,0.35)"}`,
+                borderRadius: 999,
+                padding: "5px 8px",
+              }}
+            >
+              {assetChange >= 0 ? "+" : ""}
+              {assetChange.toFixed(2)}
+            </div>
+          </div>
+          <div style={{ textAlign: "right" }}>
+            <div style={{ color: "#c9a840", fontSize: 14, fontWeight: 900 }}>
+              تغير الأصول الشهري
+            </div>
+            <select
+              value={assetTrendMonths}
+              onChange={(e) => setAssetTrendMonths(Number(e.target.value || 6))}
+              style={{
+                ...G.inp(),
+                width: 112,
+                padding: "5px 7px",
+                fontSize: 10,
+                marginTop: 4,
+              }}
+            >
+              <option value={3}>آخر 3 أشهر</option>
+              <option value={6}>آخر 6 أشهر</option>
+              <option value={9}>آخر 9 أشهر</option>
+              <option value={12}>آخر 12 شهر</option>
+            </select>
+          </div>
+        </div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 12 }}>
+          <div style={{ background: "#111827", borderRadius: 10, padding: 9, textAlign: "right" }}>
+            <div style={{ color: "#64748b", fontSize: 10 }}>الأصول الآن</div>
+            <b>{Number(lastAssetPoint?.totalAssets || 0).toFixed(2)}</b>
+          </div>
+          <div style={{ background: "#111827", borderRadius: 10, padding: 9, textAlign: "right" }}>
+            <div style={{ color: "#64748b", fontSize: 10 }}>النسبة</div>
+            <b style={{ color: assetChangeColor }}>
+              {assetChange >= 0 ? "+" : ""}
+              {assetChangePct.toFixed(1)}%
+            </b>
+          </div>
+        </div>
+
+        <div
+          style={{
+            height: 96,
+            display: "grid",
+            gridTemplateColumns: `repeat(${Math.max(assetTrendPoints.length, 1)}, 1fr)`,
+            gap: 7,
+            alignItems: "end",
+            borderTop: "1px solid #1a2540",
+            paddingTop: 10,
+          }}
+        >
+          {assetTrendPoints.length ? (
+            assetTrendPoints.map((point, index) => {
+              const height =
+                assetTrendPoints.length === 1
+                  ? 54
+                  : 28 + ((Number(point.totalAssets || 0) - minAssetTrendValue) / assetTrendRange) * 52;
+              const previous = assetTrendPoints[index - 1];
+              const pointChange = previous
+                ? Number(point.totalAssets || 0) - Number(previous.totalAssets || 0)
+                : 0;
+              const pointColor = index === 0 ? "#64748b" : pointChange >= 0 ? "#22c55e" : "#ef4444";
+
+              return (
+                <div key={`${point.month}-${index}`} style={{ textAlign: "center" }}>
+                  <div
+                    title={`${point.month}: ${Number(point.totalAssets || 0).toFixed(2)}`}
+                    style={{
+                      height,
+                      minHeight: 18,
+                      borderRadius: "8px 8px 4px 4px",
+                      background: `linear-gradient(180deg,${pointColor},#1e293b)`,
+                      border: `1px solid ${pointColor}66`,
+                    }}
+                  />
+                  <div style={{ color: "#94a3b8", fontSize: 9, marginTop: 5 }}>
+                    {String(point.month || "").slice(5, 7) || "--"}
+                  </div>
+                </div>
+              );
+            })
+          ) : (
+            <div style={{ color: "#64748b", fontSize: 12, textAlign: "center" }}>
+              لا توجد لقطات شهرية بعد
+            </div>
+          )}
+        </div>
       </div>
 
       <div style={G.card()}>
@@ -2451,15 +2994,35 @@ function ReportsScreen({ state }) {
           كشف المصروفات
         </div>
 
-        {expenses.map((e, i) => (
-          <div key={e.id} style={i < expenses.length - 1 ? G.row : G.lrow}>
+        <button
+          type="button"
+          onClick={() => setShowExpenseReport(true)}
+          style={G.btn("#1e293b", "#e8c96a", { width: "100%" })}
+        >
+          كشف المصروفات
+        </button>
+
+        {false && expenses.map((e, i) => (
+          <div
+            key={e.id}
+            style={{
+              ...(i < expenses.length - 1 ? G.row : G.lrow),
+              ...(incomeEntryStyle(e.isIncomeEntry) || {}),
+            }}
+          >
             <div>
-              <div style={{ fontSize: 15, fontWeight: 800 }}>
-                {Number(e.amount || 0).toFixed(2)} د.أ
+              <div
+                style={{
+                  fontSize: 15,
+                  fontWeight: 800,
+                  color: e.isIncomeEntry ? "#86efac" : "#f8fafc",
+                }}
+              >
+                {e.isIncomeEntry ? "+" : ""}
+                {incomeEntryAmount(e).toFixed(2)} د.أ
               </div>
-              <div style={{ fontSize: 10, color: "#64748b" }}>
-                مغطى: {Number(e.budgetCovered || 0).toFixed(2)} | تجاوز:{" "}
-                {Number(e.overBudget || 0).toFixed(2)}
+              <div style={{ fontSize: 10, color: e.isIncomeEntry ? "#86efac" : "#64748b" }}>
+                {incomeEntryMeta(e)}
               </div>
             </div>
 
@@ -2468,7 +3031,7 @@ function ReportsScreen({ state }) {
               <div
                 style={{
                   fontSize: 10,
-                  color: CC[e.category] || "#94a3b8",
+                  color: e.isIncomeEntry ? "#22c55e" : CC[e.category] || "#94a3b8",
                   marginTop: 2,
                 }}
               >
@@ -2478,7 +3041,7 @@ function ReportsScreen({ state }) {
           </div>
         ))}
 
-        {!expenses.length && (
+        {false && !expenses.length && (
           <div
             style={{
               textAlign: "center",
@@ -2491,11 +3054,374 @@ function ReportsScreen({ state }) {
           </div>
         )}
       </div>
+
+      {showExpenseReport && (
+        <div
+          onClick={(e) => e.target === e.currentTarget && setShowExpenseReport(false)}
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.78)",
+            backdropFilter: "blur(8px)",
+            display: "flex",
+            alignItems: "flex-end",
+            justifyContent: "center",
+            zIndex: 555,
+          }}
+        >
+          <div
+            style={{
+              background: "#0c1525",
+              border: "1px solid #1e293b",
+              borderRadius: "22px 22px 0 0",
+              width: "100%",
+              maxWidth: 440,
+              maxHeight: "82vh",
+              overflowY: "auto",
+              padding: "18px 16px 28px",
+              direction: "rtl",
+            }}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+              <button
+                type="button"
+                onClick={() => setShowExpenseReport(false)}
+                style={{
+                  width: 34,
+                  height: 34,
+                  borderRadius: 10,
+                  border: "1px solid rgba(148,163,184,0.28)",
+                  background: "#111827",
+                  color: "#cbd5e1",
+                  cursor: "pointer",
+                  fontSize: 20,
+                }}
+              >
+                ×
+              </button>
+              <div style={{ textAlign: "right" }}>
+                <div style={{ color: "#c9a840", fontWeight: 900, fontSize: 15 }}>
+                  كشف المصروفات
+                </div>
+                <div style={{ color: "#64748b", fontSize: 10 }}>
+                  {expenses.length} حركة
+                </div>
+              </div>
+            </div>
+
+            {expenses.map((e, i) => (
+              <div
+                key={e.id}
+                style={{
+                  ...(i < expenses.length - 1 ? G.row : G.lrow),
+                  ...(incomeEntryStyle(e.isIncomeEntry) || {}),
+                }}
+              >
+                <div>
+                  <div
+                    style={{
+                      fontSize: 15,
+                      fontWeight: 800,
+                      color: e.isIncomeEntry ? "#86efac" : "#f8fafc",
+                    }}
+                  >
+                    {e.isIncomeEntry ? "+" : ""}
+                    {incomeEntryAmount(e).toFixed(2)} د.أ
+                  </div>
+                  <div style={{ fontSize: 10, color: e.isIncomeEntry ? "#86efac" : "#64748b" }}>
+                    {incomeEntryMeta(e)}
+                  </div>
+                </div>
+
+                <div style={{ textAlign: "right" }}>
+                  <div style={{ fontSize: 13 }}>{e.note || e.category}</div>
+                  <div
+                    style={{
+                      fontSize: 10,
+                      color: e.isIncomeEntry ? "#22c55e" : CC[e.category] || "#94a3b8",
+                      marginTop: 2,
+                    }}
+                  >
+                    {e.category} | {e.paymentMethod}
+                  </div>
+                </div>
+              </div>
+            ))}
+
+            {!expenses.length && (
+              <div
+                style={{
+                  textAlign: "center",
+                  color: "#475569",
+                  padding: "20px 0",
+                  fontSize: 13,
+                }}
+              >
+                لا توجد مصروفات بعد
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {showOverBudgetReport && (
+        <div
+          onClick={(e) => e.target === e.currentTarget && setShowOverBudgetReport(false)}
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.78)",
+            backdropFilter: "blur(8px)",
+            display: "flex",
+            alignItems: "flex-end",
+            justifyContent: "center",
+            zIndex: 558,
+          }}
+        >
+          <div
+            style={{
+              background: "#0c1525",
+              border: "1px solid #1e293b",
+              borderRadius: "22px 22px 0 0",
+              width: "100%",
+              maxWidth: 440,
+              maxHeight: "82vh",
+              overflowY: "auto",
+              padding: "18px 16px 28px",
+              direction: "rtl",
+            }}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+              <button
+                type="button"
+                onClick={() => setShowOverBudgetReport(false)}
+                style={{
+                  width: 34,
+                  height: 34,
+                  borderRadius: 10,
+                  border: "1px solid rgba(148,163,184,0.28)",
+                  background: "#111827",
+                  color: "#cbd5e1",
+                  cursor: "pointer",
+                  fontSize: 20,
+                }}
+              >
+                ×
+              </button>
+              <div style={{ textAlign: "right" }}>
+                <div style={{ color: "#fecaca", fontWeight: 900, fontSize: 15 }}>
+                  تفاصيل التجاوز
+                </div>
+                <div style={{ color: "#64748b", fontSize: 10 }}>
+                  الإجمالي {overBudgetTotal.toFixed(2)} د.أ
+                </div>
+              </div>
+            </div>
+
+            {overBudgetItems.map((item) => (
+              <div
+                key={item.id}
+                style={{
+                  background: "rgba(239,68,68,0.10)",
+                  border: "1px solid rgba(239,68,68,0.28)",
+                  borderRadius: 12,
+                  padding: 10,
+                  marginBottom: 8,
+                }}
+              >
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
+                  <b style={{ color: "#fecaca" }}>
+                    {Number(item.overBudget || 0).toFixed(2)} د.أ
+                  </b>
+                  <div style={{ textAlign: "right" }}>
+                    <div style={{ color: "#f8fafc", fontSize: 13, fontWeight: 800 }}>
+                      {item.category || "مصروف"}
+                    </div>
+                    <div style={{ color: "#94a3b8", fontSize: 10 }}>
+                      {item.note || "بدون ملاحظة"}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+
+            {!overBudgetItems.length && (
+              <div style={{ color: "#64748b", fontSize: 12, textAlign: "center", padding: 20 }}>
+                لا يوجد تجاوز في هذا الشهر
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {showAssetTrendDetails && (
+        <div
+          onClick={(e) => e.target === e.currentTarget && setShowAssetTrendDetails(false)}
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.78)",
+            backdropFilter: "blur(8px)",
+            display: "flex",
+            alignItems: "flex-end",
+            justifyContent: "center",
+            zIndex: 560,
+          }}
+        >
+          <div
+            style={{
+              background: "#0c1525",
+              border: "1px solid #1e293b",
+              borderRadius: "22px 22px 0 0",
+              width: "100%",
+              maxWidth: 440,
+              maxHeight: "82vh",
+              overflowY: "auto",
+              padding: "18px 16px 28px",
+              direction: "rtl",
+            }}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+              <button
+                type="button"
+                onClick={() => setShowAssetTrendDetails(false)}
+                style={{
+                  width: 34,
+                  height: 34,
+                  borderRadius: 10,
+                  border: "1px solid rgba(148,163,184,0.28)",
+                  background: "#111827",
+                  color: "#cbd5e1",
+                  cursor: "pointer",
+                  fontSize: 20,
+                }}
+              >
+                ×
+              </button>
+              <div style={{ textAlign: "right" }}>
+                <div style={{ color: "#c9a840", fontWeight: 900, fontSize: 15 }}>
+                  تفاصيل تغير الأصول
+                </div>
+                <div style={{ color: "#64748b", fontSize: 10 }}>
+                  {assetTrendMonths} أشهر
+                </div>
+              </div>
+            </div>
+
+            {assetDetailRows.length ? (
+              <>
+                <div style={{ display: "grid", gap: 8, marginBottom: 12 }}>
+                  {assetDetailRows.map((asset) => {
+                    const width = Math.max(8, (Math.abs(asset.change) / maxAssetDetailChange) * 100);
+                    const isSelected = selectedTrendAsset?.key === asset.key;
+                    const color = asset.change >= 0 ? "#22c55e" : "#ef4444";
+
+                    return (
+                      <button
+                        key={asset.key}
+                        type="button"
+                        onClick={() => setSelectedTrendAssetKey(asset.key)}
+                        style={{
+                          border: `1px solid ${isSelected ? color : "#1e293b"}`,
+                          background: isSelected ? "rgba(148,163,184,0.08)" : "#0f172a",
+                          borderRadius: 12,
+                          padding: 9,
+                          color: "#f8fafc",
+                          cursor: "pointer",
+                          fontFamily: "inherit",
+                          textAlign: "right",
+                        }}
+                      >
+                        <div style={{ display: "grid", gridTemplateColumns: "0.8fr 1.2fr", gap: 8, alignItems: "center" }}>
+                          <div style={{ textAlign: "left" }}>
+                            <b style={{ color }}>
+                              {asset.change >= 0 ? "+" : ""}
+                              {asset.change.toFixed(2)}
+                            </b>
+                            <div style={{ color: "#64748b", fontSize: 10 }}>
+                              {asset.change >= 0 ? "نما" : "نقص"}
+                            </div>
+                          </div>
+                          <div>
+                            <div style={{ fontSize: 12, fontWeight: 800 }}>{asset.label}</div>
+                            <div style={{ height: 7, background: "#111827", borderRadius: 99, marginTop: 6, overflow: "hidden" }}>
+                              <div
+                                style={{
+                                  height: "100%",
+                                  width: `${width}%`,
+                                  background: color,
+                                  borderRadius: 99,
+                                }}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {selectedTrendAsset && (
+                  <div style={{ background: "#111827", border: "1px solid #1e293b", borderRadius: 12, padding: 10 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
+                      <b style={{ color: selectedTrendAsset.change >= 0 ? "#86efac" : "#fecaca" }}>
+                        {selectedTrendAsset.change >= 0 ? "+" : ""}
+                        {selectedTrendAsset.change.toFixed(2)}
+                      </b>
+                      <span style={{ color: "#cbd5e1", fontSize: 12 }}>{selectedTrendAsset.label}</span>
+                    </div>
+
+                    {selectedTrendAsset.months.map((month) => (
+                      <div key={`${selectedTrendAsset.key}-${month.month}`} style={{ borderTop: "1px solid #1e293b", paddingTop: 7, marginTop: 7 }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, marginBottom: 5 }}>
+                          <span style={{ color: month.change >= 0 ? "#86efac" : "#fecaca" }}>
+                            {month.change >= 0 ? "+" : ""}
+                            {month.change.toFixed(2)}
+                          </span>
+                          <span style={{ color: "#94a3b8" }}>{month.month}</span>
+                        </div>
+
+                        {month.reasons.real.length > 0 ? (
+                          month.reasons.real.map((reason) => (
+                            <div key={`${month.month}-${reason.reason}`} style={{ display: "flex", justifyContent: "space-between", fontSize: 11, marginBottom: 4 }}>
+                              <span style={{ color: "#fecaca" }}>-{reason.amount.toFixed(2)}</span>
+                              <span style={{ color: "#cbd5e1" }}>{reason.reason}</span>
+                            </div>
+                          ))
+                        ) : (
+                          <div style={{ color: "#64748b", fontSize: 11, marginBottom: 4 }}>
+                            لا يوجد سبب مصروف مباشر مسجل
+                          </div>
+                        )}
+
+                        {month.reasons.transfers.length > 0 && (
+                          <div style={{ marginTop: 6, paddingTop: 6, borderTop: "1px dashed #334155" }}>
+                            {month.reasons.transfers.map((reason) => (
+                              <div key={`${month.month}-${reason.reason}`} style={{ display: "flex", justifyContent: "space-between", fontSize: 11, marginBottom: 4 }}>
+                                <span style={{ color: "#93c5fd" }}>{reason.amount.toFixed(2)}</span>
+                                <span style={{ color: "#93c5fd" }}>{reason.reason} · ليست نقصاً فعلياً</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </>
+            ) : (
+              <div style={{ color: "#64748b", fontSize: 12, textAlign: "center", padding: 20 }}>
+                تحتاج إلى إغلاق شهرين على الأقل للمقارنة
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
-function AssetsScreen({ state, setState, onAddExtraCash }) {
+function AssetsScreen({ state, setState, onAddExtraCash, readOnly = false }) {
   const assets = calcAssets(state);
 
   const [showAddAsset, setShowAddAsset] = useState(false);
@@ -2504,14 +3430,138 @@ function AssetsScreen({ state, setState, onAddExtraCash }) {
   const [fromAsset, setFromAsset] = useState("cash");
   const [toAsset, setToAsset] = useState("cash");
   const [transferAmount, setTransferAmount] = useState("");
+  const [transferAllocations, setTransferAllocations] = useState([
+    { id: 1, allocation: "cash", amount: "", targetId: "", assetName: "", units: "", price: "" },
+  ]);
 
   const [assetKind, setAssetKind] = useState("bank");
   const [assetName, setAssetName] = useState("");
   const [assetAmount, setAssetAmount] = useState("");
   const [assetUnits, setAssetUnits] = useState("");
   const [assetPrice, setAssetPrice] = useState("");
+  const [openAssetCard, setOpenAssetCard] = useState("cash");
 
   const sources = getAssetSources(state);
+
+  const bankTotal = (state.assets.banks || []).reduce(
+    (sum, b) => sum + Number(b.balance || 0),
+    0
+  );
+  const goldPrice = Number(state.settings.market.goldGramPrice || 0);
+  const silverPrice = Number(state.settings.market.silverGramPrice || 0);
+  const goldTotal = (state.assets.gold || []).reduce(
+    (sum, g) => sum + Number(g.units || 0) * goldPrice,
+    0
+  );
+  const silverTotal = (state.assets.silver || []).reduce(
+    (sum, s) => sum + Number(s.units || 0) * silverPrice,
+    0
+  );
+  const stockTotal = (state.assets.stocks || []).reduce(
+    (sum, s) => sum + Number(s.units || 0) * Number(s.currentPrice || 0),
+    0
+  );
+  const stockUnitsTotal = (state.assets.stocks || []).reduce(
+    (sum, s) => sum + Number(s.units || 0),
+    0
+  );
+  const stockCostTotal = (state.assets.stocks || []).reduce(
+    (sum, s) => sum + Number(s.units || 0) * Number(s.wac || 0),
+    0
+  );
+  const stockAverageCost =
+    stockUnitsTotal > 0 ? stockCostTotal / stockUnitsTotal : 0;
+  const customTotal = (state.assets.custom || []).reduce((sum, c) => {
+    if (c.type === "fixed") return sum + Number(c.amount || 0);
+    return sum + Number(c.units || 0) * Number(c.price || 0);
+  }, 0);
+
+  const openAddAsset = (kind) => {
+    setAssetKind(kind);
+    setAssetName("");
+    setAssetAmount("");
+    setAssetUnits("");
+    setAssetPrice("");
+    setShowAddAsset(true);
+  };
+
+  const assetCardStyle = (color) => ({
+    ...G.card(`${color}22`),
+    padding: "12px",
+  });
+
+  const renderAssetHeader = ({ id, icon, title, total, color, addKind }) => {
+    const isOpen = openAssetCard === id;
+
+    return (
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          gap: 10,
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          {!readOnly && addKind && (
+            <button
+              type="button"
+              title="إضافة"
+              onClick={(e) => {
+                e.stopPropagation();
+                openAddAsset(addKind);
+              }}
+              style={{
+                width: 30,
+                height: 30,
+                borderRadius: 10,
+                border: `1px solid ${color}66`,
+                background: "#111827",
+                color,
+                cursor: "pointer",
+                fontWeight: 900,
+              }}
+            >
+              +
+            </button>
+          )}
+          <button
+            type="button"
+            title={isOpen ? "إخفاء" : "فتح"}
+            onClick={() => setOpenAssetCard(isOpen ? "" : id)}
+            style={{
+              width: 30,
+              height: 30,
+              borderRadius: 10,
+              border: "1px solid #334155",
+              background: isOpen ? `${color}22` : "#111827",
+              color,
+              cursor: "pointer",
+              fontWeight: 900,
+            }}
+          >
+            {isOpen ? "-" : "⋯"}
+          </button>
+        </div>
+
+        <div style={{ textAlign: "right", flex: 1 }}>
+          <div style={{ color, fontSize: 14, fontWeight: 900 }}>
+            {icon} {title}
+          </div>
+          <div style={{ fontSize: 21, fontWeight: 900, marginTop: 2 }}>
+            {Number(total || 0).toFixed(2)}
+            <span style={{ fontSize: 11, color: "#64748b" }}> د.أ</span>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const renderEmptyAsset = (text) => (
+    <div style={{ textAlign: "center", color: "#64748b", fontSize: 12, padding: "12px 0 4px" }}>
+      {text}
+    </div>
+  );
 
   const addNewAsset = () => {
   if (!assetName.trim()) return alert("أدخل اسم الأصل");
@@ -2519,9 +3569,12 @@ function AssetsScreen({ state, setState, onAddExtraCash }) {
   const next = structuredClone(state);
   const id = Date.now();
   const name = assetName.trim();
+  let allocationAmount = 0;
 
   if (assetKind === "bank") {
     const amount = Number(assetAmount || 0);
+    if (amount <= 0) return alert("أدخل رصيدًا صحيحًا");
+    allocationAmount = amount;
 
     const existing = next.assets.banks.find(
       (b) => b.name.trim() === name
@@ -2545,6 +3598,10 @@ function AssetsScreen({ state, setState, onAddExtraCash }) {
     const purchasePrice = Number(
       assetPrice || state.settings.market.goldGramPrice || 0
     );
+    if (newUnits <= 0 || purchasePrice <= 0) {
+      return alert("أدخل عدد غرامات وسعرًا صحيحًا");
+    }
+    allocationAmount = newUnits * purchasePrice;
 
     const existing = next.assets.gold.find(
       (g) => g.label.trim() === name
@@ -2578,6 +3635,10 @@ function AssetsScreen({ state, setState, onAddExtraCash }) {
     const purchasePrice = Number(
       assetPrice || state.settings.market.silverGramPrice || 0
     );
+    if (newUnits <= 0 || purchasePrice <= 0) {
+      return alert("أدخل عدد غرامات وسعرًا صحيحًا");
+    }
+    allocationAmount = newUnits * purchasePrice;
 
     const existing = next.assets.silver.find(
       (s) => s.label.trim() === name
@@ -2609,6 +3670,10 @@ function AssetsScreen({ state, setState, onAddExtraCash }) {
   if (assetKind === "stock") {
     const newUnits = Number(assetUnits || 0);
     const purchasePrice = Number(assetPrice || 0);
+    if (newUnits <= 0 || purchasePrice <= 0) {
+      return alert("أدخل عدد الأسهم وسعرًا صحيحًا");
+    }
+    allocationAmount = newUnits * purchasePrice;
 
     const existing = next.assets.stocks.find(
       (s) => s.name.trim() === name
@@ -2642,6 +3707,8 @@ function AssetsScreen({ state, setState, onAddExtraCash }) {
 
   if (assetKind === "fixed") {
     const amount = Number(assetAmount || 0);
+    if (amount <= 0) return alert("أدخل قيمة صحيحة");
+    allocationAmount = amount;
 
     const existing = next.assets.custom.find(
       (c) => c.name.trim() === name && c.type === "fixed"
@@ -2664,6 +3731,10 @@ function AssetsScreen({ state, setState, onAddExtraCash }) {
   if (assetKind === "unit") {
     const newUnits = Number(assetUnits || 0);
     const purchasePrice = Number(assetPrice || 1);
+    if (newUnits <= 0 || purchasePrice <= 0) {
+      return alert("أدخل عددًا وسعرًا صحيحًا");
+    }
+    allocationAmount = newUnits * purchasePrice;
 
     const existing = next.assets.custom.find(
       (c) => c.name.trim() === name && c.type === "unit"
@@ -2695,7 +3766,11 @@ function AssetsScreen({ state, setState, onAddExtraCash }) {
 
   next.transactions.push({
     id,
-    type: "add_or_merge_asset",
+    type: "positive_cash_allocated_to_asset",
+    cashFlow: "positive",
+    allocation: "asset",
+    assetKind,
+    amount: Number((allocationAmount || 0).toFixed(2)),
     date: new Date().toISOString(),
     note: `إضافة/دمج أصل: ${name}`,
   });
@@ -2709,73 +3784,341 @@ function AssetsScreen({ state, setState, onAddExtraCash }) {
   setAssetPrice("");
 };
 
-  const applyTransfer = () => {
-    const result = transferBetweenAssets(
-      state,
-      fromAsset,
-      toAsset,
-      Number(transferAmount || 0)
-    );
+  const transferDestinationOptions = (allocation) => {
+    if (allocation === "bank") return state.assets.banks || [];
+    if (allocation === "stock") return state.assets.stocks || [];
+    if (allocation === "gold") {
+      return [
+        ...(state.assets.gold || []),
+        ...["ذهب 21", "ذهب 24"]
+          .filter(
+            (label) =>
+              !(state.assets.gold || []).some(
+                (item) => String(item.label || "").trim() === label
+              )
+          )
+          .map((label) => ({ id: `new:${label}`, label, isPreset: true })),
+      ];
+    }
+    if (allocation === "silver") return state.assets.silver || [];
+    if (allocation === "goods") {
+      return (state.assets.custom || []).filter((item) => item.type === "unit");
+    }
+    return [];
+  };
 
-    if (!result.success) {
-      alert(result.message);
+  const updateTransferAllocation = (rowId, patch) => {
+    setTransferAllocations((rows) =>
+      rows.map((row) => (row.id === rowId ? { ...row, ...patch } : row))
+    );
+  };
+
+  const addTransferAllocationRow = () => {
+    setTransferAllocations((rows) => [
+      ...rows,
+      {
+        id: Date.now(),
+        allocation: "cash",
+        amount: "",
+        targetId: "",
+        assetName: "",
+        units: "",
+        price: "",
+      },
+    ]);
+  };
+
+  const removeTransferAllocationRow = (rowId) => {
+    setTransferAllocations((rows) =>
+      rows.length <= 1 ? rows : rows.filter((row) => row.id !== rowId)
+    );
+  };
+
+  const applyTransfer = () => {
+    const amount = Number(transferAmount || 0);
+    if (amount <= 0) return alert("أدخل قيمة المناقلة");
+    const now = new Date().toISOString();
+
+    const rows = transferAllocations.map((row) => ({
+      ...row,
+      amount: Number(row.amount || 0),
+      units: Number(row.units || 0),
+      price: Number(row.price || 0),
+      assetName: String(row.assetName || "").trim(),
+    }));
+
+    const allocatedTotal = rows.reduce((sum, row) => sum + Number(row.amount || 0), 0);
+    if (Math.abs(allocatedTotal - amount) > 0.01) {
+      alert("مجموع التوزيع يجب أن يساوي قيمة المناقلة");
       return;
     }
 
-    setState(result.nextState);
+    const deduction = deductFromAsset(state, fromAsset, amount);
+    if (!deduction.success) {
+      alert(deduction.message);
+      return;
+    }
+
+    let next = {
+      ...deduction.nextState,
+      assetHistory: [
+        ...(deduction.nextState.assetHistory || []),
+        {
+          id: `${Date.now()}-out`,
+          date: now,
+          type: "transfer_out",
+          source: "asset_transfer",
+          assetKey: fromAsset,
+          amount,
+          note: "مناقلة من أصل",
+        },
+      ],
+    };
+
+    const addUnitAsset = ({ row, listName, nameField, type }) => {
+      if (row.units <= 0 || row.price <= 0) {
+        alert("أدخل العدد والسعر لحساب متوسط التكلفة");
+        return false;
+      }
+
+      if (Math.abs(row.units * row.price - row.amount) > 0.01) {
+        alert("مبلغ التوزيع يجب أن يساوي العدد × السعر");
+        return false;
+      }
+
+      const list = next.assets[listName] || [];
+      const existing = row.targetId
+        ? list.find((item) => String(item.id) === String(row.targetId))
+        : list.find((item) => String(item[nameField] || "").trim() === row.assetName);
+
+      if (existing) {
+        const oldUnits = Number(existing.units || 0);
+        const oldAverage =
+          type === "custom" ? Number(existing.price || 0) : Number(existing.wac || 0);
+        const totalUnits = oldUnits + row.units;
+        const nextAverage =
+          totalUnits > 0
+            ? Number(((oldUnits * oldAverage + row.amount) / totalUnits).toFixed(4))
+            : row.price;
+
+        existing.units = Number(totalUnits.toFixed(4));
+        if (type === "custom") existing.price = nextAverage;
+        else existing.wac = nextAverage;
+        if (listName === "stocks") existing.currentPrice = row.price;
+        next.assetHistory.push({
+          id: `${Date.now()}-${row.id}`,
+          date: now,
+          type: "transfer_in_units",
+          source: "asset_transfer",
+          assetKind: listName,
+          assetId: existing.id,
+          assetName: existing.name || existing.label,
+          amount: row.amount,
+          unitsAdded: row.units,
+          unitPrice: row.price,
+          unitsBefore: oldUnits,
+          unitsAfter: Number(totalUnits.toFixed(4)),
+          averageBefore: oldAverage,
+          averageAfter: nextAverage,
+        });
+      } else {
+        if (!row.assetName) {
+          alert("أدخل اسم الأصل الجديد");
+          return false;
+        }
+
+        const id = Date.now() + Math.floor(Math.random() * 1000);
+        if (listName === "stocks") {
+          list.push({
+            id,
+            name: row.assetName,
+            units: row.units,
+            wac: row.price,
+            currentPrice: row.price,
+          });
+        } else if (listName === "custom") {
+          list.push({
+            id,
+            name: row.assetName,
+            type: "unit",
+            units: row.units,
+            price: row.price,
+          });
+        } else {
+          list.push({
+            id,
+            label: row.assetName,
+            units: row.units,
+            wac: row.price,
+          });
+        }
+        next.assetHistory.push({
+          id: `${Date.now()}-${row.id}`,
+          date: now,
+          type: "transfer_in_units",
+          source: "asset_transfer",
+          assetKind: listName,
+          assetId: id,
+          assetName: row.assetName,
+          amount: row.amount,
+          unitsAdded: row.units,
+          unitPrice: row.price,
+          unitsBefore: 0,
+          unitsAfter: row.units,
+          averageBefore: 0,
+          averageAfter: row.price,
+        });
+      }
+
+      next.assets[listName] = list;
+      return true;
+    };
+
+    for (const row of rows) {
+      if (row.amount <= 0) {
+        alert("أدخل مبلغًا صحيحًا لكل توزيع");
+        return;
+      }
+
+      if (row.allocation === "spendingCap") {
+        next.session.spendingCap = Number(next.session.spendingCap || 0) + row.amount;
+        next.assetHistory.push({
+          id: `${Date.now()}-${row.id}`,
+          date: now,
+          type: "transfer_to_spending_cap",
+          source: "asset_transfer",
+          amount: row.amount,
+          note: "توزيع من أصل إلى سقف الصرف",
+        });
+      }
+
+      if (row.allocation === "cash") {
+        next.assets.cash = Number((Number(next.assets.cash || 0) + row.amount).toFixed(2));
+        next.assetHistory.push({
+          id: `${Date.now()}-${row.id}`,
+          date: now,
+          type: "transfer_to_cash",
+          source: "asset_transfer",
+          assetKind: "cash",
+          amount: row.amount,
+          balanceAfter: next.assets.cash,
+        });
+      }
+
+      if (row.allocation === "bank") {
+        const existing = row.targetId
+          ? (next.assets.banks || []).find((bank) => String(bank.id) === String(row.targetId))
+          : (next.assets.banks || []).find(
+              (bank) => String(bank.name || "").trim() === row.assetName
+            );
+
+        if (existing) {
+          existing.balance = Number((Number(existing.balance || 0) + row.amount).toFixed(2));
+          next.assetHistory.push({
+            id: `${Date.now()}-${row.id}`,
+            date: now,
+            type: "transfer_to_bank",
+            source: "asset_transfer",
+            assetKind: "bank",
+            assetId: existing.id,
+            assetName: existing.name,
+            amount: row.amount,
+            balanceAfter: existing.balance,
+          });
+        } else {
+          if (!row.assetName) return alert("أدخل اسم البنك");
+          const id = Date.now() + Math.floor(Math.random() * 1000);
+          next.assets.banks.push({
+            id,
+            name: row.assetName,
+            balance: row.amount,
+          });
+          next.assetHistory.push({
+            id: `${Date.now()}-${row.id}`,
+            date: now,
+            type: "transfer_to_bank",
+            source: "asset_transfer",
+            assetKind: "bank",
+            assetId: id,
+            assetName: row.assetName,
+            amount: row.amount,
+            balanceAfter: row.amount,
+          });
+        }
+      }
+
+      if (row.allocation === "stock") {
+        if (!addUnitAsset({ row, listName: "stocks", nameField: "name", type: "stock" })) return;
+      }
+
+      if (row.allocation === "gold") {
+        if (!addUnitAsset({ row, listName: "gold", nameField: "label", type: "metal" })) return;
+      }
+
+      if (row.allocation === "silver") {
+        if (!addUnitAsset({ row, listName: "silver", nameField: "label", type: "metal" })) return;
+      }
+
+      if (row.allocation === "goods") {
+        if (!addUnitAsset({ row, listName: "custom", nameField: "name", type: "custom" })) return;
+      }
+    }
+
+    next.transactions.push({
+      id: Date.now(),
+      type: "asset_transfer_split",
+      fromAsset,
+      amount,
+      allocations: rows,
+      date: new Date().toISOString(),
+    });
+
+    setState(next);
     setShowTransfer(false);
     setTransferAmount("");
+    setTransferAllocations([
+      { id: 1, allocation: "cash", amount: "", targetId: "", assetName: "", units: "", price: "" },
+    ]);
   };
 
   return (
     <div style={G.scr}>
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          marginBottom: 12,
-          gap: 8,
-        }}
-      >
+      {!readOnly && (
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 44px", gap: 8, marginBottom: 12 }}>
         <button
-          onClick={() => setShowAddAsset(true)}
-          style={G.btn("linear-gradient(135deg,#c9a840,#e8c96a)", "#0f172a", {
+          onClick={onAddExtraCash}
+          style={{
+            background: "#22c55e",
+            color: "white",
             padding: "9px 14px",
             fontSize: 12,
-            flex: 1,
-          })}
+            border: "0",
+            borderRadius: 12,
+            cursor: "pointer",
+            width: "100%",
+          }}
         >
-          + إضافة أصل
+          + دخل إضافي
         </button>
-
         <button
+          type="button"
+          title="مناقلة"
           onClick={() => setShowTransfer(true)}
-          style={G.btn("#1e293b", "#cbd5e1", {
-            padding: "9px 14px",
-            fontSize: 12,
+          style={{
+            width: 44,
+            height: 38,
+            borderRadius: 12,
             border: "1px solid #334155",
-            flex: 1,
-          })}
+            background: "#1e293b",
+            color: "#cbd5e1",
+            cursor: "pointer",
+            fontWeight: 900,
+          }}
         >
-          ⇄ مناقلة
+          {ICONS.transfer}
         </button>
       </div>
-      <button
-  onClick={onAddExtraCash}
-  style={{
-    background: "#22c55e",
-    color: "white",
-    padding: "9px 14px",
-    fontSize: 12,
-    border: "0",
-    borderRadius: 12,
-    cursor: "pointer",
-    flex: 1,
-  }}
->
-  + نقد إضافي
-</button>
+      )}
 
       <div style={{ ...G.card("#c9a84022"), textAlign: "right" }}>
         <div style={{ fontSize: 12, color: "#c9a840" }}>إجمالي الأصول</div>
@@ -2783,140 +4126,182 @@ function AssetsScreen({ state, setState, onAddExtraCash }) {
           {assets.totalAssets.toFixed(2)}{" "}
           <span style={{ fontSize: 13, color: "#64748b" }}>د.أ</span>
         </div>
-
-        <div style={{ fontSize: 11, color: "#64748b", marginTop: 6 }}>
-          صافي الثروة:{" "}
-          <span style={{ color: "#c9a840", fontWeight: 800 }}>
-            {assets.netWorth.toFixed(2)} د.أ
-          </span>
-        </div>
-      </div>
-
-      <div style={G.card("#22c55e22")}>
-        <div style={G.lrow}>
-          <strong>{Number(state.assets.cash || 0).toFixed(2)} د.أ</strong>
-          <span>💵 كاش</span>
-        </div>
-      </div>
-
-      <div style={G.card("#3b82f622")}>
-        <div style={{ marginBottom: 10, color: "#3b82f6", fontWeight: 800 }}>
-          🏦 الحسابات البنكية
-        </div>
-        {state.assets.banks.map((b, i) => (
-          <div
-            key={b.id}
-            style={i < state.assets.banks.length - 1 ? G.row : G.lrow}
-          >
-            <strong>{Number(b.balance || 0).toFixed(2)} د.أ</strong>
-            <span>{b.name}</span>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 10 }}>
+          <div style={{ background: "#13251d", borderRadius: 10, padding: 9 }}>
+            <div style={{ fontSize: 10, color: "#86efac" }}>ادخار سائل</div>
+            <b>{(Number(state.assets.cash || 0) + bankTotal).toFixed(2)}</b>
           </div>
-        ))}
+          <div style={{ background: "#111827", borderRadius: 10, padding: 9 }}>
+            <div style={{ fontSize: 10, color: "#94a3b8" }}>صافي</div>
+            <b style={{ color: "#c9a840" }}>{assets.netWorth.toFixed(2)}</b>
+          </div>
+        </div>
       </div>
 
-      <div style={G.card("#f59e0b22")}>
-        <div style={{ marginBottom: 10, color: "#f59e0b", fontWeight: 800 }}>
-          🥇 الذهب
-        </div>
-        {state.assets.gold.map((g, i) => {
-          const value =
-            Number(g.units || 0) *
-            Number(state.settings.market.goldGramPrice || 0);
-
-          return (
-            <div
-              key={g.id}
-              style={i < state.assets.gold.length - 1 ? G.row : G.lrow}
-            >
-              <div>
-                <strong>{value.toFixed(2)} د.أ</strong>
-                <div style={{ fontSize: 10, color: "#64748b" }}>
-                  {Number(g.units || 0).toFixed(4)} غرام | WAC: {g.wac}
-                </div>
-              </div>
-              <span>{g.label}</span>
-            </div>
-          );
+      <div style={assetCardStyle("#22c55e")}>
+        {renderAssetHeader({
+          id: "cash",
+          icon: ICONS.cash,
+          title: "الكاش الاحتياطي",
+          total: Number(state.assets.cash || 0),
+          color: "#22c55e",
         })}
+        {openAssetCard === "cash" && (
+          <div style={{ ...G.lrow, marginTop: 8 }}>
+            <strong>{Number(state.assets.cash || 0).toFixed(2)} د.أ</strong>
+            <span style={{ color: "#94a3b8", fontSize: 12 }}>ادخار نقدي</span>
+          </div>
+        )}
       </div>
 
-      {state.assets.silver.length > 0 && (
-        <div style={G.card("#94a3b822")}>
-          <div style={{ marginBottom: 10, color: "#94a3b8", fontWeight: 800 }}>
-            🪙 الفضة
+      <div style={assetCardStyle("#3b82f6")}>
+        {renderAssetHeader({
+          id: "banks",
+          icon: ICONS.bank,
+          title: "الحسابات البنكية",
+          total: bankTotal,
+          color: "#3b82f6",
+        })}
+        {openAssetCard === "banks" && (
+          <div style={{ marginTop: 8 }}>
+            {(state.assets.banks || []).map((b, i) => (
+              <div key={b.id} style={i < state.assets.banks.length - 1 ? G.row : G.lrow}>
+                <strong>{Number(b.balance || 0).toFixed(2)} د.أ</strong>
+                <span>{b.name}</span>
+              </div>
+            ))}
+            {!state.assets.banks?.length && renderEmptyAsset("لا توجد حسابات")}
           </div>
-          {state.assets.silver.map((s, i) => {
-            const value =
-              Number(s.units || 0) *
-              Number(state.settings.market.silverGramPrice || 0);
+        )}
+      </div>
 
-            return (
-              <div
-                key={s.id}
-                style={i < state.assets.silver.length - 1 ? G.row : G.lrow}
-              >
-                <div>
-                  <strong>{value.toFixed(2)} د.أ</strong>
-                  <div style={{ fontSize: 10, color: "#64748b" }}>
-                    {Number(s.units || 0).toFixed(4)} غرام | WAC: {s.wac}
+      <div style={assetCardStyle("#a855f7")}>
+        {renderAssetHeader({
+          id: "stocks",
+          icon: ICONS.stock,
+          title: "الأسهم",
+          total: stockTotal,
+          color: "#a855f7",
+        })}
+        <div style={{ fontSize: 10, color: "#94a3b8", textAlign: "right", marginTop: 6 }}>
+          {stockUnitsTotal.toFixed(4)} سهم · متوسط {stockAverageCost.toFixed(4)}
+        </div>
+        {openAssetCard === "stocks" && (
+          <div style={{ marginTop: 8 }}>
+            {(state.assets.stocks || []).map((s, i) => {
+              const value = Number(s.units || 0) * Number(s.currentPrice || 0);
+
+              return (
+                <div key={s.id} style={i < state.assets.stocks.length - 1 ? G.row : G.lrow}>
+                  <div>
+                    <strong>{value.toFixed(2)} د.أ</strong>
+                    <div style={{ fontSize: 10, color: "#64748b" }}>
+                      {Number(s.units || 0).toFixed(4)} سهم · سعر {Number(s.currentPrice || 0).toFixed(4)} · متوسط {Number(s.wac || 0).toFixed(4)}
+                    </div>
                   </div>
+                  <span>{s.name}</span>
                 </div>
-                <span>{s.label}</span>
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      <div style={G.card("#a855f722")}>
-        <div style={{ marginBottom: 10, color: "#a855f7", fontWeight: 800 }}>
-          📊 الأسهم
-        </div>
-        {state.assets.stocks.map((s, i) => {
-          const value = Number(s.units || 0) * Number(s.currentPrice || 0);
-
-          return (
-            <div
-              key={s.id}
-              style={i < state.assets.stocks.length - 1 ? G.row : G.lrow}
-            >
-              <div>
-                <strong>{value.toFixed(2)} د.أ</strong>
-                <div style={{ fontSize: 10, color: "#64748b" }}>
-                  {Number(s.units || 0).toFixed(4)} سهم | السعر{" "}
-                  {s.currentPrice}
-                </div>
-              </div>
-              <span>{s.name}</span>
-            </div>
-          );
-        })}
+              );
+            })}
+            {!state.assets.stocks?.length && renderEmptyAsset("لا توجد أسهم")}
+          </div>
+        )}
       </div>
 
-      {state.assets.custom.length > 0 && (
-        <div style={G.card("#64748b22")}>
-          <div style={{ marginBottom: 10, color: "#94a3b8", fontWeight: 800 }}>
-            📁 أصول مخصصة
+      <div style={assetCardStyle("#f59e0b")}>
+        {renderAssetHeader({
+          id: "gold",
+          icon: ICONS.gold,
+          title: "الذهب",
+          total: goldTotal,
+          color: "#f59e0b",
+        })}
+        {openAssetCard === "gold" && (
+          <div style={{ marginTop: 8 }}>
+            {(state.assets.gold || []).map((g, i) => {
+              const value = Number(g.units || 0) * goldPrice;
+
+              return (
+                <div key={g.id} style={i < state.assets.gold.length - 1 ? G.row : G.lrow}>
+                  <div>
+                    <strong>{value.toFixed(2)} د.أ</strong>
+                    <div style={{ fontSize: 10, color: "#cbd5e1", fontWeight: 700 }}>
+                      {Number(g.units || 0).toFixed(4)} غ · متوسط {Number(g.wac || 0).toFixed(4)}
+                    </div>
+                  </div>
+                  <span>{g.label}</span>
+                </div>
+              );
+            })}
+            {!state.assets.gold?.length && renderEmptyAsset("لا يوجد ذهب")}
           </div>
+        )}
+      </div>
 
-          {state.assets.custom.map((c, i) => {
-            const value =
-              c.type === "fixed"
-                ? Number(c.amount || 0)
-                : Number(c.units || 0) * Number(c.price || 0);
+      <div style={assetCardStyle("#94a3b8")}>
+        {renderAssetHeader({
+          id: "silver",
+          icon: ICONS.silver,
+          title: "الفضة",
+          total: silverTotal,
+          color: "#94a3b8",
+        })}
+        {openAssetCard === "silver" && (
+          <div style={{ marginTop: 8 }}>
+            {(state.assets.silver || []).map((s, i) => {
+              const value = Number(s.units || 0) * silverPrice;
 
-            return (
-              <div
-                key={c.id}
-                style={i < state.assets.custom.length - 1 ? G.row : G.lrow}
-              >
-                <strong>{value.toFixed(2)} د.أ</strong>
-                <span>{c.name}</span>
-              </div>
-            );
-          })}
-        </div>
-      )}
+              return (
+                <div key={s.id} style={i < state.assets.silver.length - 1 ? G.row : G.lrow}>
+                  <div>
+                    <strong>{value.toFixed(2)} د.أ</strong>
+                    <div style={{ fontSize: 10, color: "#64748b" }}>
+                      {Number(s.units || 0).toFixed(4)} غ · سعر {silverPrice.toFixed(4)} · متوسط {Number(s.wac || 0).toFixed(4)}
+                    </div>
+                  </div>
+                  <span>{s.label}</span>
+                </div>
+              );
+            })}
+            {!state.assets.silver?.length && renderEmptyAsset("لا توجد فضة")}
+          </div>
+        )}
+      </div>
+
+      <div style={assetCardStyle("#64748b")}>
+        {renderAssetHeader({
+          id: "custom",
+          icon: ICONS.goods,
+          title: "بضائع / أخرى",
+          total: customTotal,
+          color: "#94a3b8",
+        })}
+        {openAssetCard === "custom" && (
+          <div style={{ marginTop: 8 }}>
+            {(state.assets.custom || []).map((c, i) => {
+              const value =
+                c.type === "fixed"
+                  ? Number(c.amount || 0)
+                  : Number(c.units || 0) * Number(c.price || 0);
+
+              return (
+                <div key={c.id} style={i < state.assets.custom.length - 1 ? G.row : G.lrow}>
+                  <div>
+                    <strong>{value.toFixed(2)} د.أ</strong>
+                    {c.type === "unit" && (
+                      <div style={{ fontSize: 10, color: "#64748b" }}>
+                        {Number(c.units || 0).toFixed(4)} وحدة · سعر {Number(c.price || 0).toFixed(4)}
+                      </div>
+                    )}
+                  </div>
+                  <span>{c.name}</span>
+                </div>
+              );
+            })}
+            {!state.assets.custom?.length && renderEmptyAsset("لا توجد بضائع")}
+          </div>
+        )}
+      </div>
 
       {showAddAsset && (
         <div
@@ -3095,19 +4480,6 @@ function AssetsScreen({ state, setState, onAddExtraCash }) {
               ))}
             </select>
 
-            <label style={{ fontSize: 11, color: "#64748b" }}>إلى أصل</label>
-            <select
-              value={toAsset}
-              onChange={(e) => setToAsset(e.target.value)}
-              style={{ ...G.inp(), marginBottom: 10 }}
-            >
-              {sources.map((s) => (
-                <option key={s.key} value={s.key}>
-                  {s.label}
-                </option>
-              ))}
-            </select>
-
             <input
               type="number"
               value={transferAmount}
@@ -3115,6 +4487,129 @@ function AssetsScreen({ state, setState, onAddExtraCash }) {
               placeholder="قيمة المناقلة"
               style={{ ...G.inp(), marginBottom: 12 }}
             />
+
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+              <button
+                type="button"
+                onClick={addTransferAllocationRow}
+                style={G.btn("#1e293b", "#cbd5e1", { padding: "7px 10px", fontSize: 12 })}
+              >
+                +
+              </button>
+              <div style={{ fontSize: 12, color: "#94a3b8" }}>توزيع القيمة</div>
+            </div>
+
+            {transferAllocations.map((row) => {
+              const needsUnits = ["stock", "gold", "silver", "goods"].includes(row.allocation);
+              const needsName = ["bank", "stock", "gold", "silver", "goods"].includes(row.allocation);
+              const options = transferDestinationOptions(row.allocation);
+
+              return (
+                <div
+                  key={row.id}
+                  style={{
+                    border: "1px solid #1e293b",
+                    borderRadius: 12,
+                    padding: 10,
+                    marginBottom: 10,
+                    background: "#020617",
+                  }}
+                >
+                  <div style={{ display: "grid", gridTemplateColumns: "42px 1fr", gap: 8, marginBottom: 8 }}>
+                    <button
+                      type="button"
+                      onClick={() => removeTransferAllocationRow(row.id)}
+                      style={G.iconBtn(false, "#ef4444")}
+                    >
+                      ×
+                    </button>
+                    <select
+                      value={row.allocation}
+                      onChange={(e) =>
+                        updateTransferAllocation(row.id, {
+                          allocation: e.target.value,
+                          targetId: "",
+                          assetName: "",
+                          units: "",
+                          price: "",
+                        })
+                      }
+                      style={G.inp()}
+                    >
+                      <option value="cash">كاش احتياطي</option>
+                      <option value="spendingCap">سقف الصرف</option>
+                      <option value="bank">حساب بنكي</option>
+                      <option value="stock">أسهم</option>
+                      <option value="gold">ذهب</option>
+                      <option value="silver">فضة</option>
+                      <option value="goods">بضاعة</option>
+                    </select>
+                  </div>
+
+                  <input
+                    type="number"
+                    value={row.amount}
+                    onChange={(e) => updateTransferAllocation(row.id, { amount: e.target.value })}
+                    placeholder="المبلغ"
+                    style={{ ...G.inp(), marginBottom: 8 }}
+                  />
+
+                  {options.length > 0 && (
+                    <select
+                      value={row.targetId}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        const preset = options.find((item) => String(item.id) === value && item.isPreset);
+                        if (preset) {
+                          updateTransferAllocation(row.id, {
+                            targetId: "",
+                            assetName: preset.label,
+                          });
+                          return;
+                        }
+                        updateTransferAllocation(row.id, { targetId: value, assetName: "" });
+                      }}
+                      style={{ ...G.inp(), marginBottom: 8 }}
+                    >
+                      <option value="">أصل جديد</option>
+                      {options.map((item) => (
+                        <option key={item.id} value={item.id}>
+                          {item.name || item.label}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+
+                  {needsName && !row.targetId && (
+                    <input
+                      value={row.assetName}
+                      onChange={(e) => updateTransferAllocation(row.id, { assetName: e.target.value })}
+                      placeholder={row.allocation === "gold" ? "مثال: ذهب 21" : "اسم الأصل"}
+                      style={{ ...G.inp(), marginBottom: 8 }}
+                    />
+                  )}
+
+                  {needsUnits && (
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                      <input
+                        type="number"
+                        value={row.units}
+                        onChange={(e) => updateTransferAllocation(row.id, { units: e.target.value })}
+                        placeholder={row.allocation === "stock" ? "عدد الأسهم" : "عدد الوحدات"}
+                        style={G.inp()}
+                      />
+                      <input
+                        type="number"
+                        value={row.price}
+                        onChange={(e) => updateTransferAllocation(row.id, { price: e.target.value })}
+                        placeholder="سعر الشراء"
+                        style={G.inp()}
+                      />
+                    </div>
+                  )}
+                </div>
+              );
+            })}
 
             <button
               onClick={applyTransfer}
@@ -3419,7 +4914,7 @@ const prepareEditCreditCard = (id) => {
     return explicit > 0 ? Math.min(explicit, actualGap) : actualGap;
   };
   const getDueText = (item) =>
-    item.dueDate ? item.dueDate : item.dueDay ? `يوم ${item.dueDay}` : "غير محدد";
+    item.dueDate ? formatDate(item.dueDate) : item.dueDay ? `يوم ${item.dueDay}` : "غير محدد";
   const coveredCurrentTotal = pendingCurrent.reduce(
     (sum, item) => sum + getCoveredAmount(item),
     0
@@ -4329,7 +5824,7 @@ const prepareEditCreditCard = (id) => {
 
                 {l.dueDate ? (
                   <div style={{ fontSize: 10, color: "#f59e0b", marginTop: 3 }}>
-                    تاريخ الاستحقاق: {l.dueDate}
+                    تاريخ الاستحقاق: {formatDate(l.dueDate)}
                   </div>
                 ) : (
                   <div style={{ fontSize: 10, color: "#64748b", marginTop: 3 }}>
@@ -4604,9 +6099,153 @@ const [structuralDueDay, setStructuralDueDay] = useState("");
 const [settingsCardName, setSettingsCardName] = useState("");
 const [settingsCardLimit, setSettingsCardLimit] = useState("");
 const [settingsCardBalance, setSettingsCardBalance] = useState("");
-const [settingsCardDueDate, setSettingsCardDueDate] = useState("");
+const [settingsCardDueDay, setSettingsCardDueDay] = useState("");
 const [settingsCardMode, setSettingsCardMode] = useState("");
 const [settingsSelectedCardId, setSettingsSelectedCardId] = useState("");
+const [openingAssetKind, setOpeningAssetKind] = useState("cash");
+const [openingAssetTarget, setOpeningAssetTarget] = useState("");
+const [openingAssetName, setOpeningAssetName] = useState("");
+const [openingAssetUnits, setOpeningAssetUnits] = useState("");
+const [openingAssetPrice, setOpeningAssetPrice] = useState("");
+const [showOpeningAssetForm, setShowOpeningAssetForm] = useState(false);
+const [showStructuralForm, setShowStructuralForm] = useState(false);
+const [settingsSectionsOpen, setSettingsSectionsOpen] = useState({
+  cards: false,
+  structural: false,
+  opening: false,
+});
+const structuralList = state.structuralLiabilities || state.structural || [];
+const creditCards = (state.currentLiabilities || []).filter((item) => item.type === "card");
+const openingAssetChoices = (() => {
+  if (openingAssetKind === "cash") return [];
+  if (openingAssetKind === "gold") return ["ذهب 21", "ذهب 24"];
+  if (openingAssetKind === "silver") return ["فضة"];
+  if (openingAssetKind === "bank") {
+    return (state.assets.banks || []).map((item) => item.name).filter(Boolean);
+  }
+  if (openingAssetKind === "stock") {
+    return (state.assets.stocks || []).map((item) => item.name).filter(Boolean);
+  }
+  if (openingAssetKind === "goods") {
+    return (state.assets.custom || [])
+      .filter((item) => item.type === "unit")
+      .map((item) => item.name)
+      .filter(Boolean);
+  }
+  return [];
+})();
+const openingAssetCanCreateNew = ["bank", "stock", "goods"].includes(openingAssetKind);
+const openingAssetEffectiveTarget =
+  openingAssetTarget ||
+  (openingAssetKind === "gold"
+    ? "ذهب 21"
+    : openingAssetKind === "silver"
+    ? "فضة"
+    : openingAssetCanCreateNew
+    ? openingAssetChoices[0] || "__new__"
+    : "");
+const openingAssetIsNew = openingAssetCanCreateNew && openingAssetEffectiveTarget === "__new__";
+const sectionTitle = (icon, title, action = null) => (
+  <div
+    style={{
+      display: "flex",
+      justifyContent: "space-between",
+      alignItems: "center",
+      marginBottom: 10,
+    }}
+  >
+    <div style={{ color: "#c9a840", fontWeight: 900, fontSize: 14 }}>
+      {icon} {title}
+    </div>
+    {action}
+  </div>
+);
+const collapsibleSectionTitle = (key, icon, title, action = null) => {
+  const isOpen = settingsSectionsOpen[key];
+
+  return (
+    <div
+      style={{
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center",
+        marginBottom: 10,
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+        {action}
+        {smallIconButton(isOpen ? "−" : "⋯", () =>
+          setSettingsSectionsOpen((prev) => ({ ...prev, [key]: !prev[key] }))
+        , "#cbd5e1")}
+      </div>
+      <button
+        type="button"
+        onClick={() =>
+          setSettingsSectionsOpen((prev) => ({ ...prev, [key]: !prev[key] }))
+        }
+        style={{
+          border: 0,
+          background: "transparent",
+          color: "#c9a840",
+          fontWeight: 900,
+          fontSize: 14,
+          cursor: "pointer",
+          fontFamily: "inherit",
+        }}
+      >
+        {icon} {title}
+      </button>
+    </div>
+  );
+};
+const smallIconButton = (label, onClick, color = "#cbd5e1") => (
+  <button
+    type="button"
+    title={label}
+    onClick={onClick}
+    style={{
+      width: 32,
+      height: 32,
+      borderRadius: 10,
+      border: `1px solid ${color}55`,
+      background: "#111827",
+      color,
+      cursor: "pointer",
+      fontWeight: 900,
+      fontSize: 15,
+    }}
+  >
+    {label}
+  </button>
+);
+const openNewSettingsCard = () => {
+  setSettingsSelectedCardId("");
+  setSettingsCardName("");
+  setSettingsCardLimit("");
+  setSettingsCardBalance("");
+  setSettingsCardDueDay("");
+  setSettingsSectionsOpen((prev) => ({ ...prev, cards: true }));
+  setSettingsCardMode(settingsCardMode === "add" ? "" : "add");
+};
+const openingBalanceRow = ({ keyPrefix, item, group, nameField, unitLabel, priceField = "wac", valueField = "name" }) => {
+  const units = Number(item.units || 0);
+  const price = Number(item[priceField] || 0);
+  const total = units * price;
+
+  return (
+    <div key={`${keyPrefix}-${item.id}`} style={{ display: "grid", gridTemplateColumns: "0.9fr 0.72fr 0.72fr 0.72fr 1fr", gap: 6, marginBottom: 8 }}>
+      <input readOnly value={total.toFixed(2)} placeholder="الإجمالي" style={{ ...G.inp(), padding: "9px 7px", fontSize: 11, color: "#cbd5e1" }} />
+      <input type="number" value={price} onChange={(e) => updateAssetItem(group, item.id, { [priceField]: Number(e.target.value || 0) })} placeholder="السعر" style={{ ...G.inp(), padding: "9px 7px", fontSize: 11 }} />
+      <select value={unitLabel} disabled style={{ ...G.inp(), padding: "9px 6px", fontSize: 11, opacity: 0.9 }}>
+        <option value="غم">غم</option>
+        <option value="سهم">سهم</option>
+        <option value="وحدة">وحدة</option>
+      </select>
+      <input type="number" value={units} onChange={(e) => updateAssetItem(group, item.id, { units: Number(e.target.value || 0) })} placeholder="العدد" style={{ ...G.inp(), padding: "9px 7px", fontSize: 11 }} />
+      <input value={item[nameField] || ""} onChange={(e) => updateAssetItem(group, item.id, { [nameField]: e.target.value })} placeholder={valueField} style={{ ...G.inp(), padding: "9px 7px", fontSize: 11 }} />
+    </div>
+  );
+};
   const updateStockPrice = (stockId, price) => {
   setState((p) => ({
     ...p,
@@ -4623,13 +6262,193 @@ const [settingsSelectedCardId, setSettingsSelectedCardId] = useState("");
     },
   }));
 };
+const updateAssetItem = (assetGroup, itemId, patch) => {
+  setState((p) => ({
+    ...p,
+    assets: {
+      ...p.assets,
+      [assetGroup]: (p.assets[assetGroup] || []).map((item) =>
+        item.id === itemId
+          ? {
+              ...item,
+              ...patch,
+              ...(assetGroup === "stocks" && patch.wac !== undefined
+                ? { currentPrice: patch.wac }
+                : {}),
+            }
+          : item
+      ),
+    },
+  }));
+};
+const addOpeningAsset = () => {
+  const rawName = String(openingAssetName || "").trim();
+  const selectedName = String(openingAssetEffectiveTarget || "").trim();
+  const name =
+    openingAssetKind === "cash"
+      ? ""
+      : openingAssetCanCreateNew && selectedName && selectedName !== "__new__"
+      ? selectedName
+      : openingAssetKind === "gold"
+      ? selectedName || rawName || "ذهب 21"
+      : openingAssetKind === "silver"
+      ? "فضة"
+      : rawName;
+  const units = Number(openingAssetUnits || 0);
+  const price = Number(openingAssetPrice || 0);
+
+  if (["bank", "stock", "goods"].includes(openingAssetKind) && !name) {
+    return alert("أدخل اسم الأصل");
+  }
+
+  setState((p) => {
+    const next = structuredClone(p);
+    const id = Date.now();
+    const historyPatch = {};
+
+    const mergeUnitAsset = ({ listName, nameField, priceField = "wac", extraNew = {} }) => {
+      const list = next.assets[listName] || [];
+      const existing = list.find(
+        (item) =>
+          String(item[nameField] || "").trim() === name &&
+          (listName !== "custom" || !extraNew.type || item.type === extraNew.type)
+      );
+
+      if (existing) {
+        const oldUnits = Number(existing.units || 0);
+        const oldAverage = Number(existing[priceField] || 0);
+        const oldValue = oldUnits * oldAverage;
+        const newValue = units * price;
+        const totalUnits = oldUnits + units;
+        const average =
+          totalUnits > 0
+            ? Number(((oldValue + newValue) / totalUnits).toFixed(4))
+            : price;
+
+        existing.units = Number(totalUnits.toFixed(4));
+        existing[priceField] = average;
+        if (listName === "stocks") existing.currentPrice = price;
+
+        historyPatch.assetId = existing.id;
+        historyPatch.unitsBefore = oldUnits;
+        historyPatch.unitsAfter = existing.units;
+        historyPatch.averageBefore = oldAverage;
+        historyPatch.averageAfter = average;
+        historyPatch.merged = true;
+      } else {
+        const newItem = {
+          id,
+          [nameField]: name,
+          units,
+          [priceField]: price,
+          ...extraNew,
+        };
+        list.push(newItem);
+        next.assets[listName] = list;
+
+        historyPatch.assetId = id;
+        historyPatch.unitsBefore = 0;
+        historyPatch.unitsAfter = units;
+        historyPatch.averageBefore = 0;
+        historyPatch.averageAfter = price;
+        historyPatch.merged = false;
+      }
+    };
+
+    if (openingAssetKind === "cash") {
+      if (units <= 0) {
+        alert("أدخل رصيد الكاش");
+        return p;
+      }
+      next.assets.cash = Number((Number(next.assets.cash || 0) + units).toFixed(2));
+    }
+
+    if (openingAssetKind === "bank") {
+      if (units <= 0) {
+        alert("أدخل رصيد الحساب");
+        return p;
+      }
+      const existing = (next.assets.banks || []).find(
+        (bank) => String(bank.name || "").trim() === name
+      );
+
+      if (existing) {
+        existing.balance = Number((Number(existing.balance || 0) + units).toFixed(2));
+        historyPatch.assetId = existing.id;
+        historyPatch.merged = true;
+      } else {
+        next.assets.banks.push({ id, name, balance: units });
+        historyPatch.assetId = id;
+        historyPatch.merged = false;
+      }
+    }
+
+    if (["gold", "silver", "stock", "goods"].includes(openingAssetKind)) {
+      if (units <= 0 || price <= 0) {
+        alert("أدخل العدد والسعر");
+        return p;
+      }
+
+      if (openingAssetKind === "gold") {
+        mergeUnitAsset({ listName: "gold", nameField: "label" });
+      }
+
+      if (openingAssetKind === "silver") {
+        mergeUnitAsset({ listName: "silver", nameField: "label" });
+      }
+
+      if (openingAssetKind === "stock") {
+        mergeUnitAsset({
+          listName: "stocks",
+          nameField: "name",
+          extraNew: { currentPrice: price },
+        });
+      }
+
+      if (openingAssetKind === "goods") {
+        mergeUnitAsset({
+          listName: "custom",
+          nameField: "name",
+          priceField: "price",
+          extraNew: { type: "unit" },
+        });
+      }
+    }
+
+    next.assetHistory = [
+      ...(next.assetHistory || []),
+      {
+        id: `${id}-opening`,
+        date: new Date().toISOString(),
+        type: "opening_balance",
+        source: "settings",
+        assetKind: openingAssetKind,
+        assetName: name || "كاش ادخار",
+        amount: openingAssetKind === "cash" || openingAssetKind === "bank" ? units : units * price,
+        units,
+        unitPrice: price || null,
+        ...historyPatch,
+      },
+    ];
+
+    return next;
+  });
+
+  setOpeningAssetName("");
+  setOpeningAssetTarget(
+    openingAssetKind === "gold" ? "ذهب 21" : openingAssetKind === "silver" ? "فضة" : ""
+  );
+  setOpeningAssetUnits("");
+  setOpeningAssetPrice("");
+  setShowOpeningAssetForm(false);
+};
  const addStructuralLiability = () => {
   if (!structuralName.trim()) return alert("أدخل اسم الالتزام الهيكلي");
 
   const monthly = Number(structuralMonthly || 0);
   if (monthly <= 0) return alert("أدخل قيمة القسط الشهري");
 
-  const dueDay = Number(structuralDueDay || 1);
+  const dueDay = 1;
 
   setState((p) => {
     const list = p.structuralLiabilities || p.structural || [];
@@ -4653,6 +6472,7 @@ const [settingsSelectedCardId, setSettingsSelectedCardId] = useState("");
   setStructuralName("");
   setStructuralMonthly("");
   setStructuralDueDay("");
+  setShowStructuralForm(false);
 };
 const updateStructuralLiability = (id, field, value) => {
   setState((p) => {
@@ -4697,7 +6517,8 @@ const addSettingsCreditCard = () => {
   if (creditLimit <= 0) return alert("أدخل سقف البطاقة");
   if (balance < 0) return alert("الرصيد المستخدم لا يجوز أن يكون سالبًا");
   if (balance > creditLimit) return alert("الرصيد المستخدم لا يجوز أن يتجاوز سقف البطاقة");
-  if (!settingsCardDueDate) return alert("أدخل تاريخ استحقاق البطاقة");
+  const dueDay = Number(settingsCardDueDay || 0);
+  if (dueDay < 1 || dueDay > 31) return alert("أدخل يوم استحقاق بين 1 و31");
 
   setState((p) => ({
     ...p,
@@ -4712,8 +6533,8 @@ const addSettingsCreditCard = () => {
         creditLimit,
         payableBuffer: 0,
         uncoveredDebt: balance,
-        dueDate: settingsCardDueDate,
-        dueDay: new Date(settingsCardDueDate).getDate(),
+        dueDate: "",
+        dueDay,
         status: "active",
         source: "manual_card",
         createdAt: new Date().toISOString(),
@@ -4725,7 +6546,7 @@ const addSettingsCreditCard = () => {
   setSettingsCardName("");
   setSettingsCardLimit("");
   setSettingsCardBalance("");
-  setSettingsCardDueDate("");
+  setSettingsCardDueDay("");
   setSettingsCardMode("");
 };
 
@@ -4748,79 +6569,198 @@ const deleteSettingsCreditCard = () => {
   setSettingsCardMode("");
 };
 
-  return (
-    <div style={G.scr}>
-      <div style={G.card()}>
-        <div style={{ marginBottom: 12, color: "#c9a840", fontWeight: 800 }}>
-          💼 بطاقة الراتب والالتزامات
-        </div>
-
-
-        <label style={{ fontSize: 11, color: "#64748b" }}>الراتب الشهري</label>
-        <input
-          type="number"
-          value={state.settings.salary}
-          onChange={(e) =>
-            updateSetting("settings.salary", Number(e.target.value || 0))
-          }
-          style={{ ...G.inp(), marginBottom: 10 }}
-        />
-        <label style={{ fontSize: 11, color: "#64748b" }}>
-  سقف الصرف الشهري
-</label>
-<input
-  type="number"
-  value={state.session.spendingCap}
-  onChange={(e) => {
-  const newCap = Number(e.target.value || 0);
-
-  if (newCap > maxSpendingCap) {
-    alert("سقف الصرف لا يجوز أن يتجاوز صافي الراتب بعد طرح الالتزامات الهيكلية");
+const prepareSettingsCardEdit = (card) => {
+  if (settingsCardMode === "edit" && String(settingsSelectedCardId) === String(card.id)) {
+    setSettingsSelectedCardId("");
+    setSettingsCardName("");
+    setSettingsCardLimit("");
+    setSettingsCardBalance("");
+    setSettingsCardDueDay("");
+    setSettingsCardMode("");
     return;
   }
 
-  setState({
-    ...state,
-    session: {
-      ...state.session,
-      spendingCap: newCap,
-    },
-  });
-}}
-  style={{ ...G.inp(), marginBottom: 10 }}
-/>
+  setSettingsSelectedCardId(card.id);
+  setSettingsCardName(card.name || "");
+  setSettingsCardLimit(String(card.creditLimit || 0));
+  setSettingsCardBalance(String(card.balance || 0));
+  setSettingsCardDueDay(String(card.dueDay || (card.dueDate ? new Date(card.dueDate).getDate() : "")));
+  setSettingsCardMode("edit");
+};
 
-<div style={{ fontSize: 12, color: "#94a3b8", marginBottom: 12 }}>
-  أقصى سقف صرف مسموح من الراتب: {maxSpendingCap.toFixed(2)}
-</div>
-<div style={{ borderTop: "1px solid #1a2540", paddingTop: 12, marginTop: 8 }}>
-  <div style={{ textAlign: "right", color: "#94a3b8", fontWeight: 800, marginBottom: 10, fontSize: 13 }}>
-    إدارة البطاقات الائتمانية
-  </div>
-  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 10 }}>
-    <button
-      type="button"
-      onClick={() => setSettingsCardMode(settingsCardMode === "add" ? "" : "add")}
-      style={G.btn("#1e293b", "#cbd5e1", { width: "100%" })}
-    >
-      إضافة بطاقة
-    </button>
-    <button
-      type="button"
-      onClick={() => setSettingsCardMode(settingsCardMode === "delete" ? "" : "delete")}
-      style={G.btn("#2b1111", "#fecaca", { width: "100%" })}
-    >
-      حذف بطاقة
-    </button>
-  </div>
-  {settingsCardMode === "add" && (
+const saveSettingsCreditCardEdit = () => {
+  if (!settingsSelectedCardId) return alert("اختر البطاقة");
+  const creditLimit = Number(settingsCardLimit || 0);
+  const balance = Number(settingsCardBalance || 0);
+  if (!settingsCardName.trim()) return alert("أدخل اسم البطاقة");
+  if (creditLimit <= 0) return alert("أدخل سقف البطاقة");
+  if (balance < 0 || balance > creditLimit) return alert("تحقق من الرصيد والسقف");
+  const dueDay = Number(settingsCardDueDay || 0);
+  if (dueDay < 1 || dueDay > 31) return alert("أدخل يوم استحقاق بين 1 و31");
+
+  setState((p) => ({
+    ...p,
+    currentLiabilities: (p.currentLiabilities || []).map((item) =>
+      String(item.id) === String(settingsSelectedCardId)
+        ? {
+            ...item,
+            name: settingsCardName.trim(),
+            creditLimit,
+            balance,
+            amount: balance,
+            uncoveredDebt: Math.max(0, balance - Number(item.payableBuffer || 0)),
+            dueDate: "",
+            dueDay,
+          }
+        : item
+    ),
+  }));
+
+  setSettingsSelectedCardId("");
+  setSettingsCardName("");
+  setSettingsCardLimit("");
+  setSettingsCardBalance("");
+  setSettingsCardDueDay("");
+  setSettingsCardMode("");
+};
+
+  return (
+    <div style={G.scr}>
+      <div style={G.card()}>
+        {sectionTitle("💼", "الراتب والسقف")}
+
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
+          <div>
+            <label style={{ fontSize: 10, color: "#64748b" }}>الراتب</label>
+            <input
+              type="number"
+              value={state.settings.salary}
+              onChange={(e) =>
+                updateSetting("settings.salary", Number(e.target.value || 0))
+              }
+              style={G.inp()}
+            />
+          </div>
+          <div>
+            <label style={{ fontSize: 10, color: "#64748b" }}>السقف</label>
+            <input
+              type="number"
+              value={state.session.spendingCap}
+              onChange={(e) => {
+                const newCap = Number(e.target.value || 0);
+
+                if (newCap > maxSpendingCap) {
+                  alert("سقف الصرف لا يجوز أن يتجاوز صافي الراتب بعد الالتزامات الهيكلية");
+                  return;
+                }
+
+                setState({
+                  ...state,
+                  session: {
+                    ...state.session,
+                    spendingCap: newCap,
+                  },
+                });
+              }}
+              style={G.inp()}
+            />
+          </div>
+        </div>
+
+        <div style={{ fontSize: 11, color: "#94a3b8", marginBottom: 12 }}>
+          الحد: {maxSpendingCap.toFixed(2)} د.أ
+        </div>
+
+        <div style={{ borderTop: "1px solid #1a2540", paddingTop: 12, marginTop: 8 }}>
+          {collapsibleSectionTitle(
+            "cards",
+            "💳",
+            "البطاقات",
+            smallIconButton("+", openNewSettingsCard, "#86efac")
+          )}
+
+          {settingsSectionsOpen.cards && (
+          <>
+          <div style={{ display: "grid", gap: 8, marginBottom: settingsCardMode ? 10 : 0 }}>
+            {creditCards.map((card) => {
+              const used = Number(card.balance || 0);
+              const limit = Number(card.creditLimit || 0);
+              const available = Math.max(0, limit - used);
+
+              return (
+                <div
+                  key={card.id}
+                  style={{
+                    border: "1px solid #1e293b",
+                    borderRadius: 12,
+                    padding: 10,
+                    background: "linear-gradient(135deg,#172554,#0f172a)",
+                  }}
+                >
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+                    <div style={{ display: "flex", gap: 6 }}>
+                      {smallIconButton("✎", () => prepareSettingsCardEdit(card), "#93c5fd")}
+                      {smallIconButton("🗑", () => {
+                        setSettingsSelectedCardId(card.id);
+                        setSettingsCardMode("delete");
+                      }, "#fecaca")}
+                    </div>
+                    <div style={{ textAlign: "right" }}>
+                      <div style={{ fontWeight: 900, fontSize: 13 }}>{card.name}</div>
+                      <div style={{ color: "#93c5fd", fontSize: 10 }}>
+                        {used.toFixed(2)} / {limit.toFixed(2)} · متاح {available.toFixed(2)}
+                      </div>
+                      <div style={{ color: "#cbd5e1", fontSize: 10, marginTop: 2 }}>
+                        {card.dueDay ? `يوم الاستحقاق ${card.dueDay}` : "بلا يوم استحقاق"}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+            {!creditCards.length && (
+              <div style={{ color: "#64748b", fontSize: 12, textAlign: "center", padding: 8 }}>
+                لا توجد بطاقات
+              </div>
+            )}
+          </div>
+
+  {(settingsCardMode === "add" || settingsCardMode === "edit") && (
     <div>
-      <input value={settingsCardName} onChange={(e) => setSettingsCardName(e.target.value)} placeholder="اسم البطاقة" style={{ ...G.inp(), marginBottom: 8 }} />
-      <input type="number" value={settingsCardLimit} onChange={(e) => setSettingsCardLimit(e.target.value)} placeholder="سقف البطاقة" style={{ ...G.inp(), marginBottom: 8 }} />
-      <input type="number" value={settingsCardBalance} onChange={(e) => setSettingsCardBalance(e.target.value)} placeholder="الرصيد المستخدم حاليًا" style={{ ...G.inp(), marginBottom: 8 }} />
-      <input type="date" value={settingsCardDueDate} onChange={(e) => setSettingsCardDueDate(e.target.value)} style={{ ...G.inp(), marginBottom: 8 }} />
-      <button type="button" onClick={addSettingsCreditCard} style={G.btn("#17341f", "#86efac", { width: "100%" })}>
-        حفظ البطاقة
+      <div style={{ display: "flex", justifyContent: "flex-start", marginBottom: 8 }}>
+        {smallIconButton("×", () => {
+          setSettingsSelectedCardId("");
+          setSettingsCardName("");
+          setSettingsCardLimit("");
+          setSettingsCardBalance("");
+          setSettingsCardDueDay("");
+          setSettingsCardMode("");
+        }, "#fecaca")}
+      </div>
+      <label style={{ fontSize: 10, color: "#64748b" }}>اسم البطاقة</label>
+      <input value={settingsCardName} onChange={(e) => setSettingsCardName(e.target.value)} placeholder="مثال: فيزا البنك" style={{ ...G.inp(), marginBottom: 8 }} />
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+        <div>
+          <label style={{ fontSize: 10, color: "#64748b" }}>سقف البطاقة</label>
+          <input type="number" value={settingsCardLimit} onChange={(e) => setSettingsCardLimit(e.target.value)} placeholder="0.00" style={{ ...G.inp(), marginBottom: 8 }} />
+        </div>
+        <div>
+          <label style={{ fontSize: 10, color: "#64748b" }}>المستخدم الآن</label>
+          <input type="number" value={settingsCardBalance} onChange={(e) => setSettingsCardBalance(e.target.value)} placeholder="0.00" style={{ ...G.inp(), marginBottom: 8 }} />
+        </div>
+      </div>
+      <label style={{ fontSize: 10, color: "#64748b" }}>يوم الاستحقاق الشهري</label>
+      <input
+        type="number"
+        min="1"
+        max="31"
+        value={settingsCardDueDay}
+        onChange={(e) => setSettingsCardDueDay(e.target.value)}
+        placeholder="مثال: 20"
+        style={{ ...G.inp(), marginBottom: 8 }}
+      />
+      <button type="button" onClick={settingsCardMode === "edit" ? saveSettingsCreditCardEdit : addSettingsCreditCard} style={G.btn("#17341f", "#86efac", { width: "100%" })}>
+        {settingsCardMode === "edit" ? "حفظ التعديل" : "حفظ البطاقة"}
       </button>
     </div>
   )}
@@ -4841,6 +6781,8 @@ const deleteSettingsCreditCard = () => {
       </button>
     </div>
   )}
+          </>
+          )}
 </div>
 <div
   style={{
@@ -4849,69 +6791,71 @@ const deleteSettingsCreditCard = () => {
     marginTop: 8,
   }}
 >
+  {collapsibleSectionTitle(
+    "structural",
+    "🏗",
+    "الالتزامات",
+    smallIconButton("+", () => {
+      setSettingsSectionsOpen((prev) => ({ ...prev, structural: true }));
+      setShowStructuralForm((v) => !v);
+    }, "#86efac")
+  )}
+
+  {settingsSectionsOpen.structural && (
+  <>
   <div
     style={{
-      textAlign: "right",
-      color: "#94a3b8",
-      fontWeight: 800,
-      marginBottom: 10,
-      fontSize: 13,
+      display: "grid",
+      gridTemplateColumns: "34px 0.9fr 1.4fr",
+      gap: 6,
+      color: "#64748b",
+      fontSize: 10,
+      marginBottom: 5,
+      padding: "0 4px",
     }}
   >
-    🏗 الالتزامات الهيكلية
+    <span />
+    <span>القسط</span>
+    <span>الاسم</span>
   </div>
 
-  {(state.structuralLiabilities || state.structural || []).map((item) => (
+  {structuralList.map((item) => (
     <div
       key={item.id}
       style={{
         background: "#0f172a",
         border: "1px solid #1e293b",
         borderRadius: 12,
-        padding: 10,
-        marginBottom: 10,
+        padding: 8,
+        marginBottom: 8,
+        display: "grid",
+        gridTemplateColumns: "34px 0.9fr 1.4fr",
+        gap: 6,
+        alignItems: "center",
       }}
     >
+      {smallIconButton("🗑", () => deleteStructuralLiability(item.id), "#fecaca")}
+      <input
+        type="number"
+        value={item.monthly ?? item.monthlyAmount ?? item.amount ?? 0}
+        onChange={(e) =>
+          updateStructuralLiability(item.id, "monthly", e.target.value)
+        }
+        placeholder="القسط"
+        style={{ ...G.inp(), padding: "9px 8px", fontSize: 12 }}
+      />
       <input
         value={item.name}
         onChange={(e) =>
           updateStructuralLiability(item.id, "name", e.target.value)
         }
-        placeholder="اسم الالتزام"
-        style={{ ...G.inp(), marginBottom: 8 }}
+        placeholder="الاسم"
+        style={{ ...G.inp(), padding: "9px 8px", fontSize: 12 }}
       />
-
-      <input
-        type="number"
-        value={item.monthly}
-        onChange={(e) =>
-          updateStructuralLiability(item.id, "monthly", e.target.value)
-        }
-        placeholder="القسط الشهري"
-        style={{ ...G.inp(), marginBottom: 8 }}
-      />
-
-      <input
-        type="number"
-        min="1"
-        max="31"
-        value={item.dueDay}
-        onChange={(e) =>
-          updateStructuralLiability(item.id, "dueDay", e.target.value)
-        }
-        placeholder="يوم السداد"
-        style={{ ...G.inp(), marginBottom: 8 }}
-      />
-
-      <button
-        onClick={() => deleteStructuralLiability(item.id)}
-        style={G.btn("#7f1d1d", "#fff", { width: "100%" })}
-      >
-        حذف الالتزام
-      </button>
     </div>
   ))}
 
+  {showStructuralForm && (
   <div
     style={{
       background: "#111827",
@@ -4921,173 +6865,269 @@ const deleteSettingsCreditCard = () => {
       marginTop: 12,
     }}
   >
-    <div
-      style={{
-        textAlign: "right",
-        color: "#c9a840",
-        fontWeight: 800,
-        marginBottom: 10,
-        fontSize: 13,
-      }}
-    >
-      + إضافة التزام هيكلي
+    <div style={{ display: "grid", gridTemplateColumns: "38px 0.9fr 1.4fr", gap: 6 }}>
+      {smallIconButton("×", () => setShowStructuralForm(false), "#fecaca")}
+      <input
+        type="number"
+        value={structuralMonthly}
+        onChange={(e) => setStructuralMonthly(e.target.value)}
+        placeholder="القسط"
+        style={{ ...G.inp(), padding: "9px 8px", fontSize: 12 }}
+      />
+      <input
+        value={structuralName}
+        onChange={(e) => setStructuralName(e.target.value)}
+        placeholder="الاسم"
+        style={{ ...G.inp(), padding: "9px 8px", fontSize: 12 }}
+      />
     </div>
-
-    <input
-      value={structuralName}
-      onChange={(e) => setStructuralName(e.target.value)}
-      placeholder="اسم الالتزام"
-      style={{ ...G.inp(), marginBottom: 8 }}
-    />
-
-    <input
-      type="number"
-      value={structuralMonthly}
-      onChange={(e) => setStructuralMonthly(e.target.value)}
-      placeholder="القسط الشهري"
-      style={{ ...G.inp(), marginBottom: 8 }}
-    />
-
-    <input
-      type="number"
-      min="1"
-      max="31"
-      value={structuralDueDay}
-      onChange={(e) => setStructuralDueDay(e.target.value)}
-      placeholder="يوم السداد"
-      style={{ ...G.inp(), marginBottom: 8 }}
-    />
-
     <button
+      type="button"
       onClick={addStructuralLiability}
       style={G.btn("linear-gradient(135deg,#c9a840,#e8c96a)", "#0f172a", {
         width: "100%",
-        fontWeight: 900,
+        padding: "9px 12px",
+        fontSize: 12,
+        marginTop: 8,
       })}
     >
-      إضافة الالتزام
+      حفظ الالتزام
     </button>
   </div>
+  )}
+  </>
+  )}
 </div>
-
-        <label style={{ fontSize: 11, color: "#64748b" }}>الشهر الحالي</label>
-        <input
-          value={state.settings.month}
-          onChange={(e) => updateSetting("settings.month", e.target.value)}
-          style={G.inp()}
-        />
       </div>
 
       <div style={G.card()}>
-        <div style={{ marginBottom: 12, color: "#c9a840", fontWeight: 800 }}>
-          🥇 بطاقة أسعار الذهب والفضة والأسهم
+        {collapsibleSectionTitle(
+          "opening",
+          "📦",
+          "الأرصدة الافتتاحية",
+          smallIconButton("+", () => {
+            setSettingsSectionsOpen((prev) => ({ ...prev, opening: true }));
+            setShowOpeningAssetForm((v) => !v);
+          }, "#86efac")
+        )}
+
+        {settingsSectionsOpen.opening && (
+        <div>
+          {showOpeningAssetForm && (
+          <div
+            style={{
+              background: "#111827",
+              border: "1px dashed #334155",
+              borderRadius: 12,
+              padding: 10,
+              marginBottom: 12,
+            }}
+          >
+            <div style={{ display: "grid", gridTemplateColumns: "38px 1fr 1fr", gap: 6, marginBottom: 8 }}>
+              {smallIconButton("×", () => setShowOpeningAssetForm(false), "#fecaca")}
+              <select
+                value={openingAssetKind}
+                onChange={(e) => {
+                  const nextKind = e.target.value;
+                  setOpeningAssetKind(nextKind);
+                  setOpeningAssetTarget(
+                    nextKind === "gold" ? "ذهب 21" : nextKind === "silver" ? "فضة" : ""
+                  );
+                  setOpeningAssetName(
+                    nextKind === "gold" ? "ذهب 21" : nextKind === "silver" ? "فضة" : ""
+                  );
+                  setOpeningAssetUnits("");
+                  setOpeningAssetPrice("");
+                }}
+                style={{ ...G.inp(), padding: "9px 8px", fontSize: 12 }}
+              >
+                <option value="cash">كاش ادخار</option>
+                <option value="bank">حساب بنكي</option>
+                <option value="gold">ذهب</option>
+                <option value="silver">فضة</option>
+                <option value="stock">أسهم</option>
+                <option value="goods">بضاعة</option>
+              </select>
+              {openingAssetKind === "cash" ? (
+                <input
+                  value="كاش ادخار"
+                  disabled
+                  style={{ ...G.inp(), padding: "9px 8px", fontSize: 12 }}
+                />
+              ) : (
+                <select
+                  value={openingAssetEffectiveTarget}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    setOpeningAssetTarget(value);
+                    setOpeningAssetName(value === "__new__" ? "" : value);
+                  }}
+                  style={{ ...G.inp(), padding: "9px 8px", fontSize: 12 }}
+                >
+                  {openingAssetChoices.map((name) => (
+                    <option key={name} value={name}>
+                      {name}
+                    </option>
+                  ))}
+                  {openingAssetCanCreateNew && <option value="__new__">أصل جديد</option>}
+                </select>
+              )}
+            </div>
+
+            {openingAssetIsNew && (
+              <input
+                value={openingAssetName}
+                onChange={(e) => setOpeningAssetName(e.target.value)}
+                placeholder={
+                  openingAssetKind === "bank"
+                    ? "اسم البنك الجديد"
+                    : openingAssetKind === "stock"
+                    ? "اسم السهم الجديد"
+                    : "اسم البضاعة الجديدة"
+                }
+                style={{ ...G.inp(), padding: "9px 8px", fontSize: 12, marginBottom: 8 }}
+              />
+            )}
+
+            <div style={{ display: "grid", gridTemplateColumns: openingAssetKind === "cash" || openingAssetKind === "bank" ? "1fr" : "1fr 1fr", gap: 6 }}>
+              <input
+                type="number"
+                value={openingAssetUnits}
+                onChange={(e) => setOpeningAssetUnits(e.target.value)}
+                placeholder={openingAssetKind === "cash" || openingAssetKind === "bank" ? "الرصيد" : "عدد الوحدات"}
+                style={{ ...G.inp(), padding: "9px 8px", fontSize: 12 }}
+              />
+              {!["cash", "bank"].includes(openingAssetKind) && (
+                <input
+                  type="number"
+                  value={openingAssetPrice}
+                  onChange={(e) => setOpeningAssetPrice(e.target.value)}
+                  placeholder="السعر"
+                  style={{ ...G.inp(), padding: "9px 8px", fontSize: 12 }}
+                />
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={addOpeningAsset}
+              style={G.btn("linear-gradient(135deg,#c9a840,#e8c96a)", "#0f172a", {
+                width: "100%",
+                padding: "9px 12px",
+                fontSize: 12,
+                marginTop: 8,
+              })}
+            >
+              حفظ الأصل
+            </button>
+          </div>
+          )}
+
+          <div style={{ display: "grid", gridTemplateColumns: "0.9fr 0.72fr 0.72fr 0.72fr 1fr", gap: 6, color: "#64748b", fontSize: 10, marginBottom: 5 }}>
+            <span>الإجمالي</span>
+            <span>السعر</span>
+            <span>الوحدة</span>
+            <span>العدد</span>
+            <span>الأصل</span>
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "0.9fr 0.72fr 0.72fr 0.72fr 1fr", gap: 6, marginBottom: 8 }}>
+            <input readOnly value={Number(state.assets.cash || 0).toFixed(2)} placeholder="الإجمالي" style={{ ...G.inp(), padding: "9px 7px", fontSize: 11, color: "#cbd5e1" }} />
+            <input readOnly value="1" placeholder="السعر" style={{ ...G.inp(), padding: "9px 7px", fontSize: 11, color: "#94a3b8" }} />
+            <select value="د.أ" disabled style={{ ...G.inp(), padding: "9px 6px", fontSize: 11, opacity: 0.9 }}>
+              <option value="د.أ">د.أ</option>
+            </select>
+            <input
+              type="number"
+              value={Number(state.assets.cash || 0)}
+              onChange={(e) =>
+                setState((p) => ({
+                  ...p,
+                  assets: {
+                    ...p.assets,
+                    cash: Number(e.target.value || 0),
+                  },
+                }))
+              }
+              placeholder="الرصيد"
+              style={{ ...G.inp(), padding: "9px 7px", fontSize: 11 }}
+            />
+            <input readOnly value="كاش ادخار" placeholder="الأصل" style={{ ...G.inp(), padding: "9px 7px", fontSize: 11, color: "#cbd5e1" }} />
+          </div>
+
+          {(state.assets.banks || []).map((bank) => (
+            <div key={`bank-${bank.id}`} style={{ display: "grid", gridTemplateColumns: "0.9fr 0.72fr 0.72fr 0.72fr 1fr", gap: 6, marginBottom: 8 }}>
+              <input readOnly value={Number(bank.balance || 0).toFixed(2)} placeholder="الإجمالي" style={{ ...G.inp(), padding: "9px 7px", fontSize: 11, color: "#cbd5e1" }} />
+              <input readOnly value="1" placeholder="السعر" style={{ ...G.inp(), padding: "9px 7px", fontSize: 11, color: "#94a3b8" }} />
+              <select value="د.أ" disabled style={{ ...G.inp(), padding: "9px 6px", fontSize: 11, opacity: 0.9 }}>
+                <option value="د.أ">د.أ</option>
+              </select>
+              <input
+                type="number"
+                value={Number(bank.balance || 0)}
+                onChange={(e) => updateAssetItem("banks", bank.id, { balance: Number(e.target.value || 0) })}
+                placeholder="الرصيد"
+                style={{ ...G.inp(), padding: "9px 7px", fontSize: 11 }}
+              />
+              <input
+                value={bank.name || ""}
+                onChange={(e) => updateAssetItem("banks", bank.id, { name: e.target.value })}
+                placeholder="اسم البنك"
+                style={{ ...G.inp(), padding: "9px 7px", fontSize: 11 }}
+              />
+            </div>
+          ))}
+
+          {(state.assets.gold || []).map((item) =>
+            openingBalanceRow({
+              keyPrefix: "gold",
+              item,
+              group: "gold",
+              nameField: "label",
+              unitLabel: "غم",
+              priceField: "wac",
+              valueField: "العيار",
+            })
+          )}
+
+          {(state.assets.silver || []).map((item) =>
+            openingBalanceRow({
+              keyPrefix: "silver",
+              item,
+              group: "silver",
+              nameField: "label",
+              unitLabel: "غم",
+              priceField: "wac",
+              valueField: "فضة",
+            })
+          )}
+
+          {(state.assets.stocks || []).map((item) =>
+            openingBalanceRow({
+              keyPrefix: "stock",
+              item,
+              group: "stocks",
+              nameField: "name",
+              unitLabel: "سهم",
+              priceField: "wac",
+              valueField: "السهم",
+            })
+          )}
+
+          {(state.assets.custom || [])
+            .filter((item) => item.type === "unit")
+            .map((item) =>
+              openingBalanceRow({
+                keyPrefix: "custom",
+                item,
+                group: "custom",
+                nameField: "name",
+                unitLabel: "وحدة",
+                priceField: "price",
+                valueField: "الأصل",
+              })
+            )}
         </div>
-
-        <label style={{ fontSize: 11, color: "#64748b" }}>سعر غرام الذهب</label>
-        <input
-          type="number"
-          value={state.settings.market.goldGramPrice}
-          onChange={(e) =>
-            updateSetting(
-              "settings.market.goldGramPrice",
-              Number(e.target.value || 0)
-            )
-          }
-          style={{ ...G.inp(), marginBottom: 10 }}
-        />
-        <div
-  style={{
-    marginTop: 14,
-    paddingTop: 12,
-    borderTop: "1px solid #1a2540",
-  }}
->
-  <div
-    style={{
-      textAlign: "right",
-      marginBottom: 10,
-      color: "#a855f7",
-      fontWeight: 800,
-      fontSize: 13,
-    }}
-  >
-    📊 أسعار الأسهم
-  </div>
-
-  {state.assets.stocks.map((stock) => (
-    <div
-      key={stock.id}
-      style={{
-        display: "grid",
-        gridTemplateColumns: "1fr 1.2fr",
-        gap: 8,
-        alignItems: "center",
-        marginBottom: 8,
-      }}
-    >
-      <input
-        type="number"
-        value={stock.currentPrice || 0}
-        onChange={(e) => updateStockPrice(stock.id, e.target.value)}
-        placeholder="السعر الحالي"
-        style={G.inp()}
-      />
-
-      <div style={{ textAlign: "right" }}>
-        <div style={{ fontSize: 13, color: "#cbd5e1", fontWeight: 700 }}>
-          {stock.name}
-        </div>
-        <div style={{ fontSize: 10, color: "#64748b" }}>
-          عدد الأسهم: {Number(stock.units || 0).toFixed(4)} | WAC:{" "}
-          {Number(stock.wac || 0).toFixed(4)}
-        </div>
-      </div>
-    </div>
-  ))}
-
-  {!state.assets.stocks.length && (
-    <div
-      style={{
-        textAlign: "center",
-        color: "#64748b",
-        fontSize: 12,
-        padding: "10px 0",
-      }}
-    >
-      لا توجد أسهم مضافة بعد
-    </div>
-  )}
-</div>
-
-        <label style={{ fontSize: 11, color: "#64748b" }}>سعر غرام الفضة</label>
-        <input
-          type="number"
-          value={state.settings.market.silverGramPrice}
-          onChange={(e) =>
-            updateSetting(
-              "settings.market.silverGramPrice",
-              Number(e.target.value || 0)
-            )
-          }
-          style={G.inp()}
-        />
-
-        <button
-  onClick={onCloseMonth}
-  style={{
-    width: "100%",
-    marginTop: 16,
-    padding: "12px 14px",
-    borderRadius: 12,
-    border: "1px solid #f59e0b",
-    background: "transparent",
-    color: "#f59e0b",
-    fontWeight: 800,
-    cursor: "pointer",
-  }}
->
-  إغلاق الشهر وحفظ لقطة تاريخية
-</button>
+        )}
 <div style={{ fontSize: 12, color: "#94a3b8", marginTop: 8 }}>
   عدد اللقطات التاريخية المحفوظة: {(state.monthlySnapshots || []).length}
 
@@ -5099,23 +7139,87 @@ const deleteSettingsCreditCard = () => {
 
 }
 
-function ExtraCashModal({ onSubmit, onClose }) {
-  const [amount, setAmount] = useState("");
-  const [note, setNote] = useState("");
-  const [direction, setDirection] = useState("spendingCap");
+function ExtraCashModal({ state, onSubmit, onClose, preset = null }) {
+  const [amount, setAmount] = useState(preset?.amount ? String(preset.amount) : "");
+  const [note, setNote] = useState(preset?.note || "");
+  const [allocation, setAllocation] = useState("spendingCap");
+  const [targetId, setTargetId] = useState("");
+  const [assetName, setAssetName] = useState("");
+  const [units, setUnits] = useState("");
+  const [price, setPrice] = useState("");
+
+  const needsAssetName = ["bank", "stock", "gold", "silver", "goods", "fixed"].includes(allocation);
+  const needsUnits = ["stock", "gold", "silver", "goods"].includes(allocation);
+
+  const targetOptions =
+    allocation === "bank"
+      ? state.assets.banks || []
+      : allocation === "stock"
+      ? state.assets.stocks || []
+      : allocation === "gold"
+      ? [
+          ...(state.assets.gold || []),
+          ...["ذهب 21", "ذهب 24"]
+            .filter(
+              (label) =>
+                !(state.assets.gold || []).some(
+                  (item) => String(item.label || "").trim() === label
+                )
+            )
+            .map((label) => ({ id: `new:${label}`, label, isPreset: true })),
+        ]
+      : allocation === "silver"
+      ? state.assets.silver || []
+      : allocation === "goods"
+      ? (state.assets.custom || []).filter((item) => item.type === "unit")
+      : [];
+
+  const targetLabel = (item) => item.name || item.label || "";
+
+  const resetTarget = (value) => {
+    setAllocation(value);
+    setTargetId("");
+    setAssetName("");
+    setUnits("");
+    setPrice("");
+  };
 
   function submit() {
-    const n = Number(amount || 0);
+    const n = Number(preset?.lockedAmount ? preset.amount : amount || 0);
+    const unitCount = Number(units || 0);
+    const unitPrice = Number(price || 0);
 
     if (!n || n <= 0) {
       alert("أدخل مبلغًا صحيحًا");
       return;
     }
 
+    if (needsAssetName && !targetId && !assetName.trim()) {
+      alert("اختر أصلًا موجودًا أو اكتب اسم أصل جديد");
+      return;
+    }
+
+    if (needsUnits) {
+      if (unitCount <= 0 || unitPrice <= 0) {
+        alert("أدخل العدد والسعر لحساب متوسط التكلفة");
+        return;
+      }
+
+      if (Math.abs(unitCount * unitPrice - n) > 0.01) {
+        alert("قيمة الدخل يجب أن تساوي العدد × السعر");
+        return;
+      }
+    }
+
     onSubmit({
       amount: n,
       note,
-      direction,
+      allocation,
+      targetId,
+      assetName,
+      units: unitCount,
+      price: unitPrice,
+      source: preset?.source || "extra_income",
     });
   }
 
@@ -5144,13 +7248,14 @@ function ExtraCashModal({ onSubmit, onClose }) {
           textAlign: "right",
         }}
       >
-        <h3 style={{ marginTop: 0 }}>نقد إضافي</h3>
+        <h3 style={{ marginTop: 0 }}>{preset?.source === "salary_surplus" ? "توجيه فائض الراتب" : "دخل إضافي"}</h3>
 
-        <label style={{ display: "block", marginBottom: 6 }}>المبلغ</label>
+        <label style={{ display: "block", marginBottom: 6 }}>المبلغ الداخل</label>
         <input
           type="number"
           value={amount}
           onChange={(e) => setAmount(e.target.value)}
+          disabled={Boolean(preset?.lockedAmount)}
           placeholder="مثال: 300"
           style={{
             width: "100%",
@@ -5163,11 +7268,12 @@ function ExtraCashModal({ onSubmit, onClose }) {
           }}
         />
 
-        <label style={{ display: "block", marginBottom: 6 }}>الوصف</label>
+        <label style={{ display: "block", marginBottom: 6 }}>المصدر</label>
         <input
           value={note}
           onChange={(e) => setNote(e.target.value)}
-          placeholder="مثال: مكافأة، جائزة، دخل جانبي"
+          disabled={Boolean(preset?.lockedNote)}
+          placeholder="مثال: بونص، هدية، زيادة"
           style={{
             width: "100%",
             padding: 10,
@@ -5179,10 +7285,10 @@ function ExtraCashModal({ onSubmit, onClose }) {
           }}
         />
 
-        <label style={{ display: "block", marginBottom: 6 }}>اتجاه النقد</label>
+        <label style={{ display: "block", marginBottom: 6 }}>تخصيص الدخل</label>
         <select
-          value={direction}
-          onChange={(e) => setDirection(e.target.value)}
+          value={allocation}
+          onChange={(e) => resetTarget(e.target.value)}
           style={{
             width: "100%",
             padding: 10,
@@ -5193,9 +7299,108 @@ function ExtraCashModal({ onSubmit, onClose }) {
             color: "white",
           }}
         >
-          <option value="spendingCap">إضافة إلى سقف الصرف</option>
-          <option value="cash">إضافة إلى النقد / الكاش</option>
+          <option value="spendingCap">زيادة سقف الصرف</option>
+          <option value="cash">ادخار كاش احتياطي</option>
+          <option value="bank">حساب بنكي</option>
+          <option value="stock">أسهم</option>
+          <option value="gold">ذهب</option>
+          <option value="silver">فضة</option>
+          <option value="goods">بضاعة / وحدات</option>
+          <option value="fixed">أصل ثابت</option>
         </select>
+
+        {targetOptions.length > 0 && (
+          <select
+            value={targetId}
+            onChange={(e) => {
+              const value = e.target.value;
+              const preset = targetOptions.find((item) => String(item.id) === value && item.isPreset);
+              if (preset) {
+                setTargetId("");
+                setAssetName(preset.label);
+                return;
+              }
+              setTargetId(value);
+              setAssetName("");
+            }}
+            style={{
+              width: "100%",
+              padding: 10,
+              marginBottom: 10,
+              borderRadius: 10,
+              border: "1px solid #334155",
+              background: "#020617",
+              color: "white",
+            }}
+          >
+            <option value="">أصل جديد</option>
+            {targetOptions.map((item) => (
+              <option key={item.id} value={item.id}>
+                {targetLabel(item)}
+              </option>
+            ))}
+          </select>
+        )}
+
+        {needsAssetName && !targetId && (
+          <input
+            value={assetName}
+            onChange={(e) => setAssetName(e.target.value)}
+            placeholder={
+              allocation === "gold"
+                ? "مثال: ذهب 21"
+                : allocation === "silver"
+                ? "مثال: فضة"
+                : allocation === "stock"
+                ? "اسم السهم"
+                : allocation === "bank"
+                ? "اسم البنك"
+                : "اسم الأصل"
+            }
+            style={{
+              width: "100%",
+              padding: 10,
+              marginBottom: 10,
+              borderRadius: 10,
+              border: "1px solid #334155",
+              background: "#020617",
+              color: "white",
+            }}
+          />
+        )}
+
+        {needsUnits && (
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 12 }}>
+            <input
+              type="number"
+              value={units}
+              onChange={(e) => setUnits(e.target.value)}
+              placeholder={allocation === "stock" ? "عدد الأسهم" : "عدد الوحدات"}
+              style={{
+                width: "100%",
+                padding: 10,
+                borderRadius: 10,
+                border: "1px solid #334155",
+                background: "#020617",
+                color: "white",
+              }}
+            />
+            <input
+              type="number"
+              value={price}
+              onChange={(e) => setPrice(e.target.value)}
+              placeholder="سعر الشراء"
+              style={{
+                width: "100%",
+                padding: 10,
+                borderRadius: 10,
+                border: "1px solid #334155",
+                background: "#020617",
+                color: "white",
+              }}
+            />
+          </div>
+        )}
 
         <div style={{ display: "flex", gap: 8 }}>
           <button
@@ -5210,7 +7415,7 @@ function ExtraCashModal({ onSubmit, onClose }) {
               cursor: "pointer",
             }}
           >
-            تسجيل
+            حفظ
           </button>
 
           <button
@@ -5235,6 +7440,14 @@ function ExtraCashModal({ onSubmit, onClose }) {
 function getMonthKey(dateValue) {
   if (!dateValue) return "";
   return String(dateValue).slice(0, 7);
+}
+
+function formatMonthKey(monthKey) {
+  if (!monthKey) return "الشهر الحالي";
+  const [year, month] = String(monthKey).split("-").map(Number);
+  if (!year || !month) return String(monthKey);
+
+  return `${year}/${month}`;
 }
 
 function getNextMonthKey(monthKey) {
@@ -5291,6 +7504,7 @@ function buildMonthlySnapshot(state) {
   const nextMonth = getNextMonthKey(currentMonth);
 
   const structuralTotal = calcStructuralTotal(state);
+  const assetTotals = calcAssets(state);
 
   const currentPlan = buildCurrentLiabilityPlan(
     state.currentLiabilities || [],
@@ -5306,9 +7520,19 @@ function buildMonthlySnapshot(state) {
     salary: Number(state.settings?.salary || 0),
     spendingCap: Number(state.session?.spendingCap || state.settings?.spendingCap || 0),
 
+    expenses: structuredClone(state.expenses || []),
     expensesByCategory: buildExpensesByCategory(state.expenses || []),
+    extraCash: structuredClone(state.extraCash || []),
+    transactions: structuredClone(state.transactions || []),
+
+    assetTotals: {
+      totalAssets: assetTotals.totalAssets,
+      currentLiabilities: assetTotals.currentLiabilities,
+      netWorth: assetTotals.netWorth,
+    },
 
     assets: structuredClone(state.assets || {}),
+    assetHistory: structuredClone(state.assetHistory || []),
 
     liabilities: {
       structuralLiabilities: structuredClone(state.structuralLiabilities || []),
@@ -5322,17 +7546,87 @@ function buildMonthlySnapshot(state) {
   };
 }
 
+function getDueDateForMonth(item, monthKey) {
+  const day = Number(item.dueDay || (item.dueDate ? String(item.dueDate).split("-")[2] : 1) || 1);
+  const safeDay = Math.min(28, Math.max(1, day));
+  return `${monthKey}-${String(safeDay).padStart(2, "0")}`;
+}
+
+function closeMonthState(prev, targetMonth = new Date().toISOString().slice(0, 7)) {
+  const snapshot = buildMonthlySnapshot(prev);
+  const nextMonth = getNextMonthKey(prev.currentMonth || targetMonth);
+  const structuralTotal = calcStructuralTotal(prev);
+  const netSalary = Math.max(0, Number(prev.settings?.salary || 0) - structuralTotal);
+  const spendingCap = Number(prev.session?.spendingCap || 0);
+  const pendingSurplus = Math.max(0, netSalary - spendingCap);
+
+  const rolledCurrentLiabilities = (prev.currentLiabilities || [])
+    .filter((l) => l.status !== "paid")
+    .map((l) => ({
+      ...l,
+      dueDate: getDueDateForMonth(l, nextMonth),
+      dueDay: Number(l.dueDay || (l.dueDate ? String(l.dueDate).split("-")[2] : 1) || 1),
+      status: "pending",
+      paymentMethod: "",
+      newDueDate: "",
+      salaryPaidAmount: 0,
+      createdThisMonthPaidFromSalary: false,
+    }));
+
+  return {
+    ...prev,
+    monthlySnapshots: [
+      ...(prev.monthlySnapshots || []).filter((s) => s.month !== snapshot.month),
+      snapshot,
+    ],
+    currentMonth: nextMonth,
+    expenses: [],
+    extraCash: [],
+    session: {
+      ...prev.session,
+      coveredSpent: 0,
+      overBudgetSpent: 0,
+      pendingSurplus: Number(pendingSurplus.toFixed(2)),
+    },
+    structuralLiabilities: prev.structuralLiabilities || [],
+    currentLiabilities: rolledCurrentLiabilities,
+  };
+}
+
+function rollStateToCurrentMonth(state) {
+  const targetMonth = new Date().toISOString().slice(0, 7);
+  let next = state;
+  let guard = 0;
+
+  while (
+    String(next.currentMonth || targetMonth) < targetMonth &&
+    guard < 24
+  ) {
+    next = closeMonthState(next, targetMonth);
+    guard += 1;
+  }
+
+  return next;
+}
+
 export default function App() {
   const [state, setState] = useState(() => loadState() || INITIAL_STATE);
   const [tab, setTab] = useState("overview");
-  const [menuOpen, setMenuOpen] = useState(false);
   const [liabilitiesFocusDueOnly, setLiabilitiesFocusDueOnly] = useState(false);
     const [showExtraCash, setShowExtraCash] = useState(false);
+    const [extraCashPreset, setExtraCashPreset] = useState(null);
     const [selectedViewMonth, setSelectedViewMonth] = useState("current");
     useEffect(() => {
     saveState(state);
   }, [state]);
-  function handleExtraCashSubmit(data) {
+    useEffect(() => {
+    setState((prev) => rollStateToCurrentMonth(prev));
+    const timer = window.setInterval(() => {
+      setState((prev) => rollStateToCurrentMonth(prev));
+    }, 60 * 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+function handleExtraCashSubmit(data) {
   const amount = Number(data.amount || 0);
 
   if (!amount || amount <= 0) {
@@ -5341,31 +7635,170 @@ export default function App() {
   }
 
   setState((prev) => {
+    const now = new Date().toISOString();
+    const allocation = data.allocation || data.direction || "spendingCap";
+    const isSalarySurplus = data.source === "salary_surplus";
+    const targetName = String(data.assetName || data.note || "").trim();
+    const units = Number(data.units || 0);
+    const price = Number(data.price || 0);
+    const purchaseValue = units * price;
     const record = {
       id: Date.now(),
-      type: "extra_cash",
+      type: "positive_cash",
+      cashFlow: "positive",
       amount,
       note: data.note || "",
-      direction: data.direction,
-      date: new Date().toISOString(),
+      direction: allocation,
+      allocation,
+      date: now,
     };
 
     let next = {
-      ...prev,
-      extraCash: [...(prev.extraCash || []), record],
+      ...structuredClone(prev),
+      extraCash: isSalarySurplus ? prev.extraCash || [] : [...(prev.extraCash || []), record],
+      transactions: [...(prev.transactions || []), record],
+      assetHistory: [...(prev.assetHistory || [])],
     };
 
-    if (data.direction === "spendingCap") {
+    const addUnitAsset = ({ listName, idField = "id", nameField, type }) => {
+      if (units <= 0 || price <= 0) {
+        alert("أدخل العدد والسعر لحساب متوسط التكلفة");
+        return false;
+      }
+
+      if (Math.abs(purchaseValue - amount) > 0.01) {
+        alert("قيمة الشراء يجب أن تساوي الدخل الإضافي");
+        return false;
+      }
+
+      const list = next.assets[listName] || [];
+      const existing = data.targetId
+        ? list.find((item) => String(item[idField]) === String(data.targetId))
+        : list.find((item) => String(item[nameField] || "").trim() === targetName);
+
+      if (existing) {
+        const oldUnits = Number(existing.units || 0);
+        const oldAverage =
+          type === "custom" ? Number(existing.price || 0) : Number(existing.wac || 0);
+        const totalUnits = oldUnits + units;
+        const nextAverage =
+          totalUnits > 0
+            ? Number(((oldUnits * oldAverage + purchaseValue) / totalUnits).toFixed(4))
+            : price;
+
+        existing.units = Number(totalUnits.toFixed(4));
+        if (type === "custom") {
+          existing.price = nextAverage;
+        } else {
+          existing.wac = nextAverage;
+        }
+        if (listName === "stocks") existing.currentPrice = price;
+        next.assetHistory.push({
+          id: `${Date.now()}-${allocation}`,
+          date: now,
+          type: "buy_units",
+          source: "extra_income",
+          assetKind: listName,
+          assetId: existing.id,
+          assetName: existing.name || existing.label,
+          amount,
+          unitsAdded: units,
+          unitPrice: price,
+          unitsBefore: oldUnits,
+          unitsAfter: Number(totalUnits.toFixed(4)),
+          averageBefore: oldAverage,
+          averageAfter: nextAverage,
+          note: data.note || "",
+        });
+      } else {
+        if (!targetName) {
+          alert("أدخل اسم الأصل الجديد");
+          return false;
+        }
+
+        const id = Date.now();
+        if (listName === "stocks") {
+          list.push({
+            id,
+            name: targetName,
+            units,
+            wac: price,
+            currentPrice: price,
+          });
+        } else if (listName === "custom") {
+          list.push({
+            id,
+            name: targetName,
+            type: "unit",
+            units,
+            price,
+          });
+        } else {
+          list.push({
+            id,
+            label: targetName,
+            units,
+            wac: price,
+          });
+        }
+        next.assetHistory.push({
+          id: `${Date.now()}-${allocation}`,
+          date: now,
+          type: "buy_units",
+          source: "extra_income",
+          assetKind: listName,
+          assetId: id,
+          assetName: targetName,
+          amount,
+          unitsAdded: units,
+          unitPrice: price,
+          unitsBefore: 0,
+          unitsAfter: units,
+          averageBefore: 0,
+          averageAfter: price,
+          note: data.note || "",
+        });
+      }
+
+      next.assets[listName] = list;
+      return true;
+    };
+
+    if (allocation === "spendingCap") {
       next = {
         ...next,
         session: {
           ...next.session,
           spendingCap: Number(next.session.spendingCap || 0) + amount,
         },
+        expenses: [
+          ...(next.expenses || []),
+          {
+            id: Date.now() + 1,
+            amount: 0,
+            originalAmount: amount,
+            category: isSalarySurplus ? "فائض راتب موجه" : "نقد إضافي مدخل",
+            paymentMethod: "income",
+            note: data.note || (isSalarySurplus ? "فائض راتب إلى السقف" : "نقد إضافي مدخل"),
+            date: now.slice(0, 10),
+            createdAt: now,
+            budgetCovered: 0,
+            overBudget: 0,
+            isIncomeEntry: true,
+          },
+        ],
       };
+      next.assetHistory.push({
+        id: `${Date.now()}-spendingCap`,
+        date: now,
+        type: "income_to_spending_cap",
+        source: "extra_income",
+        amount,
+        note: data.note || "",
+      });
     }
 
-    if (data.direction === "cash") {
+    if (allocation === "cash") {
       next = {
         ...next,
         assets: {
@@ -5373,66 +7806,158 @@ export default function App() {
           cash: Number(next.assets?.cash || 0) + amount,
         },
       };
+      next.assetHistory.push({
+        id: `${Date.now()}-cash`,
+        date: now,
+        type: "income_to_cash",
+        source: "extra_income",
+        assetKind: "cash",
+        amount,
+        balanceAfter: next.assets.cash,
+        note: data.note || "",
+      });
+    }
+
+    if (allocation === "bank") {
+      const bankName = targetName;
+      if (!bankName && !data.targetId) {
+        alert("اختر حسابًا أو أدخل اسم بنك جديد");
+        return prev;
+      }
+
+      const existing = data.targetId
+        ? (next.assets.banks || []).find((bank) => String(bank.id) === String(data.targetId))
+        : (next.assets.banks || []).find((bank) => String(bank.name || "").trim() === bankName);
+
+      if (existing) {
+        existing.balance = Number((Number(existing.balance || 0) + amount).toFixed(2));
+        next.assetHistory.push({
+          id: `${Date.now()}-bank`,
+          date: now,
+          type: "income_to_bank",
+          source: "extra_income",
+          assetKind: "bank",
+          assetId: existing.id,
+          assetName: existing.name,
+          amount,
+          balanceAfter: existing.balance,
+          note: data.note || "",
+        });
+      } else {
+        const id = Date.now();
+        next.assets.banks.push({
+          id,
+          name: bankName,
+          balance: amount,
+        });
+        next.assetHistory.push({
+          id: `${Date.now()}-bank`,
+          date: now,
+          type: "income_to_bank",
+          source: "extra_income",
+          assetKind: "bank",
+          assetId: id,
+          assetName: bankName,
+          amount,
+          balanceAfter: amount,
+          note: data.note || "",
+        });
+      }
+    }
+
+    if (allocation === "stock") {
+      if (!addUnitAsset({ listName: "stocks", nameField: "name", type: "stock" })) return prev;
+    }
+
+    if (allocation === "gold") {
+      if (!addUnitAsset({ listName: "gold", nameField: "label", type: "metal" })) return prev;
+    }
+
+    if (allocation === "silver") {
+      if (!addUnitAsset({ listName: "silver", nameField: "label", type: "metal" })) return prev;
+    }
+
+    if (allocation === "goods") {
+      if (!addUnitAsset({ listName: "custom", nameField: "name", type: "custom" })) return prev;
+    }
+
+    if (allocation === "fixed") {
+      if (!targetName) {
+        alert("أدخل اسم الأصل");
+        return prev;
+      }
+
+      const existing = (next.assets.custom || []).find(
+        (item) => item.type === "fixed" && String(item.name || "").trim() === targetName
+      );
+
+      if (existing) {
+        existing.amount = Number((Number(existing.amount || 0) + amount).toFixed(2));
+        next.assetHistory.push({
+          id: `${Date.now()}-fixed`,
+          date: now,
+          type: "income_to_fixed_asset",
+          source: "extra_income",
+          assetKind: "fixed",
+          assetId: existing.id,
+          assetName: existing.name,
+          amount,
+          balanceAfter: existing.amount,
+          note: data.note || "",
+        });
+      } else {
+        const id = Date.now();
+        next.assets.custom.push({
+          id,
+          name: targetName,
+          type: "fixed",
+          amount,
+        });
+        next.assetHistory.push({
+          id: `${Date.now()}-fixed`,
+          date: now,
+          type: "income_to_fixed_asset",
+          source: "extra_income",
+          assetKind: "fixed",
+          assetId: id,
+          assetName: targetName,
+          amount,
+          balanceAfter: amount,
+          note: data.note || "",
+        });
+      }
+    }
+
+    next.transactions = (next.transactions || []).map((tx) =>
+      tx.id === record.id
+        ? {
+            ...tx,
+            allocation,
+            targetId: data.targetId || null,
+            assetName: targetName,
+            units: units || null,
+            price: price || null,
+            purchaseValue: purchaseValue || null,
+          }
+        : tx
+    );
+
+    if (isSalarySurplus) {
+      next.session = {
+        ...next.session,
+        pendingSurplus: 0,
+      };
     }
 
     return next;
   });
 
   setShowExtraCash(false);
+  setExtraCashPreset(null);
 }
 
 function handleCloseMonth() {
-  const confirmed = window.confirm(
-    "هل تريد إغلاق الشهر؟ سيتم حفظ لقطة تاريخية وترحيل البيانات للشهر التالي."
-  );
-
-  if (!confirmed) return;
-
-  setState((prev) => {
-    const snapshot = buildMonthlySnapshot(prev);
-
-    const nextMonth = getNextMonthKey(
-      prev.currentMonth || new Date().toISOString().slice(0, 7)
-    );
-
-    const currentPlan = buildCurrentLiabilityPlan(
-      prev.currentLiabilities || [],
-      nextMonth
-    );
-    const rolledCurrentLiabilities = (prev.currentLiabilities || [])
-  .filter((l) => l.status !== "paid")
-  .map((l) => ({
-    ...l,
-    paymentMethod: "",
-    newDueDate: "",
-    salaryPaidAmount: 0,
-    createdThisMonthPaidFromSalary: false,
-  }));
-
-    return {
-      ...prev,
-
-      monthlySnapshots: [
-  ...(prev.monthlySnapshots || []).filter((s) => s.month !== snapshot.month),
-  snapshot,
-],
-
-      currentMonth: nextMonth,
-
-      expenses: [],
-      extraCash: [],
-
-      session: {
-        ...prev.session,
-        coveredSpent: 0,
-        overBudgetSpent: 0,
-      },
-
-      structuralLiabilities: prev.structuralLiabilities || [],
-
-      currentLiabilities: rolledCurrentLiabilities,
-    };
-  });
+  setState((prev) => closeMonthState(prev));
 }
 
   
@@ -5444,11 +7969,28 @@ function handleCloseMonth() {
     { id: "settings", label: "الإعدادات" },
   ];
   const snapshots = state.monthlySnapshots || [];
+  const currentMonthLabel = formatMonthKey(state.currentMonth || new Date().toISOString().slice(0, 7));
 
 const selectedViewSnapshot =
   selectedViewMonth === "current"
     ? null
     : snapshots.find((snap) => snap.id === selectedViewMonth);
+const isSnapshotView = Boolean(selectedViewSnapshot);
+const visibleTabs = isSnapshotView
+  ? tabs.filter((item) => ["overview", "reports", "assets"].includes(item.id))
+  : tabs;
+const tabIcon = (id) => {
+  if (id === "overview") return "⌂";
+  if (id === "reports") return "◔";
+  if (id === "assets") return "◇";
+  if (id === "liabilities") return "▣";
+  return "⚙";
+};
+useEffect(() => {
+  if (isSnapshotView && !["overview", "reports", "assets"].includes(tab)) {
+    setTab("overview");
+  }
+}, [isSnapshotView, tab]);
     const viewState = selectedViewSnapshot
   ? {
       ...state,
@@ -5490,41 +8032,12 @@ const selectedViewSnapshot =
   style={{
     position: "relative",
     display: "grid",
-    gridTemplateColumns: "70px 1fr 150px",
+    gridTemplateColumns: "1fr 150px",
     alignItems: "center",
     marginBottom: 12,
     minHeight: 44,
   }}
 >
-<div
-  style={{
-    display: "flex",
-    justifyContent: "flex-start",
-    alignItems: "center",
-  }}
->
-  {!menuOpen && (
-    <button
-      onClick={() => setMenuOpen(true)}
-      style={{
-        width: 34,
-        height: 34,
-        borderRadius: 11,
-        border: "1px solid rgba(232, 201, 106, 0.18)",
-        background: "rgba(30, 41, 59, 0.9)",
-        color: "#e8c96a",
-        boxShadow: "none",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        fontSize: 18,
-        cursor: "pointer",
-      }}
-    >
-      ☰
-    </button>
-  )}
-</div>
   <div
     style={{
       display: "flex",
@@ -5546,15 +8059,31 @@ const selectedViewSnapshot =
       }}
     >
       <option value="current">
-        {state.settings?.month || state.currentMonth || "الشهر الحالي"}
+        {currentMonthLabel}
       </option>
 
       {snapshots.map((snap) => (
         <option key={snap.id} value={snap.id}>
-          {snap.month}
+          {formatMonthKey(snap.month)}
         </option>
       ))}
     </select>
+    {selectedViewSnapshot && (
+      <span
+        style={{
+          marginRight: 6,
+          color: "#fbbf24",
+          background: "rgba(251,191,36,0.1)",
+          border: "1px solid rgba(251,191,36,0.28)",
+          borderRadius: 999,
+          padding: "3px 7px",
+          fontSize: 9,
+          fontWeight: 800,
+        }}
+      >
+        عرض فقط
+      </span>
+    )}
   </div>
 
   <div
@@ -5588,11 +8117,11 @@ const selectedViewSnapshot =
         color: "#0f172a",
       }}
     >
-      ث
+      ◈
     </div>
   </div>
 </div>
-        <style>
+        {false && <style>
   {`
     @keyframes drawerIn {
       from {
@@ -5606,9 +8135,9 @@ const selectedViewSnapshot =
       }
     }
   `}
-</style>
+</style>}
 
-       <>
+       {false && <>
   
   {menuOpen && (
     <>
@@ -5679,7 +8208,7 @@ justifyContent: "flex-end",
         </div>
 
 <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
-            {tabs.map((t) => {
+            {visibleTabs.map((t) => {
             const icon =
               t.id === "overview"
                 ? "▦"
@@ -5735,46 +8264,120 @@ boxShadow:
       </div>
     </>
   )}
-</>
+</>}
 </div>
 
 {tab === "overview" && (
   <Overview
     state={viewState}
     setState={setState}
+    readOnly={isSnapshotView}
     onOpenReports={() => setTab("reports")}
     onOpenDueLiabilities={() => {
+      if (isSnapshotView) return;
       setLiabilitiesFocusDueOnly(true);
       setTab("liabilities");
+    }}
+    onAllocateSurplus={(amount) => {
+      setExtraCashPreset({
+        amount,
+        lockedAmount: true,
+        lockedNote: true,
+        note: "فائض راتب",
+        source: "salary_surplus",
+      });
+      setShowExtraCash(true);
     }}
   />
 )}
       {tab === "reports" && <ReportsScreen state={viewState} />}
       {tab === "assets" && (
   <AssetsScreen
-state={viewState}
+    state={viewState}
     setState={setState}
-    onAddExtraCash={() => setShowExtraCash(true)}
+    readOnly={isSnapshotView}
+    onAddExtraCash={() => {
+      setExtraCashPreset(null);
+      setShowExtraCash(true);
+    }}
   />
 )}
-     {tab === "liabilities" && (
+     {!isSnapshotView && tab === "liabilities" && (
   <LiabilitiesScreen
     state={viewState}
     setState={setState}
     focusDueOnly={liabilitiesFocusDueOnly}
   />
 )}
-      {tab === "settings" && (
+      {!isSnapshotView && tab === "settings" && (
   <SettingsScreen
     state={state}
     setState={setState}
     onCloseMonth={handleCloseMonth}
   />
 )}
-      {showExtraCash && (
+      <div
+        style={{
+          position: "fixed",
+          bottom: 0,
+          left: "50%",
+          transform: "translateX(-50%)",
+          width: "100%",
+          maxWidth: 440,
+          background: "rgba(12,21,37,0.96)",
+          borderTop: "1px solid #1e293b",
+          padding: "7px 8px calc(7px + env(safe-area-inset-bottom))",
+          display: "grid",
+          gridTemplateColumns: `repeat(${visibleTabs.length}, 1fr)`,
+          gap: 4,
+          zIndex: 520,
+          backdropFilter: "blur(10px)",
+        }}
+      >
+        {visibleTabs.map((item) => {
+          const active = tab === item.id;
+
+          return (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => {
+                setLiabilitiesFocusDueOnly(false);
+                setTab(item.id);
+              }}
+              style={{
+                border: active ? "1px solid rgba(232,201,106,0.45)" : "1px solid transparent",
+                background: active ? "rgba(232,201,106,0.12)" : "transparent",
+                color: active ? "#e8c96a" : "#94a3b8",
+                borderRadius: 12,
+                minHeight: 48,
+                padding: "5px 2px",
+                cursor: "pointer",
+                fontFamily: "inherit",
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 2,
+              }}
+            >
+              <span style={{ fontSize: 18, lineHeight: 1 }}>{tabIcon(item.id)}</span>
+              <span style={{ fontSize: 9, fontWeight: active ? 900 : 700, lineHeight: 1.2 }}>
+                {item.label}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+      {!isSnapshotView && showExtraCash && (
   <ExtraCashModal
+    state={state}
     onSubmit={handleExtraCashSubmit}
-    onClose={() => setShowExtraCash(false)}
+    onClose={() => {
+      setShowExtraCash(false);
+      setExtraCashPreset(null);
+    }}
+    preset={extraCashPreset}
   />
 )}
     </div>
