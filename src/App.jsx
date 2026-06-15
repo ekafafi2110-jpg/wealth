@@ -8,7 +8,7 @@ import {
 } from "recharts";
 import { INITIAL_STATE } from "./data/initialState";
 import { recordExpense } from "./logic/expenses";
-import { loadState, saveState, clearState } from "./storage/localStorage";
+import { loadState, saveState, clearState } from "./storage/supabaseStorage";
 import {
   calcAssets,
   calcBudget,
@@ -1628,9 +1628,14 @@ onClick={() => setSelectedExpense(e)}    style={{
 
       {!readOnly && (
       <button
-        onClick={() => {
-          clearState();
-          window.location.reload();
+        onClick={async () => {
+          try {
+            await clearState();
+            window.location.reload();
+          } catch (err) {
+            console.error("Clear Error:", err);
+            setStorageError("تعذر حذف البيانات من Supabase. لم يتم استخدام تخزين محلي.");
+          }
         }}
         style={G.btn("#7f1d1d", "#fff", { width: "100%" })}
       >
@@ -8080,22 +8085,50 @@ function rollStateToCurrentMonth(state) {
 }
 
 export default function App() {
-  const [state, setState] = useState(() => loadState() || INITIAL_STATE);
+  const [state, setState] = useState(INITIAL_STATE);
+  const [storageReady, setStorageReady] = useState(false);
+  const [storageError, setStorageError] = useState("");
   const [tab, setTab] = useState("overview");
   const [liabilitiesFocusDueOnly, setLiabilitiesFocusDueOnly] = useState(false);
     const [showExtraCash, setShowExtraCash] = useState(false);
     const [extraCashPreset, setExtraCashPreset] = useState(null);
     const [selectedViewMonth, setSelectedViewMonth] = useState("current");
     useEffect(() => {
-    saveState(state);
-  }, [state]);
+    let active = true;
+
+    loadState()
+      .then((storedState) => {
+        if (!active) return;
+        setState(storedState || INITIAL_STATE);
+        setStorageError("");
+        setStorageReady(true);
+      })
+      .catch((err) => {
+        console.error("Load Error:", err);
+        if (!active) return;
+        setStorageError("تعذر الاتصال بـ Supabase. تأكد من متغيرات Vercel وجدول wealth_app_state.");
+        setStorageReady(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
     useEffect(() => {
+    if (!storageReady) return;
+    saveState(state).catch((err) => {
+      console.error("Save Error:", err);
+      setStorageError("تعذر حفظ البيانات في Supabase. لم يتم استخدام تخزين محلي.");
+    });
+  }, [state, storageReady]);
+    useEffect(() => {
+    if (!storageReady) return undefined;
     setState((prev) => rollStateToCurrentMonth(prev));
     const timer = window.setInterval(() => {
       setState((prev) => rollStateToCurrentMonth(prev));
     }, 60 * 1000);
     return () => window.clearInterval(timer);
-  }, []);
+  }, [storageReady]);
 function handleExtraCashSubmit(data) {
   const amount = Number(data.amount || 0);
 
@@ -8429,6 +8462,36 @@ function handleExtraCashSubmit(data) {
 function handleCloseMonth() {
   setState((prev) => closeMonthState(prev));
 }
+
+  if (storageError) {
+    return (
+      <div
+        style={{
+          ...G.app,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: 18,
+        }}
+      >
+        <div
+          style={{
+            ...G.card(),
+            width: "100%",
+            textAlign: "right",
+            border: "1.5px solid var(--red-border)",
+            background: "var(--red-bg)",
+            color: "var(--text-body)",
+          }}
+        >
+          <div style={{ fontSize: 15, fontWeight: 800, color: "#D95555", marginBottom: 8 }}>
+            خطأ في الاتصال بقاعدة البيانات
+          </div>
+          <div style={{ fontSize: 13, lineHeight: 1.8 }}>{storageError}</div>
+        </div>
+      </div>
+    );
+  }
 
   
   const tabs = [
