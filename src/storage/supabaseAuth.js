@@ -1,5 +1,6 @@
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const AUTH_REDIRECT_URL = import.meta.env.VITE_AUTH_REDIRECT_URL;
 
 function assertConfigured() {
   if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
@@ -9,6 +10,28 @@ function assertConfigured() {
 
 function authEndpoint(path) {
   return `${SUPABASE_URL}/auth/v1/${path}`;
+}
+
+function currentAppUrl() {
+  if (AUTH_REDIRECT_URL) {
+    return AUTH_REDIRECT_URL;
+  }
+
+  if (typeof window !== "undefined" && window.location?.origin) {
+    return window.location.origin;
+  }
+
+  return "";
+}
+
+function authEndpointWithRedirect(path) {
+  const redirectUrl = currentAppUrl();
+
+  if (!redirectUrl) {
+    return authEndpoint(path);
+  }
+
+  return authEndpoint(`${path}?redirect_to=${encodeURIComponent(redirectUrl)}`);
 }
 
 function headers(extra = {}) {
@@ -44,7 +67,7 @@ export async function signInWithPassword(email, password) {
 export async function signUpWithPassword(email, password) {
   assertConfigured();
 
-  const response = await fetch(authEndpoint("signup"), {
+  const response = await fetch(authEndpointWithRedirect("signup"), {
     method: "POST",
     headers: headers(),
     body: JSON.stringify({ email, password }),
@@ -56,7 +79,7 @@ export async function signUpWithPassword(email, password) {
 export async function resetPasswordForEmail(email) {
   assertConfigured();
 
-  const response = await fetch(authEndpoint("recover"), {
+  const response = await fetch(authEndpointWithRedirect("recover"), {
     method: "POST",
     headers: headers(),
     body: JSON.stringify({ email }),
