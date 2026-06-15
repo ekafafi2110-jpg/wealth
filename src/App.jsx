@@ -9,6 +9,8 @@ import {
 import { INITIAL_STATE } from "./data/initialState";
 import { recordExpense } from "./logic/expenses";
 import {
+  authErrorMessage,
+  getSessionFromUrl,
   resetPasswordForEmail,
   signInWithPassword,
   signUpWithPassword,
@@ -8108,6 +8110,27 @@ export default function App() {
     useEffect(() => {
     let active = true;
 
+    getSessionFromUrl()
+      .then((session) => {
+        if (!active || !session) return;
+        setAuthSession(session);
+        setAuthPassword("");
+        setAuthError("");
+        setAuthNotice("");
+      })
+      .catch((err) => {
+        console.error("Auth Redirect Error:", err);
+        if (!active) return;
+        setAuthError(authErrorMessage(err));
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
+    useEffect(() => {
+    let active = true;
+
     if (!authSession) {
       setStorageReady(false);
       setStorageError("");
@@ -8508,7 +8531,7 @@ async function handleAuthSubmit(ev) {
     setAuthPassword("");
   } catch (err) {
     console.error("Auth Error:", err);
-    setAuthError("تعذر تسجيل الدخول. تأكد من البريد وكلمة المرور.");
+    setAuthError(authErrorMessage(err));
   } finally {
     setAuthLoading(false);
   }
@@ -8532,7 +8555,7 @@ async function handlePasswordReset() {
     setAuthNotice("تم إرسال رابط استعادة كلمة المرور إلى بريدك الإلكتروني.");
   } catch (err) {
     console.error("Password Reset Error:", err);
-    setAuthError("تعذر إرسال رابط استعادة كلمة المرور.");
+    setAuthError(authErrorMessage(err));
   } finally {
     setAuthLoading(false);
   }
