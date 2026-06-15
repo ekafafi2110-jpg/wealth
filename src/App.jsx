@@ -8775,11 +8775,6 @@ const isSnapshotView = Boolean(selectedViewSnapshot);
 const visibleTabs = isSnapshotView
   ? tabs.filter((item) => ["overview", "reports", "assets"].includes(item.id))
   : tabs;
-useEffect(() => {
-  if (isSnapshotView && !["overview", "reports", "assets"].includes(tab)) {
-    setTab("overview");
-  }
-}, [isSnapshotView, tab]);
     const viewState = selectedViewSnapshot
   ? {
       ...state,
