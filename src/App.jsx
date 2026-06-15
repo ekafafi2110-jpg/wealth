@@ -8,7 +8,11 @@ import {
 } from "recharts";
 import { INITIAL_STATE } from "./data/initialState";
 import { recordExpense } from "./logic/expenses";
-import { signInWithPassword, signUpWithPassword } from "./storage/supabaseAuth";
+import {
+  resetPasswordForEmail,
+  signInWithPassword,
+  signUpWithPassword,
+} from "./storage/supabaseAuth";
 import { loadState, saveState, clearState } from "./storage/supabaseStorage";
 import {
   calcAssets,
@@ -8510,6 +8514,30 @@ async function handleAuthSubmit(ev) {
   }
 }
 
+async function handlePasswordReset() {
+  setAuthError("");
+  setAuthNotice("");
+
+  const email = authEmail.trim();
+
+  if (!email) {
+    setAuthError("أدخل البريد الإلكتروني أولاً.");
+    return;
+  }
+
+  setAuthLoading(true);
+
+  try {
+    await resetPasswordForEmail(email);
+    setAuthNotice("تم إرسال رابط استعادة كلمة المرور إلى بريدك الإلكتروني.");
+  } catch (err) {
+    console.error("Password Reset Error:", err);
+    setAuthError("تعذر إرسال رابط استعادة كلمة المرور.");
+  } finally {
+    setAuthLoading(false);
+  }
+}
+
   if (!authSession) {
     return (
       <div
@@ -8531,6 +8559,10 @@ async function handleAuthSubmit(ev) {
         >
           <div style={{ fontSize: 15, fontWeight: 800, color: "var(--text-heading)", marginBottom: 12 }}>
             تسجيل الدخول
+          </div>
+
+          <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 12, lineHeight: 1.7 }}>
+            يرجى تسجيل الدخول أو إنشاء حساب للبدء
           </div>
 
           <input
@@ -8594,6 +8626,24 @@ async function handleAuthSubmit(ev) {
             }}
           >
             {authMode === "signup" ? "لدي حساب" : "إنشاء حساب جديد"}
+          </button>
+
+          <button
+            type="button"
+            onClick={handlePasswordReset}
+            disabled={authLoading}
+            style={{
+              marginTop: 8,
+              width: "100%",
+              border: "none",
+              background: "transparent",
+              color: "var(--text-muted)",
+              fontFamily: "inherit",
+              fontWeight: 700,
+              cursor: "pointer",
+            }}
+          >
+            استعادة كلمة المرور
           </button>
         </form>
       </div>
@@ -8771,7 +8821,7 @@ useEffect(() => {
         fontFamily: "inherit",
       }}
     >
-      خروج
+      تسجيل خروج
     </button>
   </div>
 

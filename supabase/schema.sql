@@ -12,10 +12,20 @@ add column if not exists user_id uuid references auth.users(id) on delete cascad
 alter table public.wealth_app_state
 add column if not exists state_key text not null default 'main';
 
+delete from public.wealth_app_state
+where user_id is null;
+
+alter table public.wealth_app_state
+alter column user_id set not null;
+
+alter table public.wealth_app_state
+alter column state_key set not null;
+
 create unique index if not exists wealth_app_state_user_state_key_idx
 on public.wealth_app_state (user_id, state_key);
 
 alter table public.wealth_app_state enable row level security;
+alter table public.wealth_app_state force row level security;
 
 drop policy if exists "wealth_app_state_select" on public.wealth_app_state;
 drop policy if exists "wealth_app_state_insert" on public.wealth_app_state;

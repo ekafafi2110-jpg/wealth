@@ -52,3 +52,15 @@ export async function signUpWithPassword(email, password) {
 
   return readAuthResponse(response);
 }
+
+export async function resetPasswordForEmail(email) {
+  assertConfigured();
+
+  const response = await fetch(authEndpoint("recover"), {
+    method: "POST",
+    headers: headers(),
+    body: JSON.stringify({ email }),
+  });
+
+  return readAuthResponse(response);
+}
