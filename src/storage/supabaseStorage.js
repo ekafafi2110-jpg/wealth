@@ -1,6 +1,6 @@
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
-const STATE_ROW_ID = import.meta.env.VITE_SUPABASE_STATE_ROW_ID || "main";
+const STATE_KEY = import.meta.env.VITE_SUPABASE_STATE_ROW_ID || "main";
 const TABLE_NAME = "wealth_app_state";
 
 function isConfigured() {
@@ -17,25 +17,38 @@ function endpoint(query = "") {
   return `${SUPABASE_URL}/rest/v1/${TABLE_NAME}${query}`;
 }
 
-function headers(extra = {}) {
+function assertSession(session) {
+  if (!session?.access_token || !session?.user?.id) {
+    throw new Error("Supabase user session is missing.");
+  }
+}
+
+function stateRowId(userId) {
+  return `${userId}:${STATE_KEY}`;
+}
+
+function headers(session, extra = {}) {
   return {
     apikey: SUPABASE_ANON_KEY,
-    Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+    Authorization: `Bearer ${session.access_token}`,
     "Content-Type": "application/json",
     ...extra,
   };
 }
 
-export async function saveState(state) {
+export async function saveState(state, session) {
   assertConfigured();
+  assertSession(session);
 
   const response = await fetch(endpoint("?on_conflict=id"), {
     method: "POST",
-    headers: headers({
+    headers: headers(session, {
       Prefer: "resolution=merge-duplicates",
     }),
     body: JSON.stringify({
-      id: STATE_ROW_ID,
+      id: stateRowId(session.user.id),
+      user_id: session.user.id,
+      state_key: STATE_KEY,
       state,
       updated_at: new Date().toISOString(),
     }),
@@ -46,13 +59,16 @@ export async function saveState(state) {
   }
 }
 
-export async function loadState() {
+export async function loadState(session) {
   assertConfigured();
+  assertSession(session);
 
   const response = await fetch(
-    endpoint(`?select=state&id=eq.${encodeURIComponent(STATE_ROW_ID)}&limit=1`),
+    endpoint(
+      `?select=state&user_id=eq.${encodeURIComponent(session.user.id)}&state_key=eq.${encodeURIComponent(STATE_KEY)}&limit=1`
+    ),
     {
-      headers: headers(),
+      headers: headers(session),
     }
   );
 
@@ -64,14 +80,17 @@ export async function loadState() {
   return rows?.[0]?.state || null;
 }
 
-export async function clearState() {
+export async function clearState(session) {
   assertConfigured();
+  assertSession(session);
 
   const response = await fetch(
-    endpoint(`?id=eq.${encodeURIComponent(STATE_ROW_ID)}`),
+    endpoint(
+      `?user_id=eq.${encodeURIComponent(session.user.id)}&state_key=eq.${encodeURIComponent(STATE_KEY)}`
+    ),
     {
       method: "DELETE",
-      headers: headers(),
+      headers: headers(session),
     }
   );
 

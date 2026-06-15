@@ -8,6 +8,7 @@ import {
 } from "recharts";
 import { INITIAL_STATE } from "./data/initialState";
 import { recordExpense } from "./logic/expenses";
+import { signInWithPassword, signUpWithPassword } from "./storage/supabaseAuth";
 import { loadState, saveState, clearState } from "./storage/supabaseStorage";
 import {
   calcAssets,
@@ -1630,7 +1631,7 @@ onClick={() => setSelectedExpense(e)}    style={{
       <button
         onClick={async () => {
           try {
-            await clearState();
+            await clearState(authSession);
             window.location.reload();
           } catch (err) {
             console.error("Clear Error:", err);
@@ -8088,6 +8089,13 @@ export default function App() {
   const [state, setState] = useState(INITIAL_STATE);
   const [storageReady, setStorageReady] = useState(false);
   const [storageError, setStorageError] = useState("");
+  const [authSession, setAuthSession] = useState(null);
+  const [authMode, setAuthMode] = useState("signin");
+  const [authEmail, setAuthEmail] = useState("");
+  const [authPassword, setAuthPassword] = useState("");
+  const [authError, setAuthError] = useState("");
+  const [authNotice, setAuthNotice] = useState("");
+  const [authLoading, setAuthLoading] = useState(false);
   const [tab, setTab] = useState("overview");
   const [liabilitiesFocusDueOnly, setLiabilitiesFocusDueOnly] = useState(false);
     const [showExtraCash, setShowExtraCash] = useState(false);
@@ -8096,7 +8104,16 @@ export default function App() {
     useEffect(() => {
     let active = true;
 
-    loadState()
+    if (!authSession) {
+      setStorageReady(false);
+      setStorageError("");
+      setState(INITIAL_STATE);
+      return () => {
+        active = false;
+      };
+    }
+
+    loadState(authSession)
       .then((storedState) => {
         if (!active) return;
         setState(storedState || INITIAL_STATE);
@@ -8113,14 +8130,14 @@ export default function App() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [authSession]);
     useEffect(() => {
-    if (!storageReady) return;
-    saveState(state).catch((err) => {
+    if (!storageReady || !authSession) return;
+    saveState(state, authSession).catch((err) => {
       console.error("Save Error:", err);
       setStorageError("تعذر حفظ البيانات في Supabase. لم يتم استخدام تخزين محلي.");
     });
-  }, [state, storageReady]);
+  }, [state, storageReady, authSession]);
     useEffect(() => {
     if (!storageReady) return undefined;
     setState((prev) => rollStateToCurrentMonth(prev));
@@ -8463,6 +8480,126 @@ function handleCloseMonth() {
   setState((prev) => closeMonthState(prev));
 }
 
+async function handleAuthSubmit(ev) {
+  ev.preventDefault();
+  setAuthError("");
+  setAuthNotice("");
+  setAuthLoading(true);
+
+  try {
+    const email = authEmail.trim();
+    const password = authPassword;
+    const result =
+      authMode === "signup"
+        ? await signUpWithPassword(email, password)
+        : await signInWithPassword(email, password);
+
+    if (!result.access_token) {
+      setAuthNotice("تم إنشاء الحساب. تحقق من البريد الإلكتروني ثم سجل الدخول.");
+      setAuthMode("signin");
+      return;
+    }
+
+    setAuthSession(result);
+    setAuthPassword("");
+  } catch (err) {
+    console.error("Auth Error:", err);
+    setAuthError("تعذر تسجيل الدخول. تأكد من البريد وكلمة المرور.");
+  } finally {
+    setAuthLoading(false);
+  }
+}
+
+  if (!authSession) {
+    return (
+      <div
+        style={{
+          ...G.app,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: 18,
+        }}
+      >
+        <form
+          onSubmit={handleAuthSubmit}
+          style={{
+            ...G.card(),
+            width: "100%",
+            textAlign: "right",
+          }}
+        >
+          <div style={{ fontSize: 15, fontWeight: 800, color: "var(--text-heading)", marginBottom: 12 }}>
+            تسجيل الدخول
+          </div>
+
+          <input
+            type="email"
+            value={authEmail}
+            onChange={(e) => setAuthEmail(e.target.value)}
+            placeholder="البريد الإلكتروني"
+            required
+            style={{ ...G.inp(), marginBottom: 10 }}
+          />
+
+          <input
+            type="password"
+            value={authPassword}
+            onChange={(e) => setAuthPassword(e.target.value)}
+            placeholder="كلمة المرور"
+            required
+            minLength={6}
+            style={{ ...G.inp(), marginBottom: 12 }}
+          />
+
+          {authError && (
+            <div style={{ color: "#D95555", fontSize: 12, marginBottom: 10 }}>
+              {authError}
+            </div>
+          )}
+
+          {authNotice && (
+            <div style={{ color: "#2A9E60", fontSize: 12, marginBottom: 10 }}>
+              {authNotice}
+            </div>
+          )}
+
+          <button
+            type="submit"
+            disabled={authLoading}
+            style={G.btn("linear-gradient(135deg,var(--gold-primary),var(--gold-border))", "var(--text-heading)", {
+              width: "100%",
+              opacity: authLoading ? 0.7 : 1,
+            })}
+          >
+            {authLoading ? "جاري الدخول" : authMode === "signup" ? "إنشاء حساب" : "دخول"}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setAuthMode(authMode === "signup" ? "signin" : "signup");
+              setAuthError("");
+              setAuthNotice("");
+            }}
+            style={{
+              marginTop: 10,
+              width: "100%",
+              border: "none",
+              background: "transparent",
+              color: "var(--gold-dark)",
+              fontFamily: "inherit",
+              fontWeight: 700,
+              cursor: "pointer",
+            }}
+          >
+            {authMode === "signup" ? "لدي حساب" : "إنشاء حساب جديد"}
+          </button>
+        </form>
+      </div>
+    );
+  }
+
   if (storageError) {
     return (
       <div
@@ -8614,6 +8751,28 @@ useEffect(() => {
         عرض فقط
       </span>
     )}
+    <button
+      type="button"
+      onClick={() => {
+        setAuthSession(null);
+        setStorageReady(false);
+        setStorageError("");
+      }}
+      style={{
+        marginRight: 6,
+        border: "1px solid var(--border-soft)",
+        background: "var(--bg-secondary)",
+        color: "var(--text-muted)",
+        borderRadius: 999,
+        padding: "5px 8px",
+        fontSize: 10,
+        fontWeight: 700,
+        cursor: "pointer",
+        fontFamily: "inherit",
+      }}
+    >
+      خروج
+    </button>
   </div>
 
   <div
