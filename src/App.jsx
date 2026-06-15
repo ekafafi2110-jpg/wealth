@@ -8091,6 +8091,59 @@ function rollStateToCurrentMonth(state) {
   return next;
 }
 
+function hydrateAppState(storedState) {
+  if (!storedState || typeof storedState !== "object" || Array.isArray(storedState)) {
+    return INITIAL_STATE;
+  }
+
+  return {
+    ...INITIAL_STATE,
+    ...storedState,
+    settings: {
+      ...INITIAL_STATE.settings,
+      ...(storedState.settings || {}),
+      market: {
+        ...INITIAL_STATE.settings.market,
+        ...(storedState.settings?.market || {}),
+      },
+    },
+    assets: {
+      ...INITIAL_STATE.assets,
+      ...(storedState.assets || {}),
+      banks: Array.isArray(storedState.assets?.banks) ? storedState.assets.banks : [],
+      gold: Array.isArray(storedState.assets?.gold) ? storedState.assets.gold : [],
+      silver: Array.isArray(storedState.assets?.silver) ? storedState.assets.silver : [],
+      stocks: Array.isArray(storedState.assets?.stocks) ? storedState.assets.stocks : [],
+      custom: Array.isArray(storedState.assets?.custom) ? storedState.assets.custom : [],
+    },
+    expenseCategories: {
+      ...INITIAL_STATE.expenseCategories,
+      ...(storedState.expenseCategories || {}),
+      items: Array.isArray(storedState.expenseCategories?.items)
+        ? storedState.expenseCategories.items
+        : [],
+    },
+    session: {
+      ...INITIAL_STATE.session,
+      ...(storedState.session || {}),
+    },
+    extraCash: Array.isArray(storedState.extraCash) ? storedState.extraCash : [],
+    structuralLiabilities: Array.isArray(storedState.structuralLiabilities)
+      ? storedState.structuralLiabilities
+      : [],
+    currentLiabilities: Array.isArray(storedState.currentLiabilities)
+      ? storedState.currentLiabilities
+      : [],
+    expenses: Array.isArray(storedState.expenses) ? storedState.expenses : [],
+    transactions: Array.isArray(storedState.transactions) ? storedState.transactions : [],
+    monthlySnapshots: Array.isArray(storedState.monthlySnapshots)
+      ? storedState.monthlySnapshots
+      : [],
+    assetHistory: Array.isArray(storedState.assetHistory) ? storedState.assetHistory : [],
+    currentMonth: storedState.currentMonth || INITIAL_STATE.currentMonth,
+  };
+}
+
 export default function App() {
   const [state, setState] = useState(INITIAL_STATE);
   const [storageReady, setStorageReady] = useState(false);
@@ -8143,7 +8196,7 @@ export default function App() {
     loadState(authSession)
       .then((storedState) => {
         if (!active) return;
-        setState(storedState || INITIAL_STATE);
+        setState(hydrateAppState(storedState));
         setStorageError("");
         setStorageReady(true);
       })
