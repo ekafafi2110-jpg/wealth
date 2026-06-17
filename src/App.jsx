@@ -2393,85 +2393,137 @@ flexDirection: "column",
   </div>
 </div>
             <div
-              style={{
-                marginBottom: 12,
-                background: "var(--bg-secondary)",
-                border: "1px solid var(--border-soft)",
-                borderRadius: 12,
-                padding: 10,
-              }}
-            >
-              <div
-                style={{
-                  height: 7,
-                  background: "var(--bg-page)",
-                  borderRadius: 99,
-                  overflow: "hidden",
-                  marginBottom: 10,
-                }}
-              >
-                <div
-                  style={{
-                    width: `${spendingProgress}%`,
-                    height: "100%",
-                    background:
-                      spendingProgress >= 100
-                        ? "#D95555"
-                        : "linear-gradient(135deg,var(--gold-primary),var(--gold-border))",
-                    borderRadius: 99,
-                  }}
-                />
-              </div>
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "repeat(3, 1fr)",
-                  gap: 7,
-                }}
-              >
-                {["1", "2", "3", "4", "5", "6", "7", "8", "9", ".", "0"].map((digit) => (
-                  <button
-                    key={digit}
-                    type="button"
-                    onClick={() => appendAmountDigit(digit)}
-                    style={G.btn("var(--bg-card)", "var(--text-heading)", {
-                      minHeight: 38,
-                      padding: "8px",
-                      fontSize: 15,
-                      fontWeight: 900,
-                    })}
-                  >
-                    {digit}
-                  </button>
-                ))}
-                <button
-                  type="button"
-                  onClick={() => setAmount((prev) => String(prev || "").slice(0, -1))}
-                  style={G.btn("var(--bg-card)", "var(--text-muted)", {
-                    minHeight: 38,
-                    padding: "8px",
-                    fontSize: 13,
-                    fontWeight: 900,
-                  })}
-                >
-                  حذف
-                </button>
-              </div>
-              <button
-                type="button"
-                onClick={addPendingExpense}
-                style={G.btn("var(--bg-card)", "var(--gold-border)", {
-                  width: "100%",
-                  minHeight: 38,
-                  marginTop: 7,
-                  padding: "8px",
-                  fontSize: 13,
-                  fontWeight: 900,
-                })}
-              >
-                إضافة
-              </button>
-            </div>
+  style={{
+    marginBottom: 12,
+    background: "var(--bg-secondary)",
+    border: "1px solid var(--border-soft)",
+    borderRadius: 12,
+    padding: 10,
+  }}
+>
+  <div
+    style={{
+      height: 7,
+      background: "var(--bg-page)",
+      borderRadius: 99,
+      overflow: "hidden",
+      marginBottom: 10,
+    }}
+  >
+    <div
+      style={{
+        width: `${spendingProgress}%`,
+        height: "100%",
+        background:
+          spendingProgress >= 100
+            ? "#D95555"
+            : "linear-gradient(135deg,var(--gold-primary),var(--gold-border))",
+        borderRadius: 99,
+      }}
+    />
+  </div>
+
+  <div
+    style={{
+      display: "grid",
+      gridTemplateColumns: "1fr 92px",
+      gap: 8,
+      direction: "ltr",
+      alignItems: "stretch",
+    }}
+  >
+    <div
+      style={{
+        display: "grid",
+        gridTemplateColumns: "repeat(3, 1fr)",
+        gap: 7,
+      }}
+    >
+      {[
+        { label: "1", action: () => appendAmountDigit("1") },
+        { label: "2", action: () => appendAmountDigit("2") },
+        { label: "3", action: () => appendAmountDigit("3") },
+        { label: "4", action: () => appendAmountDigit("4") },
+        { label: "5", action: () => appendAmountDigit("5") },
+        { label: "6", action: () => appendAmountDigit("6") },
+        { label: "7", action: () => appendAmountDigit("7") },
+        { label: "8", action: () => appendAmountDigit("8") },
+        { label: "9", action: () => appendAmountDigit("9") },
+        { label: ".", action: () => appendAmountDigit(".") },
+        { label: "0", action: () => appendAmountDigit("0") },
+        {
+          label: "⌫",
+          action: () => setAmount((prev) => String(prev || "").slice(0, -1)),
+        },
+      ].map((key) => (
+        <button
+          key={key.label}
+          type="button"
+          onClick={key.action}
+          style={G.btn("var(--bg-card)", "var(--text-heading)", {
+            minHeight: 44,
+            padding: "9px",
+            fontSize: key.label === "⌫" ? 18 : 16,
+            fontWeight: 900,
+          })}
+        >
+          {key.label}
+        </button>
+      ))}
+    </div>
+
+    <div
+      style={{
+        display: "grid",
+        gridTemplateRows: "44px 1fr",
+        gap: 7,
+      }}
+    >
+            <button
+        type="button"
+        title={note ? `ملاحظة: ${note}` : "ملاحظة"}
+        aria-label="ملاحظة"
+        onClick={() => {
+          const nextNote = window.prompt("اكتب ملاحظة المصروف", note || "");
+          if (nextNote !== null) {
+            setNote(nextNote);
+          }
+        }}
+        style={G.btn(note ? "rgba(22,163,74,0.14)" : "var(--bg-card)", "#16a34a", {
+          minHeight: 44,
+          padding: "9px",
+          fontSize: 22,
+          fontWeight: 900,
+          border: note
+            ? "1px solid rgba(22,163,74,0.55)"
+            : "1px solid rgba(22,163,74,0.25)",
+        })}
+      >
+        📝
+      </button>
+
+      <button
+        type="button"
+        onClick={addPendingExpense}
+        style={G.btn("linear-gradient(135deg,#22c55e,#16a34a)", "#fff", {
+          width: "100%",
+          minHeight: 139,
+          padding: "10px",
+          fontSize: 14,
+          fontWeight: 900,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          flexDirection: "column",
+          gap: 6,
+        })}
+      >
+        <span style={{ fontSize: 26, lineHeight: 1 }}>+</span>
+        <span>إضافة</span>
+      </button>
+    </div>
+  </div>
+</div>
           <div style={{ display: "none" }}>
  
 {showUnusualPicker && (
@@ -3098,12 +3150,14 @@ flexDirection: "column",
               </div>
             )}
 
-            <input
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-              placeholder="ملاحظة"
-              style={{ ...G.inp(), marginBottom: 12 }}
-            />
+                        {false && (
+              <input
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+                placeholder="ملاحظة"
+                style={{ ...G.inp(), marginBottom: 12 }}
+              />
+            )}
 
             <button
               type="button"
