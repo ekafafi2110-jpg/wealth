@@ -1564,9 +1564,11 @@ function toggleExpenseCategoryPinned(catId) {
               marginBottom: 8,
             }}
           >
-            <div
+                        <div
               style={{
                 gridColumn: 1,
+                gridRow: 1,
+                zIndex: 1,
                 display: "flex",
                 justifyContent: "flex-start",
               }}
@@ -1577,43 +1579,44 @@ function toggleExpenseCategoryPinned(catId) {
                   onClick={onOpenDueLiabilities}
                   title="الالتزامات المستحقة هذا الشهر"
                   aria-label="الالتزامات المستحقة هذا الشهر"
-                  style={{
-                    position: "relative",
-                    width: 34,
-                    height: 34,
-                    borderRadius: 14,
-                    border: "1px solid rgba(239,68,68,0.14)",
-                    background: "rgba(239,68,68,0.06)",
-                    color: "#dc2626",
-                    display: "inline-flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    cursor: "pointer",
-                    fontSize: 18,
-                    fontWeight: 900,
-                    fontFamily: "inherit",
-                    boxShadow: "0 6px 14px rgba(239,68,68,0.07)",
-                  }}
+                 style={{
+  position: "relative",
+  width: 30,
+  height: 30,
+  borderRadius: 12,
+  border: "1px solid rgba(214,174,70,0.16)",
+  background: "rgba(255,255,255,0.38)",
+  color: "var(--gold-dark)",
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  cursor: "pointer",
+  fontSize: 15,
+  fontWeight: 900,
+  fontFamily: "inherit",
+  boxShadow: "inset 0 1px 0 rgba(255,255,255,0.42)",
+}}
                 >
                   🔔
                   <span
                     style={{
-                      position: "absolute",
-                      top: -6,
-                      right: -6,
-                      minWidth: 17,
-                      height: 17,
-                      padding: "0 5px",
-                      borderRadius: 999,
-                      background: "#ef4444",
-                      color: "#fff",
-                      display: "inline-flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      fontSize: 10,
-                      fontWeight: 900,
-                      lineHeight: 1,
-                    }}
+  position: "absolute",
+  top: -5,
+  right: -5,
+  minWidth: 16,
+  height: 16,
+  padding: "0 4px",
+  borderRadius: 999,
+  background: "#ef4444",
+  color: "#fff",
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  fontSize: 9,
+  fontWeight: 900,
+  lineHeight: 1,
+  boxShadow: "0 1px 4px rgba(239,68,68,0.18)",
+}}
                   >
                     {dueCurrentLiabilities.length}
                   </span>
@@ -1621,71 +1624,28 @@ function toggleExpenseCategoryPinned(catId) {
               )}
             </div>
 
-            <div
+                                              <div
               style={{
-                gridColumn: 2,
+                gridColumn: "1 / 4",
+                gridRow: 1,
+                width: "100%",
+                boxSizing: "border-box",
+                paddingInline: 48,
+                transform: "translateX(-55px)",
                 textAlign: "center",
                 fontSize: 14,
                 fontWeight: 800,
                 color: "var(--text-muted)",
                 letterSpacing: "0.2px",
+                pointerEvents: "none",
               }}
             >
               سقف الصرف الشهري
             </div>
-
             <div style={{ gridColumn: 3 }} />
           </div>
 
-            {Number(dueCurrentLiabilities.length || 0) > 0 && (
-              <button
-                type="button"
-                onClick={onOpenDueLiabilities}
-                title="الالتزامات المستحقة"
-                aria-label="الالتزامات المستحقة"
-                style={{
-                  position: "relative",
-                  width: 36,
-                  height: 36,
-                  borderRadius: 12,
-                  border: "1px solid rgba(239,68,68,0.22)",
-                  background: "rgba(239,68,68,0.08)",
-                  color: "#dc2626",
-                  display: "inline-flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  cursor: "pointer",
-                  fontSize: 18,
-                  fontWeight: 900,
-                  fontFamily: "inherit",
-                  flex: "0 0 auto",
-                }}
-              >
-                🔔
-                <span
-                  style={{
-                    position: "absolute",
-                    top: -5,
-                    right: -5,
-                    minWidth: 18,
-                    height: 18,
-                    padding: "0 5px",
-                    borderRadius: 999,
-                    background: "#dc2626",
-                    color: "#fff",
-                    display: "inline-flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    fontSize: 10,
-                    fontWeight: 900,
-                    lineHeight: 1,
-                    boxShadow: "0 2px 6px rgba(220,38,38,0.28)",
-                  }}
-                >
-                  {Number(dueCurrentLiabilities.length || 0)}
-                </span>
-              </button>
-            )}
+          
           </div>
 
           <div
@@ -1706,19 +1666,20 @@ function toggleExpenseCategoryPinned(catId) {
             {spendingProgress.toFixed(0)}%
           </div>
 
-          <div
+                   <div
             style={{
-              display: "grid",
-              gridTemplateColumns: "1fr auto",
-              gap: 10,
-              alignItems: "center",
+              display: "flex",
+              flexDirection: "column",
+              gap: 6,
               direction: "ltr",
+              width: "100%",
             }}
           >
             <div
               style={{
                 position: "relative",
                 height: 34,
+                width: "100%",
                 borderRadius: 999,
                 background:
                   "linear-gradient(180deg, rgba(255,255,255,0.55), rgba(148,163,184,0.14))",
@@ -1784,26 +1745,20 @@ function toggleExpenseCategoryPinned(catId) {
 
             <div
               style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 6,
-                padding: "6px 10px",
-                borderRadius: 999,
-                background: "rgba(255,255,255,0.78)",
-                border: "1px solid rgba(148,163,184,0.16)",
-                color: "var(--text-heading)",
-                fontSize: 14,
-                fontWeight: 900,
+                alignSelf: "flex-end",
+                color: "var(--text-muted)",
+                fontSize: 11,
+                fontWeight: 800,
                 fontVariantNumeric: "tabular-nums",
-                whiteSpace: "nowrap",
-                boxShadow: "0 1px 3px rgba(15,23,42,0.06)",
+                lineHeight: 1,
+                paddingInlineEnd: 2,
               }}
             >
-              <span style={{ fontSize: 13, lineHeight: 1 }}>🎯</span>
-              <span>{spendingCapValue.toFixed(0)} د.أ</span>
+              {spendingCapValue.toFixed(0)}
             </div>
           </div>
-          {budget.overBudgetSpent > 0 && (
+          
+                    {budget.overBudgetSpent > 0 && (
             <div
               style={{
                 marginTop: 12,
@@ -2131,6 +2086,140 @@ function toggleExpenseCategoryPinned(catId) {
               })}
             </div>
           </div>
+                    {(paymentMethod === "card" ||
+            paymentMethod === "asset" ||
+            paymentMethod === "liability" ||
+            paymentMethod === "emergency") && (
+            <div
+              style={{
+                marginBottom: 10,
+                background: "var(--bg-secondary)",
+                border: "1px solid var(--border-soft)",
+                borderRadius: 14,
+                padding: 10,
+              }}
+            >
+              {paymentMethod === "card" && (
+                <select
+                  value={cardId}
+                  onChange={(e) => setCardId(e.target.value)}
+                  style={{ ...G.inp(), marginBottom: 0 }}
+                >
+                  <option value="">اختر البطاقة</option>
+                  {cards.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name} — الرصيد {Number(c.balance || 0).toFixed(2)}
+                    </option>
+                  ))}
+                </select>
+              )}
+
+              {paymentMethod === "asset" && (
+                <select
+                  value={assetPaymentKey}
+                  onChange={(e) => setAssetPaymentKey(e.target.value)}
+                  style={{ ...G.inp(), marginBottom: 0 }}
+                >
+                  {assetSources.map((s) => (
+                    <option key={s.key} value={s.key}>
+                      {s.label} — متاح {Number(s.available || 0).toFixed(2)} د.أ
+                    </option>
+                  ))}
+                </select>
+              )}
+
+              {paymentMethod === "liability" && (
+                <>
+                  <input
+                    value={liabilityName}
+                    onChange={(e) => setLiabilityName(e.target.value)}
+                    placeholder="اسم الالتزام"
+                    style={{ ...G.inp(), marginBottom: 8 }}
+                  />
+
+                  <input
+                    type="date"
+                    value={dueDate}
+                    onChange={(e) => setDueDate(e.target.value)}
+                    style={{ ...G.inp(), marginBottom: 0 }}
+                  />
+                </>
+              )}
+
+              {paymentMethod === "emergency" && (
+                <>
+                  <select
+                    value={unusualFundingMode}
+                    onChange={(e) => setUnusualFundingMode(e.target.value)}
+                    style={{ ...G.inp(), marginBottom: 8 }}
+                  >
+                    <option value="asset">كاملًا من أصل</option>
+                    <option value="liability">كاملًا كدين</option>
+                    {hasSpendingCap && (
+                      <option value="mix">جزء من السقف والباقي من أصل أو دين</option>
+                    )}
+                  </select>
+
+                  {unusualFundingMode === "mix" && (
+                    <>
+                      <input
+                        type="number"
+                        value={unusualCapAmount}
+                        onChange={(e) => setUnusualCapAmount(e.target.value)}
+                        placeholder="الجزء من سقف الصرف"
+                        style={{ ...G.inp(), marginBottom: 8 }}
+                      />
+
+                      <select
+                        value={unusualRemainderSource}
+                        onChange={(e) => setUnusualRemainderSource(e.target.value)}
+                        style={{ ...G.inp(), marginBottom: 8 }}
+                      >
+                        <option value="asset">الباقي من أصل</option>
+                        <option value="liability">الباقي كدين</option>
+                      </select>
+                    </>
+                  )}
+
+                  {(unusualFundingMode === "asset" ||
+                    (unusualFundingMode === "mix" &&
+                      unusualRemainderSource === "asset")) && (
+                    <select
+                      value={unusualAssetKey}
+                      onChange={(e) => setUnusualAssetKey(e.target.value)}
+                      style={{ ...G.inp(), marginBottom: 8 }}
+                    >
+                      {assetSources.map((s) => (
+                        <option key={s.key} value={s.key}>
+                          {s.label} — متاح {Number(s.available || 0).toFixed(2)} د.أ
+                        </option>
+                      ))}
+                    </select>
+                  )}
+
+                  {(unusualFundingMode === "liability" ||
+                    (unusualFundingMode === "mix" &&
+                      unusualRemainderSource === "liability")) && (
+                    <>
+                      <input
+                        value={unusualLiabilityName}
+                        onChange={(e) => setUnusualLiabilityName(e.target.value)}
+                        placeholder="اسم الدين"
+                        style={{ ...G.inp(), marginBottom: 8 }}
+                      />
+
+                      <input
+                        type="date"
+                        value={unusualDueDate}
+                        onChange={(e) => setUnusualDueDate(e.target.value)}
+                        style={{ ...G.inp(), marginBottom: 0 }}
+                      />
+                    </>
+                  )}
+                </>
+              )}
+            </div>
+          )}
 
           <div
             style={{
