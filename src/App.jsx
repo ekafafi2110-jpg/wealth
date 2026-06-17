@@ -814,6 +814,7 @@ function Overview({
   onOpenReports,
   onOpenDueLiabilities,
   onAllocateSurplus,
+  onClearState,
   readOnly = false,
 }) {
   const budget = calcBudget(state);
@@ -826,6 +827,8 @@ function Overview({
   const [paymentMethod, setPaymentMethod] = useState("cash");
   const [cardId, setCardId] = useState("");
   const [note, setNote] = useState("");
+const pendingExpenses = [];
+const setPendingExpenses = () => {};
   const [liabilityName, setLiabilityName] = useState("");
   const [dueDate, setDueDate] = useState("");
 
@@ -887,7 +890,7 @@ const allExpenseCategories = [
 
 const pinnedExpenseCategories = allExpenseCategories
   .filter((cat) => cat.pinned && !cat.isOther)
-  .slice(0, 12);
+  .slice(0, 9);
 
 const otherExpenseCategory =
   allExpenseCategories.find((cat) => cat.isOther) || {
@@ -901,6 +904,30 @@ const otherExpenseCategory =
 
 const mainExpenseCategories = pinnedExpenseCategories;
   const enteredAmount = Number(amount || 0);
+  const pendingTotal = pendingExpenses.reduce(
+    (sum, item) => sum + Number(item.amount || 0),
+    0
+  );
+  const pendingCount = pendingExpenses.length;
+  const pendingByCategory = pendingExpenses.reduce((acc, item) => {
+    acc[item.category] = Number((Number(acc[item.category] || 0) + Number(item.amount || 0)).toFixed(2));
+    return acc;
+  }, {});
+  const displayOverBudget =
+    ["emergency", "asset"].includes(paymentMethod)
+      ? 0
+      : Math.max(0, enteredAmount - Number(budget.remainingCap || 0));
+  const spendingProgress =
+    Number(budget.spendingCap || 0) > 0
+      ? Math.min(100, (Number(budget.coveredSpent || 0) / Number(budget.spendingCap || 0)) * 100)
+      : 0;
+  const saveButtonTitle = "تسجيل المصروف";
+  const saveButtonMeta =
+    pendingCount === 0
+      ? ""
+      : pendingCount === 1
+      ? `قائمة مؤقتة: ${pendingTotal.toFixed(2)} د.أ | 1 عنصر`
+      : `قائمة مؤقتة: ${pendingTotal.toFixed(2)} د.أ | ${pendingCount} عناصر`;
   const selectedExpenseTotal = Number(
     selectedExpense?.originalAmount ?? selectedExpense?.amount ?? 0
   );
@@ -927,7 +954,102 @@ useEffect(() => {
   }
 }, [hasSpendingCap, paymentMethod, unusualFundingMode]);
 
+  const resetExpenseDraft = () => {
+    setAmount("");
+    setCategory("طعام");
+    setPaymentMethod("cash");
+    setCardId("");
+    setNote("");
+    setPendingExpenses([]);
+    setLiabilityName("");
+    setDueDate("");
+    setOverBudgetSource("liability");
+    setOverBudgetAssetKey("cash");
+    setAssetPaymentKey("cash");
+    setOverBudgetLiabilityName("تجاوز سقف الصرف");
+    setOverBudgetDueDate("");
+    setIsUnusualExpense(false);
+    setShowUnusualPicker(false);
+    setUnusualFundingMode("asset");
+    setUnusualCapAmount("");
+    setUnusualRemainderSource("asset");
+    setUnusualAssetKey("cash");
+    setUnusualLiabilityName("مصروف طارئ");
+    setUnusualDueDate("");
+  };
+
+  const closeExpenseSheet = () => {
+    if (pendingExpenses.length > 0) {
+      const ok = window.confirm("لديك مصروفات غير مسجلة. هل تريد إلغائها والخروج؟");
+      if (!ok) return;
+    }
+
+    resetExpenseDraft();
+    setShowExpense(false);
+  };
+
+  const appendAmountDigit = (digit) => {
+    setAmount((prev) => {
+      const next = String(prev || "");
+      if (digit === "." && next.includes(".")) return next;
+      if (digit === "." && !next) return "0.";
+      if (next === "0" && digit !== ".") return String(digit);
+      return `${next}${digit}`;
+    });
+  };
+
+  const addPendingExpense = () => {
+    const value = Number(amount || 0);
+
+    if (!value || value <= 0) return;
+
+    setPendingExpenses((prev) => [
+      ...prev,
+      {
+        id: `${Date.now()}-${prev.length}`,
+        category,
+        amount: value,
+        note,
+      },
+    ]);
+    setAmount("");
+    setNote("");
+  };
+
+  const changePaymentMethod = (value) => {
+    if (pendingExpenses.length > 0 && value !== paymentMethod) {
+      alert("لديك مصروفات غير مسجلة. سجلها أولاً أو قم بإلغائها قبل تغيير طريقة الدفع.");
+      return;
+    }
+
+    if (value === "emergency") {
+      setPaymentMethod(value);
+      setIsUnusualExpense(true);
+      setUnusualFundingMode("asset");
+      setShowUnusualPicker(false);
+      return;
+    }
+
+    setPaymentMethod(value);
+    setIsUnusualExpense(false);
+    setUnusualFundingMode("");
+    setShowUnusualPicker(false);
+  };
+
+  const paymentOptions = [
+    ...(hasSpendingCap ? [{ value: "cash", label: "كاش", icon: "💵" }] : []),
+    { value: "asset", label: "أصل", icon: "🏦" },
+    { value: "card", label: "بطاقة", icon: "💳" },
+    { value: "liability", label: "التزام", icon: "🧾" },
+    { value: "emergency", label: "طارئ", icon: "⚡" },
+  ];
+
   const submitExpense = () => {
+    if (!enteredAmount || enteredAmount <= 0) {
+      alert("أدخل مبلغًا صحيحًا");
+      return;
+    }
+
     if (paymentMethod === "liability" && !dueDate) {
   alert("أدخل تاريخ استحقاق الدين المباشر");
   return;
@@ -1043,7 +1165,6 @@ useEffect(() => {
     }
 
     let nextState = result.nextState;
-
 const lastExpense =
   nextState.expenses[nextState.expenses.length - 1];
 
@@ -1105,28 +1226,8 @@ nextState.currentLiabilities.push({
 }
 
 setState(nextState);
+    resetExpenseDraft();
     setShowExpense(false);
-
-    setAmount("");
-    setCategory("طعام");
-    setPaymentMethod("cash");
-    setCardId("");
-    setNote("");
-    setLiabilityName("");
-    setDueDate("");
-setOverBudgetSource("liability");
-setOverBudgetAssetKey("cash");
-setAssetPaymentKey("cash");
-setOverBudgetLiabilityName("تجاوز سقف الصرف");
-setOverBudgetDueDate("");
-setIsUnusualExpense(false);
-setShowUnusualPicker(false);
-setUnusualFundingMode("asset");
-setUnusualCapAmount("");
-setUnusualRemainderSource("asset");
-setUnusualAssetKey("cash");
-setUnusualLiabilityName("مصروف طارئ");
-setUnusualDueDate("");
   };
   function cancelExpense(expenseId) {
   const ok = window.confirm("هل تريد إلغاء هذا المصروف وعكس أثره المالي؟");
@@ -1322,8 +1423,8 @@ function toggleExpenseCategoryPinned(catId) {
       (cat) => cat.pinned && !cat.isOther
     ).length;
 
-    if (!target.pinned && pinnedCount >= 12) {
-      alert("الحد الأقصى للشاشة الرئيسية هو 12 نوعًا");
+    if (!target.pinned && pinnedCount >= 9) {
+      alert("اكتمل العدد في قائمة المصاريف الرئيسية. قم بإلغاء تثبيت أحد المصاريف أولاً لإضافة مصروف جديد.");
       return prev;
     }
 
@@ -1635,15 +1736,7 @@ onClick={() => setSelectedExpense(e)}    style={{
 
       {!readOnly && (
       <button
-        onClick={async () => {
-          try {
-            await clearState(authSession);
-            window.location.reload();
-          } catch (err) {
-            console.error("Clear Error:", err);
-            setStorageError("تعذر حذف البيانات من Supabase. لم يتم استخدام تخزين محلي.");
-          }
-        }}
+        onClick={onClearState}
         style={G.btn("#7f1d1d", "#fff", { width: "100%" })}
       >
         تصفير البيانات التجريبية
@@ -1958,7 +2051,7 @@ flexDirection: "column",
 )}
       {showExpense && (
         <div
-          onClick={(e) => e.target === e.currentTarget && setShowExpense(false)}
+          onClick={(e) => e.target === e.currentTarget && closeExpenseSheet()}
           style={{
             position: "fixed",
             inset: 0,
@@ -2000,7 +2093,7 @@ flexDirection: "column",
               }}
             >
               <button
-                onClick={() => setShowExpense(false)}
+                onClick={closeExpenseSheet}
                 style={G.btn("var(--bg-secondary)", "var(--text-muted)", {
                   padding: "7px 12px",
                   borderRadius: 10,
@@ -2022,6 +2115,86 @@ flexDirection: "column",
               placeholder="المبلغ"
               style={{ ...G.inp(), marginBottom: 10, fontSize: 22 }}
             />
+            <div
+              style={{
+                marginBottom: 12,
+                background: "var(--bg-secondary)",
+                border: "1px solid var(--border-soft)",
+                borderRadius: 12,
+                padding: 10,
+              }}
+            >
+              <div
+                style={{
+                  height: 7,
+                  background: "var(--bg-page)",
+                  borderRadius: 99,
+                  overflow: "hidden",
+                  marginBottom: 10,
+                }}
+              >
+                <div
+                  style={{
+                    width: `${spendingProgress}%`,
+                    height: "100%",
+                    background:
+                      spendingProgress >= 100
+                        ? "#D95555"
+                        : "linear-gradient(135deg,var(--gold-primary),var(--gold-border))",
+                    borderRadius: 99,
+                  }}
+                />
+              </div>
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(3, 1fr)",
+                  gap: 7,
+                }}
+              >
+                {["1", "2", "3", "4", "5", "6", "7", "8", "9", ".", "0"].map((digit) => (
+                  <button
+                    key={digit}
+                    type="button"
+                    onClick={() => appendAmountDigit(digit)}
+                    style={G.btn("var(--bg-card)", "var(--text-heading)", {
+                      minHeight: 38,
+                      padding: "8px",
+                      fontSize: 15,
+                      fontWeight: 900,
+                    })}
+                  >
+                    {digit}
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => setAmount((prev) => String(prev || "").slice(0, -1))}
+                  style={G.btn("var(--bg-card)", "var(--text-muted)", {
+                    minHeight: 38,
+                    padding: "8px",
+                    fontSize: 13,
+                    fontWeight: 900,
+                  })}
+                >
+                  حذف
+                </button>
+              </div>
+              <button
+                type="button"
+                onClick={addPendingExpense}
+                style={G.btn("var(--bg-card)", "var(--gold-border)", {
+                  width: "100%",
+                  minHeight: 38,
+                  marginTop: 7,
+                  padding: "8px",
+                  fontSize: 13,
+                  fontWeight: 900,
+                })}
+              >
+                إضافة
+              </button>
+            </div>
           <div style={{ display: "none" }}>
  
 {showUnusualPicker && (
@@ -2268,7 +2441,7 @@ flexDirection: "column",
     }}
   >
     ⚠️ هذا المصروف يتجاوز سقف الصرف بمبلغ{" "}
-    {expectedOverBudget.toFixed(2)} د.أ
+    {displayOverBudget.toFixed(2)} د.أ
   </div>
 )}{false && expectedOverBudget > 0 && paymentMethod === "cash" && (
   <div
@@ -2369,6 +2542,8 @@ flexDirection: "column",
   const cat = catItem.label;
   const active = category === cat;
   const tile = getCategoryTileStyle(cat);
+  const pendingAmount = Number(pendingByCategory[cat] || 0);
+  const hasPending = pendingAmount > 0;
 
   return (
     <button
@@ -2386,10 +2561,12 @@ flexDirection: "column",
 minHeight: 42,
 width: "auto",
 borderRadius: 10,
-border: active
+  border: hasPending
+    ? "1px solid var(--gold-border)"
+    : active
   ? "1px solid var(--gold-border)"
   : "1px solid transparent",
-background: active ? "var(--gold-light)" : "var(--bg-page)",
+background: hasPending ? "rgba(232,201,106,0.18)" : active ? "var(--gold-light)" : "var(--bg-page)",
 color: "var(--text-body)",
 display: "flex",
 flexDirection: "column",
@@ -2408,7 +2585,7 @@ fontWeight: 700,
           width: 24,
           height: 24,
           borderRadius: 8,
-          background: catItem.isOther ? "var(--bg-secondary)" : tile.bg,
+          background: hasPending ? "var(--gold-primary)" : catItem.isOther ? "var(--bg-secondary)" : tile.bg,
           color: catItem.isOther ? "var(--text-muted)" : tile.icon,
           display: "flex",
           alignItems: "center",
@@ -2420,7 +2597,7 @@ fontWeight: 700,
       >
 {catItem.isOther ? "⚙️" : catItem.icon || CAT_ICONS[cat] || "📌"}      </span>
       <span style={{ fontSize: 9, color: "var(--text-muted)", textAlign: "center", lineHeight: 1.1 }}>
-{catItem.isOther ? "إدارة" : cat}      </span>
+{hasPending ? `${pendingAmount.toFixed(2)}` : catItem.isOther ? "إدارة" : cat}      </span>
     </button>
   );
 })}
@@ -2485,29 +2662,14 @@ fontWeight: 700,
             <label style={{ fontSize: 11, color: "var(--text-faint)" }}>طريقة الدفع</label>
             <select
               value={paymentMethod}
-onChange={(e) => {
-  const value = e.target.value;
-
-  if (value === "emergency") {
-    setPaymentMethod(value);
-    setIsUnusualExpense(true);
-    setUnusualFundingMode("asset");
-    setShowUnusualPicker(false);
-    return;
-  }
-
-  setPaymentMethod(value);
-  setIsUnusualExpense(false);
-  setUnusualFundingMode("");
-  setShowUnusualPicker(false);
-}}
+onChange={(e) => changePaymentMethod(e.target.value)}
 style={{ ...G.inp(), marginBottom: 10 }}
             >
-              {hasSpendingCap && <option value="cash">نقدا</option>}
-              <option value="asset">من أصل</option>
-              <option value="card">بطاقة</option>
-              <option value="liability">دين / التزام جديد</option>
-              <option value="emergency">مصروف طارئ</option>
+              {paymentOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.icon} {option.label}
+                </option>
+              ))}
             </select>
             {paymentMethod === "emergency" && isUnusualExpense && (
   <div
@@ -2816,7 +2978,12 @@ style={{ ...G.inp(), marginBottom: 10 }}
                 display: "block",
               })}
             >
-              ✓ تسجيل المصروف
+              <span style={{ display: "block" }}>✓ {saveButtonTitle}</span>
+              {saveButtonMeta && (
+                <span style={{ display: "block", marginTop: 3, fontSize: 11, fontWeight: 700 }}>
+                  {saveButtonMeta}
+                </span>
+              )}
             </button>
           </div>
         </div>
@@ -8560,6 +8727,16 @@ function handleCloseMonth() {
   setState((prev) => closeMonthState(prev));
 }
 
+async function handleClearState() {
+  try {
+    await clearState(authSession);
+    window.location.reload();
+  } catch (err) {
+    console.error("Clear Error:", err);
+    setStorageError("تعذر حذف البيانات من Supabase. لم يتم استخدام تخزين محلي.");
+  }
+}
+
 async function handleAuthSubmit(ev) {
   ev.preventDefault();
   setAuthError("");
@@ -8613,6 +8790,30 @@ async function handlePasswordReset() {
     setAuthLoading(false);
   }
 }
+
+  const tabs = [
+    { id: "settings", label: "الإعدادات" },
+    { id: "reports", label: "التقارير" },
+    { id: "overview", label: "الرئيسية" },
+    { id: "assets", label: "الأصول" },
+    { id: "liabilities", label: "الخصوم" },
+  ];
+  const snapshots = state.monthlySnapshots || [];
+  const currentMonthLabel = formatMonthKey(state.currentMonth || new Date().toISOString().slice(0, 7));
+
+const selectedViewSnapshot =
+  selectedViewMonth === "current"
+    ? null
+    : snapshots.find((snap) => snap.id === selectedViewMonth);
+const isSnapshotView = Boolean(selectedViewSnapshot);
+const visibleTabs = isSnapshotView
+  ? tabs.filter((item) => ["overview", "reports", "assets"].includes(item.id))
+  : tabs;
+useEffect(() => {
+  if (isSnapshotView && !["overview", "reports", "assets"].includes(tab)) {
+    setTab("overview");
+  }
+}, [isSnapshotView, tab]);
 
   if (!authSession) {
     return (
@@ -8756,30 +8957,6 @@ async function handlePasswordReset() {
     );
   }
 
-  
-  const tabs = [
-    { id: "settings", label: "الإعدادات" },
-    { id: "reports", label: "التقارير" },
-    { id: "overview", label: "الرئيسية" },
-    { id: "assets", label: "الأصول" },
-    { id: "liabilities", label: "الخصوم" },
-  ];
-  const snapshots = state.monthlySnapshots || [];
-  const currentMonthLabel = formatMonthKey(state.currentMonth || new Date().toISOString().slice(0, 7));
-
-const selectedViewSnapshot =
-  selectedViewMonth === "current"
-    ? null
-    : snapshots.find((snap) => snap.id === selectedViewMonth);
-const isSnapshotView = Boolean(selectedViewSnapshot);
-const visibleTabs = isSnapshotView
-  ? tabs.filter((item) => ["overview", "reports", "assets"].includes(item.id))
-  : tabs;
-useEffect(() => {
-  if (isSnapshotView && !["overview", "reports", "assets"].includes(tab)) {
-    setTab("overview");
-  }
-}, [isSnapshotView, tab]);
     const viewState = selectedViewSnapshot
   ? {
       ...state,
@@ -9095,6 +9272,7 @@ boxShadow:
               setLiabilitiesFocusDueOnly(true);
               setTab("liabilities");
             }}
+            onClearState={handleClearState}
             onAllocateSurplus={(amount) => {
               setExtraCashPreset({
                 amount,
