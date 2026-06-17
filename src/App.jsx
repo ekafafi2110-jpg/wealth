@@ -406,45 +406,127 @@ function Tag({ label, col }) {
 }
 
 function SpendBar({ spent, cap }) {
-  const pct = cap > 0 ? Math.min(100, Math.round((spent / cap) * 100)) : 0;
-  const col = pct >= 100 ? "#F07A7A" : pct >= 70 ? "#E8A44A" : "#60C698";
+  const safeSpent = Number(spent || 0);
+  const safeCap = Number(cap || 0);
+  const remaining = Math.max(0, safeCap - safeSpent);
+  const pct = safeCap > 0 ? Math.min(100, Math.round((safeSpent / safeCap) * 100)) : 0;
+  const remainingRatio = safeCap > 0 ? remaining / safeCap : 0;
+
+  const col =
+    remainingRatio > 0.5
+      ? "linear-gradient(90deg,#22c55e,#16a34a)"
+      : remainingRatio > 0.2
+      ? "linear-gradient(90deg,#f59e0b,#f97316)"
+      : "linear-gradient(90deg,#ef4444,#dc2626)";
+
+  const pctColor =
+    remainingRatio > 0.5
+      ? "#16a34a"
+      : remainingRatio > 0.2
+      ? "#f59e0b"
+      : "#dc2626";
 
   return (
-    <div>
+    <div style={{ width: "100%" }}>
       <div
         style={{
-          display: "flex",
-          justifyContent: "space-between",
+          textAlign: "center",
           fontSize: 12,
-          marginBottom: 5,
+          fontWeight: 900,
+          color: pctColor,
+          marginBottom: 6,
+          fontVariantNumeric: "tabular-nums",
         }}
       >
-        <span style={{ color: "var(--text-faint)" }}>
-          {spent.toFixed(2)} / {cap.toFixed(2)} د.أ
-        </span>
-        <span style={{ color: col, fontWeight: 700 }}>{pct}%</span>
+        {pct}%
       </div>
+
       <div
         style={{
-          background: "var(--bg-secondary)",
-          borderRadius: 4,
-          height: 7,
+          position: "relative",
+          width: "100%",
+          height: 32,
+          borderRadius: 999,
+          background:
+            "linear-gradient(180deg, rgba(255,255,255,0.82), rgba(148,163,184,0.16))",
           overflow: "hidden",
+          boxShadow:
+            "inset 0 1px 2px rgba(255,255,255,0.65), inset 0 -1px 3px rgba(15,23,42,0.08)",
         }}
       >
         <div
           style={{
-            height: "100%",
+            position: "absolute",
+            top: 0,
+            bottom: 0,
+            right: 0,
             width: `${pct}%`,
             background: col,
-            borderRadius: 4,
+            borderRadius: 999,
+            boxShadow:
+              "inset 0 1px 0 rgba(255,255,255,0.35), 0 4px 12px rgba(34,197,94,0.14)",
+            transition: "width 0.25s ease",
           }}
         />
+
+        <div
+          style={{
+            position: "relative",
+            zIndex: 1,
+            height: "100%",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            padding: "0 10px",
+            direction: "ltr",
+            fontSize: 12,
+            fontWeight: 900,
+            fontVariantNumeric: "tabular-nums",
+          }}
+        >
+          <span
+            style={{
+              background: "rgba(255,255,255,0.94)",
+              color: "#166534",
+              padding: "2px 10px",
+              borderRadius: 999,
+              lineHeight: 1.4,
+              boxShadow: "0 1px 3px rgba(15,23,42,0.10)",
+            }}
+          >
+            {remaining.toFixed(0)}
+          </span>
+
+          <span
+            style={{
+              color: pct >= 18 ? "#fff" : "var(--text-heading)",
+              textAlign: "center",
+            }}
+          >
+            {safeSpent.toFixed(0)}
+          </span>
+        </div>
+      </div>
+
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "flex-end",
+          alignItems: "center",
+          gap: 5,
+          marginTop: 7,
+          fontSize: 11,
+          fontWeight: 800,
+          color: "var(--text-muted)",
+          fontVariantNumeric: "tabular-nums",
+        }}
+      >
+        <span>{safeCap.toFixed(0)} د.أ</span>
+        <span style={{ fontSize: 12, opacity: 0.75 }}>🎯</span>
       </div>
     </div>
   );
 }
-
 function formatDate(value) {
   if (!value) return "غير محدد";
   const date = new Date(value);
@@ -921,6 +1003,19 @@ const mainExpenseCategories = pinnedExpenseCategories;
     Number(budget.spendingCap || 0) > 0
       ? Math.min(100, (Number(budget.coveredSpent || 0) / Number(budget.spendingCap || 0)) * 100)
       : 0;
+        const spendingCapValue = Number(budget.spendingCap || 0);
+  const spentValue = Number(budget.coveredSpent || 0);
+  const remainingValue = Math.max(0, Number(budget.remainingCap || 0));
+
+  const remainingRatio =
+    spendingCapValue > 0 ? remainingValue / spendingCapValue : 0;
+
+  const progressBarColor =
+    remainingRatio > 0.5
+      ? "linear-gradient(90deg,#22c55e,#16a34a)"
+      : remainingRatio > 0.2
+      ? "linear-gradient(90deg,#f59e0b,#f97316)"
+      : "linear-gradient(90deg,#ef4444,#dc2626)";
   const saveButtonTitle = "تسجيل المصروف";
   const saveButtonMeta =
     pendingCount === 0
@@ -1441,97 +1536,732 @@ function toggleExpenseCategoryPinned(catId) {
  return (
     <div style={G.scr}>
             <div style={G.card()}>
-              {!readOnly && dueCurrentLiabilities.length > 0 && (
-  <button
-    type="button"
-    onClick={onOpenDueLiabilities}
-    style={{
-      background: "rgba(239,68,68,0.10)",
-      border: "1px solid rgba(248,113,113,0.35)",
-      color: "#fecaca",
-      padding: "7px 10px",
-      borderRadius: 999,
-      marginBottom: 12,
-      textAlign: "right",
-      fontSize: 0,
-      fontWeight: 800,
-      cursor: "pointer",
-      fontFamily: "inherit",
-      display: "inline-flex",
-      alignItems: "center",
-      gap: 6,
-      maxWidth: "100%",
-    }}
-  >
-    <span style={{ fontSize: 11 }}>!</span>
-    <span style={{ fontSize: 11 }}>{dueCurrentLiabilities.length} مستحق هذا الشهر</span>
-    ⚠️ لديك {dueCurrentLiabilities.length} التزام جاري مستحق هذا الشهر
-  </button>
-)}
-        <div style={{ textAlign: "right", marginBottom: 12, color: "var(--text-muted)" }}>
-          🎯 سقف الصرف الشهري
-        </div>
-
-        <SpendBar spent={budget.coveredSpent} cap={budget.spendingCap} />
-
-        <div
+           
+                     <div
           style={{
-            display: "grid",
-            gridTemplateColumns: "1fr 1fr",
-            gap: 8,
-            marginTop: 12,
+            background: "var(--bg-secondary)",
+            border: "1px solid rgba(148,163,184,0.14)",
+            borderRadius: 20,
+            padding: 14,
+            marginTop: 4,
           }}
         >
-          <div style={summaryCard("success")}>
-            <div style={{ fontSize: 10, color: "var(--text-faint)" }}>المتبقي</div>
-            <div style={summaryValue("success")}>
-              {budget.remainingCap.toFixed(2)}
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 10,
+              marginBottom: 10,
+            }}
+          >
+                      <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "38px 1fr 38px",
+              alignItems: "center",
+              gap: 8,
+              marginBottom: 8,
+            }}
+          >
+            <div
+              style={{
+                gridColumn: 1,
+                display: "flex",
+                justifyContent: "flex-start",
+              }}
+            >
+              {Number(dueCurrentLiabilities.length || 0) > 0 && (
+                <button
+                  type="button"
+                  onClick={onOpenDueLiabilities}
+                  title="الالتزامات المستحقة هذا الشهر"
+                  aria-label="الالتزامات المستحقة هذا الشهر"
+                  style={{
+                    position: "relative",
+                    width: 34,
+                    height: 34,
+                    borderRadius: 14,
+                    border: "1px solid rgba(239,68,68,0.14)",
+                    background: "rgba(239,68,68,0.06)",
+                    color: "#dc2626",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    cursor: "pointer",
+                    fontSize: 18,
+                    fontWeight: 900,
+                    fontFamily: "inherit",
+                    boxShadow: "0 6px 14px rgba(239,68,68,0.07)",
+                  }}
+                >
+                  🔔
+                  <span
+                    style={{
+                      position: "absolute",
+                      top: -6,
+                      right: -6,
+                      minWidth: 17,
+                      height: 17,
+                      padding: "0 5px",
+                      borderRadius: 999,
+                      background: "#ef4444",
+                      color: "#fff",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      fontSize: 10,
+                      fontWeight: 900,
+                      lineHeight: 1,
+                    }}
+                  >
+                    {dueCurrentLiabilities.length}
+                  </span>
+                </button>
+              )}
+            </div>
+
+            <div
+              style={{
+                gridColumn: 2,
+                textAlign: "center",
+                fontSize: 14,
+                fontWeight: 800,
+                color: "var(--text-muted)",
+                letterSpacing: "0.2px",
+              }}
+            >
+              سقف الصرف الشهري
+            </div>
+
+            <div style={{ gridColumn: 3 }} />
+          </div>
+
+            {Number(dueCurrentLiabilities.length || 0) > 0 && (
+              <button
+                type="button"
+                onClick={onOpenDueLiabilities}
+                title="الالتزامات المستحقة"
+                aria-label="الالتزامات المستحقة"
+                style={{
+                  position: "relative",
+                  width: 36,
+                  height: 36,
+                  borderRadius: 12,
+                  border: "1px solid rgba(239,68,68,0.22)",
+                  background: "rgba(239,68,68,0.08)",
+                  color: "#dc2626",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  cursor: "pointer",
+                  fontSize: 18,
+                  fontWeight: 900,
+                  fontFamily: "inherit",
+                  flex: "0 0 auto",
+                }}
+              >
+                🔔
+                <span
+                  style={{
+                    position: "absolute",
+                    top: -5,
+                    right: -5,
+                    minWidth: 18,
+                    height: 18,
+                    padding: "0 5px",
+                    borderRadius: 999,
+                    background: "#dc2626",
+                    color: "#fff",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    fontSize: 10,
+                    fontWeight: 900,
+                    lineHeight: 1,
+                    boxShadow: "0 2px 6px rgba(220,38,38,0.28)",
+                  }}
+                >
+                  {Number(dueCurrentLiabilities.length || 0)}
+                </span>
+              </button>
+            )}
+          </div>
+
+          <div
+            style={{
+              marginBottom: 8,
+              textAlign: "center",
+              fontSize: 13,
+              fontWeight: 900,
+              fontVariantNumeric: "tabular-nums",
+              color:
+                remainingRatio > 0.5
+                  ? "#16a34a"
+                  : remainingRatio > 0.2
+                  ? "#f59e0b"
+                  : "#dc2626",
+            }}
+          >
+            {spendingProgress.toFixed(0)}%
+          </div>
+
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "1fr auto",
+              gap: 10,
+              alignItems: "center",
+              direction: "ltr",
+            }}
+          >
+            <div
+              style={{
+                position: "relative",
+                height: 34,
+                borderRadius: 999,
+                background:
+                  "linear-gradient(180deg, rgba(255,255,255,0.55), rgba(148,163,184,0.14))",
+                overflow: "hidden",
+                boxShadow:
+                  "inset 0 1px 2px rgba(255,255,255,0.55), inset 0 -1px 3px rgba(15,23,42,0.08)",
+              }}
+            >
+              <div
+                style={{
+                  position: "absolute",
+                  top: 0,
+                  bottom: 0,
+                  right: 0,
+                  width: `${spendingProgress}%`,
+                  background: progressBarColor,
+                  borderRadius: 999,
+                  boxShadow:
+                    "inset 0 1px 0 rgba(255,255,255,0.35), 0 4px 12px rgba(34,197,94,0.18)",
+                  transition: "width 0.25s ease",
+                }}
+              />
+
+              <div
+                style={{
+                  position: "relative",
+                  zIndex: 1,
+                  height: "100%",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  padding: "0 10px",
+                  direction: "ltr",
+                  fontSize: 12,
+                  fontWeight: 900,
+                  fontVariantNumeric: "tabular-nums",
+                }}
+              >
+                <span
+                  style={{
+                    background: "rgba(255,255,255,0.94)",
+                    color: "#166534",
+                    padding: "2px 10px",
+                    borderRadius: 999,
+                    lineHeight: 1.4,
+                    boxShadow: "0 1px 3px rgba(15,23,42,0.10)",
+                  }}
+                >
+                  {remainingValue.toFixed(0)}
+                </span>
+
+                <span
+                  style={{
+                    color:
+                      spendingProgress >= 18 ? "#ffffff" : "var(--text-heading)",
+                    textAlign: "center",
+                  }}
+                >
+                  {spentValue.toFixed(0)}
+                </span>
+              </div>
+            </div>
+
+            <div
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6,
+                padding: "6px 10px",
+                borderRadius: 999,
+                background: "rgba(255,255,255,0.78)",
+                border: "1px solid rgba(148,163,184,0.16)",
+                color: "var(--text-heading)",
+                fontSize: 14,
+                fontWeight: 900,
+                fontVariantNumeric: "tabular-nums",
+                whiteSpace: "nowrap",
+                boxShadow: "0 1px 3px rgba(15,23,42,0.06)",
+              }}
+            >
+              <span style={{ fontSize: 13, lineHeight: 1 }}>🎯</span>
+              <span>{spendingCapValue.toFixed(0)} د.أ</span>
+            </div>
+          </div>
+          {budget.overBudgetSpent > 0 && (
+            <div
+              style={{
+                marginTop: 12,
+                background: "rgba(239,68,68,0.10)",
+                border: "1px solid rgba(239,68,68,0.22)",
+                borderRadius: 14,
+                padding: "10px 12px",
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                gap: 8,
+              }}
+            >
+              <div
+                style={{
+                  fontSize: 12,
+                  color: "#b91c1c",
+                  fontWeight: 800,
+                }}
+              >
+                التجاوز
+              </div>
+
+              <div
+                style={{
+                  fontSize: 16,
+                  color: "#dc2626",
+                  fontWeight: 900,
+                  fontVariantNumeric: "tabular-nums",
+                }}
+              >
+                {Number(budget.overBudgetSpent || 0).toFixed(2)} د.أ
+              </div>
+            </div>
+          )}
+        </div>
+
+
+                {budget.overBudgetSpent > 0 && (
+          <div
+            style={{
+              marginTop: 12,
+              padding: "10px 12px",
+              borderRadius: 16,
+              background: "rgba(239,68,68,0.07)",
+              border: "1px solid rgba(239,68,68,0.16)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 10,
+            }}
+          >
+            <div
+              style={{
+                fontSize: 12,
+                color: "#b91c1c",
+                fontWeight: 800,
+              }}
+            >
+              التجاوز
+            </div>
+
+            <div
+              style={{
+                fontSize: 15,
+                color: "#dc2626",
+                fontWeight: 900,
+                fontVariantNumeric: "tabular-nums",
+              }}
+            >
+              {budget.overBudgetSpent.toFixed(2)} د.أ
+            </div>
+          </div>
+        )}
+
+      </div>
+
+            {!readOnly && state.session.isOpen && (
+        <div
+          style={{
+            ...G.card(),
+            margin: "14px 0 16px",
+            padding: 12,
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 10,
+              marginBottom: 12,
+            }}
+          >
+            <button
+              type="button"
+              onClick={() => setShowCategoryManager(true)}
+              title="المزيد"
+              aria-label="المزيد"
+              style={{
+                width: 40,
+                height: 40,
+                borderRadius: 14,
+                border: "1px solid rgba(148,163,184,0.18)",
+                background: "var(--bg-page)",
+                color: "var(--text-muted)",
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                cursor: "pointer",
+                fontSize: 20,
+                fontWeight: 900,
+                fontFamily: "inherit",
+                flex: "0 0 auto",
+              }}
+            >
+              ⋯
+            </button>
+
+            <div
+              style={{
+                fontSize: 17,
+                fontWeight: 900,
+                color: "var(--text-heading)",
+                textAlign: "right",
+              }}
+            >
+              اختر نوع المصروف
             </div>
           </div>
 
-          {budget.overBudgetSpent > 0 && (
-  <div style={summaryCard("danger")}>
-    <div style={{ fontSize: 10, color: "var(--text-faint)" }}>التجاوز</div>
-    <div style={summaryValue("danger")}>
-      {budget.overBudgetSpent.toFixed(2)}
-    </div>
-  </div>
-)}        </div>
-      </div>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+              gap: 8,
+              marginBottom: 12,
+            }}
+          >
+            {mainExpenseCategories
+              .filter((catItem) => !catItem.isOther)
+              .slice(0, 8)
+              .map((catItem) => {
+                const cat = catItem.label;
+                const active = category === cat;
+                const tile = getCategoryTileStyle(cat);
 
-      {!readOnly && (
-      <div style={{ display: "flex", justifyContent: "center", margin: "14px 0 16px" }}>
-        <button
-          type="button"
-          title="تسجيل مصروف"
-          onClick={() => setShowExpense(true)}
-          disabled={!state.session.isOpen}
-          style={{
-            width: 76,
-            height: 76,
-            borderRadius: "50%",
-            border: state.session.isOpen
-              ? "1px solid rgba(232,201,106,0.65)"
-              : "1px solid var(--border-soft)",
-            background: state.session.isOpen
-              ? "linear-gradient(135deg,var(--gold-primary),var(--gold-border))"
-              : "var(--bg-secondary)",
-            color: state.session.isOpen ? "var(--text-heading)" : "var(--text-faint)",
-            boxShadow: state.session.isOpen
-              ? "0 14px 34px rgba(201,168,64,0.28)"
-              : "none",
-            cursor: state.session.isOpen ? "pointer" : "not-allowed",
-            opacity: state.session.isOpen ? 1 : 0.6,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            fontSize: 34,
-            fontWeight: 900,
-          }}
-        >
-          💸
-        </button>
-      </div>
+                return (
+                  <button
+                    key={cat}
+                    type="button"
+                    onClick={() => setCategory(cat)}
+                    style={{
+                      position: "relative",
+                      minHeight: 78,
+                      borderRadius: 16,
+                      border: active
+                        ? "1.5px solid #16a34a"
+                        : "1px solid rgba(148,163,184,0.16)",
+                      background: active
+                        ? "rgba(22,163,74,0.08)"
+                        : "var(--bg-page)",
+                      color: "var(--text-body)",
+                      display: "flex",
+                      flexDirection: "column",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: 7,
+                      padding: "9px 5px",
+                      cursor: "pointer",
+                      fontFamily: "inherit",
+                      fontWeight: 800,
+                    }}
+                  >
+                    {active && (
+                      <span
+                        style={{
+                          position: "absolute",
+                          top: -7,
+                          right: -7,
+                          width: 22,
+                          height: 22,
+                          borderRadius: "999px",
+                          background: "#16a34a",
+                          color: "#fff",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          fontSize: 12,
+                          fontWeight: 900,
+                        }}
+                      >
+                        ✓
+                      </span>
+                    )}
+
+                    <span
+                      style={{
+                        width: 40,
+                        height: 40,
+                        borderRadius: 14,
+                        background: tile.bg,
+                        color: tile.icon,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        fontSize: 22,
+                        lineHeight: 1,
+                      }}
+                    >
+                      {catItem.icon || CAT_ICONS[cat] || "📌"}
+                    </span>
+
+                    <span
+                      style={{
+                        fontSize: 11,
+                        color: "var(--text-heading)",
+                        textAlign: "center",
+                        lineHeight: 1.2,
+                        maxWidth: "100%",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {cat}
+                    </span>
+                  </button>
+                );
+              })}
+          </div>
+
+          <input
+            type="number"
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+            placeholder="المبلغ"
+            style={{ ...G.inp(), marginBottom: 10, fontSize: 22 }}
+          />
+
+          <div style={{ marginBottom: 10 }}>
+            <div
+              style={{
+                fontSize: 13,
+                fontWeight: 900,
+                color: "var(--text-heading)",
+                textAlign: "right",
+                marginBottom: 8,
+              }}
+            >
+              طريقة الدفع
+            </div>
+
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(5, minmax(0, 1fr))",
+                gap: 7,
+                background: "var(--bg-page)",
+                border: "1px solid rgba(148,163,184,0.14)",
+                borderRadius: 18,
+                padding: 6,
+              }}
+            >
+              {[
+                ...(hasSpendingCap
+                  ? [{ value: "cash", label: "كاش", icon: "💵" }]
+                  : []),
+                { value: "asset", label: "أصل", icon: "🏦" },
+                { value: "card", label: "بطاقة", icon: "💳" },
+                { value: "liability", label: "التزام", icon: "🧾" },
+                { value: "emergency", label: "طارئ", icon: "⚡" },
+              ].map((item) => {
+                const active = paymentMethod === item.value;
+
+                return (
+                  <button
+                    key={item.value}
+                    type="button"
+                    onClick={() => {
+                      const value = item.value;
+
+                      if (value === "emergency") {
+                        setPaymentMethod(value);
+                        setIsUnusualExpense(true);
+                        setUnusualFundingMode("asset");
+                        setShowUnusualPicker(false);
+                        return;
+                      }
+
+                      setPaymentMethod(value);
+                      setIsUnusualExpense(false);
+                      setUnusualFundingMode("");
+                      setShowUnusualPicker(false);
+                    }}
+                    style={{
+                      minHeight: 50,
+                      borderRadius: 14,
+                      border: active
+                        ? "1.5px solid #16a34a"
+                        : "1px solid transparent",
+                      background: active
+                        ? "rgba(22,163,74,0.10)"
+                        : "transparent",
+                      color: active ? "#166534" : "var(--text-muted)",
+                      display: "flex",
+                      flexDirection: "column",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: 4,
+                      cursor: "pointer",
+                      fontFamily: "inherit",
+                      fontWeight: active ? 900 : 700,
+                      padding: "6px 3px",
+                    }}
+                  >
+                    <span style={{ fontSize: 17, lineHeight: 1 }}>
+                      {item.icon}
+                    </span>
+                    <span style={{ fontSize: 9, lineHeight: 1.1, whiteSpace: "nowrap" }}>
+                      {item.label}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div
+            style={{
+              marginBottom: 12,
+              background: "var(--bg-secondary)",
+              border: "1px solid var(--border-soft)",
+              borderRadius: 12,
+              padding: 10,
+            }}
+          >
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "1fr 92px",
+                gap: 8,
+                direction: "ltr",
+                alignItems: "stretch",
+              }}
+            >
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(3, 1fr)",
+                  gap: 7,
+                }}
+              >
+                {[
+                  { label: "1", action: () => appendAmountDigit("1") },
+                  { label: "2", action: () => appendAmountDigit("2") },
+                  { label: "3", action: () => appendAmountDigit("3") },
+                  { label: "4", action: () => appendAmountDigit("4") },
+                  { label: "5", action: () => appendAmountDigit("5") },
+                  { label: "6", action: () => appendAmountDigit("6") },
+                  { label: "7", action: () => appendAmountDigit("7") },
+                  { label: "8", action: () => appendAmountDigit("8") },
+                  { label: "9", action: () => appendAmountDigit("9") },
+                  { label: ".", action: () => appendAmountDigit(".") },
+                  { label: "0", action: () => appendAmountDigit("0") },
+                  {
+                    label: "⌫",
+                    action: () => setAmount((prev) => String(prev || "").slice(0, -1)),
+                  },
+                ].map((key) => (
+                  <button
+                    key={key.label}
+                    type="button"
+                    onClick={key.action}
+                    style={G.btn("var(--bg-card)", "var(--text-heading)", {
+                      minHeight: 44,
+                      padding: "9px",
+                      fontSize: key.label === "⌫" ? 18 : 16,
+                      fontWeight: 900,
+                    })}
+                  >
+                    {key.label}
+                  </button>
+                ))}
+              </div>
+
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateRows: "44px 1fr",
+                  gap: 7,
+                }}
+              >
+                <button
+                  type="button"
+                  title={note ? `ملاحظة: ${note}` : "ملاحظة"}
+                  aria-label="ملاحظة"
+                  onClick={() => {
+                    const nextNote = window.prompt("اكتب ملاحظة المصروف", note || "");
+                    if (nextNote !== null) {
+                      setNote(nextNote);
+                    }
+                  }}
+                  style={G.btn(note ? "rgba(22,163,74,0.14)" : "var(--bg-card)", "#16a34a", {
+                    minHeight: 44,
+                    padding: "9px",
+                    fontSize: 22,
+                    fontWeight: 900,
+                    border: note
+                      ? "1px solid rgba(22,163,74,0.55)"
+                      : "1px solid rgba(22,163,74,0.25)",
+                  })}
+                >
+                  📝
+                </button>
+
+                <button
+                  type="button"
+                  onClick={addPendingExpense}
+                  style={G.btn("linear-gradient(135deg,#22c55e,#16a34a)", "#fff", {
+                    width: "100%",
+                    minHeight: 139,
+                    padding: "10px",
+                    fontSize: 14,
+                    fontWeight: 900,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    flexDirection: "column",
+                    gap: 6,
+                  })}
+                >
+                  <span style={{ fontSize: 26, lineHeight: 1 }}>+</span>
+                  <span>إضافة</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={submitExpense}
+            style={G.btn("linear-gradient(135deg,#22c55e,#16a34a)", "#fff", {
+              width: "100%",
+              minHeight: 46,
+              marginTop: 6,
+              marginBottom: 0,
+              display: "block",
+            })}
+          >
+            <span style={{ display: "block" }}>✓ {saveButtonTitle}</span>
+            {saveButtonMeta && (
+              <span style={{ display: "block", marginTop: 3, fontSize: 11, fontWeight: 700 }}>
+                {saveButtonMeta}
+              </span>
+            )}
+          </button>
+        </div>
       )}
 
       {!readOnly && !state.session.isOpen && (
@@ -2049,7 +2779,7 @@ flexDirection: "column",
     </div>
   </div>
 )}
-      {showExpense && (
+      {false && showExpense && (
         <div
           onClick={(e) => e.target === e.currentTarget && closeExpenseSheet()}
           style={{
@@ -3516,12 +4246,7 @@ function ReportsScreen({ state }) {
             </div>
           </div>
 
-          <div style={summaryCard("success")}>
-            <div style={{ fontSize: 10, color: "var(--text-faint)" }}>المتبقي من السقف</div>
-            <div style={summaryValue("success")}>
-              {budget.remainingCap.toFixed(2)}
-            </div>
-          </div>
+          
 
           {overBudgetTotal > 0 && (
             <button
