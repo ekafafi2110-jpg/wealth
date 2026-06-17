@@ -2107,6 +2107,158 @@ flexDirection: "column",
                 تسجيل مصروف
               </span>
             </div>
+            <div
+  style={{
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+    margin: "4px 0 12px",
+  }}
+>
+  <div
+    style={{
+      fontSize: 18,
+      fontWeight: 900,
+      color: "var(--text-heading)",
+      textAlign: "right",
+    }}
+  >
+    اختر نوع المصروف
+  </div>
+
+  <button
+    type="button"
+    onClick={() => setShowCategoryManager(true)}
+    title="المزيد"
+    aria-label="المزيد"
+    style={{
+      width: 42,
+      height: 42,
+      borderRadius: 14,
+      border: "1px solid rgba(148,163,184,0.18)",
+      background: "var(--bg-page)",
+      color: "var(--text-muted)",
+      display: "inline-flex",
+      alignItems: "center",
+      justifyContent: "center",
+      cursor: "pointer",
+      fontSize: 20,
+      fontWeight: 900,
+      fontFamily: "inherit",
+      boxShadow: "0 8px 18px rgba(15,23,42,0.06)",
+      flex: "0 0 auto",
+    }}
+  >
+    ⋯
+  </button>
+</div>
+
+<div
+  style={{
+    display: "grid",
+    gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+    gap: 10,
+    marginBottom: 14,
+  }}
+>
+  {mainExpenseCategories
+    .filter((catItem) => !catItem.isOther)
+    .slice(0, 8)
+    .map((catItem) => {
+      const cat = catItem.label;
+      const active = category === cat;
+      const tile = getCategoryTileStyle(cat);
+
+      return (
+        <button
+          key={cat}
+          type="button"
+          onClick={() => setCategory(cat)}
+          style={{
+            position: "relative",
+            minHeight: 86,
+            borderRadius: 18,
+            border: active
+              ? "1.5px solid #16a34a"
+              : "1px solid rgba(148,163,184,0.16)",
+            background: active
+              ? "rgba(22,163,74,0.08)"
+              : "var(--bg-page)",
+            color: "var(--text-body)",
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: 8,
+            padding: "10px 6px",
+            cursor: "pointer",
+            fontFamily: "inherit",
+            fontWeight: 800,
+            boxShadow: active
+              ? "0 10px 24px rgba(22,163,74,0.12)"
+              : "0 8px 18px rgba(15,23,42,0.05)",
+          }}
+        >
+          {active && (
+            <span
+              style={{
+                position: "absolute",
+                top: -8,
+                right: -8,
+                width: 24,
+                height: 24,
+                borderRadius: "999px",
+                background: "#16a34a",
+                color: "#fff",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                fontSize: 13,
+                fontWeight: 900,
+                boxShadow: "0 6px 14px rgba(22,163,74,0.25)",
+              }}
+            >
+              ✓
+            </span>
+          )}
+
+          <span
+            style={{
+              width: 44,
+              height: 44,
+              borderRadius: 16,
+              background: tile.bg,
+              color: tile.icon,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              fontSize: 24,
+              lineHeight: 1,
+              flex: "0 0 auto",
+            }}
+          >
+            {catItem.icon || CAT_ICONS[cat] || "📌"}
+          </span>
+
+          <span
+            style={{
+              fontSize: 12,
+              color: "var(--text-heading)",
+              textAlign: "center",
+              lineHeight: 1.2,
+              maxWidth: "100%",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+            }}
+          >
+            {cat}
+          </span>
+        </button>
+      );
+    })}
+</div>
 
             <input
               type="number"
@@ -2115,6 +2267,131 @@ flexDirection: "column",
               placeholder="المبلغ"
               style={{ ...G.inp(), marginBottom: 10, fontSize: 22 }}
             />
+            <div
+  style={{
+    marginBottom: 10,
+  }}
+>
+  <div
+    style={{
+      fontSize: 13,
+      fontWeight: 900,
+      color: "var(--text-heading)",
+      textAlign: "right",
+      marginBottom: 8,
+    }}
+  >
+    طريقة الدفع
+  </div>
+
+  <div
+    style={{
+      display: "grid",
+      gridTemplateColumns: "repeat(5, minmax(0, 1fr))",
+      gap: 7,
+      background: "var(--bg-page)",
+      border: "1px solid rgba(148,163,184,0.14)",
+      borderRadius: 18,
+      padding: 6,
+    }}
+  >
+    {[
+      ...(hasSpendingCap
+        ? [
+            {
+              value: "cash",
+              label: "كاش",
+              icon: "💵",
+            },
+          ]
+        : []),
+      {
+        value: "asset",
+        label: "أصل",
+        icon: "🏦",
+      },
+      {
+        value: "card",
+        label: "بطاقة",
+        icon: "💳",
+      },
+      {
+        value: "liability",
+        label: "التزام",
+        icon: "🧾",
+      },
+      {
+        value: "emergency",
+        label: "طارئ",
+        icon: "⚡",
+      },
+    ].map((item) => {
+      const active = paymentMethod === item.value;
+
+      return (
+        <button
+          key={item.value}
+          type="button"
+          onClick={() => {
+            const value = item.value;
+
+            if (value === "emergency") {
+              setPaymentMethod(value);
+              setIsUnusualExpense(true);
+              setUnusualFundingMode("asset");
+              setShowUnusualPicker(false);
+              return;
+            }
+
+            setPaymentMethod(value);
+            setIsUnusualExpense(false);
+            setUnusualFundingMode("");
+            setShowUnusualPicker(false);
+          }}
+          style={{
+            minHeight: 52,
+            borderRadius: 14,
+            border: active
+              ? "1.5px solid #16a34a"
+              : "1px solid transparent",
+            background: active
+              ? "rgba(22,163,74,0.10)"
+              : "transparent",
+            color: active ? "#166534" : "var(--text-muted)",
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: 4,
+            cursor: "pointer",
+            fontFamily: "inherit",
+            fontWeight: active ? 900 : 700,
+            padding: "6px 3px",
+          }}
+        >
+          <span
+            style={{
+              fontSize: 17,
+              lineHeight: 1,
+            }}
+          >
+            {item.icon}
+          </span>
+
+          <span
+            style={{
+              fontSize: 9,
+              lineHeight: 1.1,
+              whiteSpace: "nowrap",
+            }}
+          >
+            {item.label}
+          </span>
+        </button>
+      );
+    })}
+  </div>
+</div>
             <div
               style={{
                 marginBottom: 12,
@@ -2530,147 +2807,8 @@ flexDirection: "column",
   </div>
 )}
 
-            <div
-  style={{
-    display: "grid",
-    gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
-    gap: 7,
-    marginBottom: 12,
-  }}
->
-              {mainExpenseCategories.slice(0, 8).map((catItem) => {
-  const cat = catItem.label;
-  const active = category === cat;
-  const tile = getCategoryTileStyle(cat);
-  const pendingAmount = Number(pendingByCategory[cat] || 0);
-  const hasPending = pendingAmount > 0;
-
-  return (
-    <button
-      key={cat}
-      type="button"
-      onClick={() => {
-  if (catItem.isOther) {
-    setShowCategoryManager(true);
-    return;
-  }
-
-  setCategory(cat);
-}}
-      style={{
-minHeight: 42,
-width: "auto",
-borderRadius: 10,
-  border: hasPending
-    ? "1px solid var(--gold-border)"
-    : active
-  ? "1px solid var(--gold-border)"
-  : "1px solid transparent",
-background: hasPending ? "rgba(232,201,106,0.18)" : active ? "var(--gold-light)" : "var(--bg-page)",
-color: "var(--text-body)",
-display: "flex",
-flexDirection: "column",
-alignItems: "center",
-justifyContent: "center",
-gap: 3,
-padding: "6px 4px",
-cursor: "pointer",
-fontFamily: "inherit",
-fontWeight: 700,
-        boxShadow: "none",
-      }}
-    >
-      <span
-        style={{
-          width: 24,
-          height: 24,
-          borderRadius: 8,
-          background: hasPending ? "var(--gold-primary)" : catItem.isOther ? "var(--bg-secondary)" : tile.bg,
-          color: catItem.isOther ? "var(--text-muted)" : tile.icon,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          fontSize: 13,
-          lineHeight: 1,
-          flex: "0 0 auto",
-        }}
-      >
-{catItem.isOther ? "⚙️" : catItem.icon || CAT_ICONS[cat] || "📌"}      </span>
-      <span style={{ fontSize: 9, color: "var(--text-muted)", textAlign: "center", lineHeight: 1.1 }}>
-{hasPending ? `${pendingAmount.toFixed(2)}` : catItem.isOther ? "إدارة" : cat}      </span>
-    </button>
-  );
-})}
-<button
-  type="button"
-  onClick={() => setShowCategoryManager(true)}
-  style={{
-    minHeight: 42,
-    borderRadius: 10,
-    border: "1px solid transparent",
-    background: "var(--bg-page)",
-    color: "var(--text-muted)",
-    display: "flex",
-    flexDirection: "column",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 3,
-    padding: "6px 4px",
-    cursor: "pointer",
-    fontFamily: "inherit",
-    fontWeight: 800,
-  }}
->
-  <span style={{ width: 24, height: 24, borderRadius: 8, background: "var(--bg-secondary)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, lineHeight: 1 }}>+</span>
-  <span style={{ fontSize: 9, color: "var(--text-muted)", lineHeight: 1.1 }}>المزيد</span>
-</button>
-            </div>
-          <div
-  style={{
-    width: "100%",
-    display: "none",
-    justifyContent: "flex-start",
-    direction: "ltr",
-    marginTop: 6,
-    marginBottom: 2,
-  }}
->
-  <button
-    type="button"
-    onClick={() => setShowCategoryManager(true)}
-    title="إدارة أنواع المصروف"
-    style={{
-      width: 38,
-      height: 38,
-      padding: 0,
-      borderRadius: 12,
-      border: "none",
-      background: "transparent",
-      color: "var(--text-muted)",
-      fontSize: 19,
-      fontWeight: 900,
-      display: "inline-flex",
-      alignItems: "center",
-      justifyContent: "center",
-      cursor: "pointer",
-    }}
-  >
-    ⚙️
-  </button>
-</div>
-
-            <label style={{ fontSize: 11, color: "var(--text-faint)" }}>طريقة الدفع</label>
-            <select
-              value={paymentMethod}
-onChange={(e) => changePaymentMethod(e.target.value)}
-style={{ ...G.inp(), marginBottom: 10 }}
-            >
-              {paymentOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.icon} {option.label}
-                </option>
-              ))}
-            </select>
+           
+            
             {paymentMethod === "emergency" && isUnusualExpense && (
   <div
     style={{
@@ -5191,6 +5329,7 @@ function AssetsScreen({ state, setState, onAddExtraCash, readOnly = false }) {
                     placeholder="المبلغ"
                     style={{ ...G.inp(), marginBottom: 8 }}
                   />
+                  
 
                   {options.length > 0 && (
                     <select
@@ -9110,7 +9249,7 @@ useEffect(() => {
         color: "#fff",
       }}
     >
-      ◈
+      💎
     </div>
   </div>
 </div>
