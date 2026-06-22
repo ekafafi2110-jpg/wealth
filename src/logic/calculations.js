@@ -20,7 +20,7 @@ export function calcCurrentLiabilitiesTotal(state) {
       return sum + Number(item.balance || 0);
     }
 
-    return sum + Number(item.amount || 0);
+    return sum + Number(item.balance ?? item.amount ?? 0);
   }, 0);
 }
 

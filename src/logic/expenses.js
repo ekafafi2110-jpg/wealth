@@ -3,6 +3,8 @@ import { deductFromAsset } from "./assets.js";
 export function recordExpense(state, expenseData) {
   const now = new Date().toISOString();
 const today = now.slice(0, 10);
+  const operationId = Number(expenseData.operationId ?? Date.now());
+  const expenseId = Number(expenseData.id ?? operationId);
   const amount = Number(expenseData.amount || 0);
 
   if (amount <= 0) {
@@ -51,7 +53,7 @@ const today = now.slice(0, 10);
       return {
         success: false,
         nextState: state,
-        message: `المتاح من سقف الصرف فقط ${remainingCap.toFixed(2)} د.أ`,
+        message: `المتاح من سقف الصرف فقط ${remainingCap.toFixed(2)}`,
       };
     }
   }
@@ -110,14 +112,14 @@ const today = now.slice(0, 10);
   }
 
   const expense = {
-    id: Date.now(),
+    id: expenseId,
     amount: expenseAmount,
     originalAmount: amount,
     category: expenseData.category,
     paymentMethod: expenseData.paymentMethod,
     cardId: expenseData.cardId || null,
     note: expenseData.note || "",
-    date: new Date().toISOString().split("T")[0],
+    date: expenseData.date || today,
 createdAt: new Date().toISOString(),
     budgetCovered,
     overBudget,
@@ -185,7 +187,7 @@ createdAt: new Date().toISOString(),
 
   if (expenseData.paymentMethod === "liability") {
   next.currentLiabilities.push({
-    id: Date.now() + 1,
+    id: operationId + 1,
     type: "direct_liability",
     name: expenseData.liabilityName || "دين مباشر من مصروف",
 
@@ -214,7 +216,7 @@ createdAt: now,
 
   if (isEmergency && emergencyLiabilityAmount > 0) {
   next.currentLiabilities.push({
-    id: Date.now() + 1,
+    id: operationId + 1,
     type: "direct_liability",
     name: emergencyFunding.liabilityName || "دين مصروف طارئ",
     amount: emergencyLiabilityAmount,
@@ -235,7 +237,7 @@ createdAt: now,
 
   if (isEmergency && emergencyAssetAmount > 0) {
     next.transactions.push({
-      id: Date.now() + 3,
+      id: operationId + 3,
       type: "emergency_expense_covered_from_asset",
       amount: emergencyAssetAmount,
       assetKey: emergencyFunding.assetKey || "cash",
@@ -246,7 +248,7 @@ createdAt: now,
 
   if (isAssetPayment) {
     next.transactions.push({
-      id: Date.now() + 3,
+      id: operationId + 3,
       type: "expense_paid_from_asset",
       amount,
       assetKey: expenseData.assetKey || "cash",
@@ -256,7 +258,7 @@ createdAt: now,
   }
 
   next.transactions.push({
-    id: Date.now() + 2,
+    id: operationId + 2,
     type: "expense_recorded",
     amount,
     category: expenseData.category,

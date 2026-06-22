@@ -1,11 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import {
-  PieChart,
-  Pie,
-  Cell,
-  Tooltip,
-  ResponsiveContainer,
-} from "recharts";
+// Test Cline Integration
+import { useEffect, useRef, useState } from "react";
 import { INITIAL_STATE } from "./data/initialState";
 import { recordExpense } from "./logic/expenses";
 import {
@@ -14,6 +8,7 @@ import {
   resetPasswordForEmail,
   signInWithPassword,
   signUpWithPassword,
+  updatePassword,
 } from "./storage/supabaseAuth";
 import { loadState, saveState, clearState } from "./storage/supabaseStorage";
 import {
@@ -23,12 +18,60 @@ import {
 } from "./logic/calculations";
 import {
   getAssetSources,
+  getAssetAvailable,
   addToAsset,
   deductFromAsset,
-  transferBetweenAssets,
+  liquidateAssetUnits,
 } from "./logic/assets";
-const CATS = ["طعام", "مواصلات", "تسوق", "صحة", "ترفيه", "فواتير", "بنزين", "أخرى"];
-
+import BottomNavigation from "./components/common/BottomNavigation";
+import ExpenseSubmitButton from "./components/expenses/ExpenseSubmitButton";
+import PaymentMethodSelector from "./components/expenses/PaymentMethodSelector";
+import ExpenseCategoryGrid from "./components/expenses/ExpenseCategoryGrid";
+import ExpenseEntryPad from "./components/expenses/ExpenseEntryPad";
+import PendingExpensesReview from "./components/expenses/PendingExpensesReview";
+import PendingSurplusCard from "./components/overview/PendingSurplusCard";
+import SpendingCapCard from "./components/overview/SpendingCapCard";
+import AllExpensesModal from "./components/overview/AllExpensesModal";
+import AssetsToolbar from "./components/assets/AssetsToolbar";
+import AssetsSummaryCard from "./components/assets/AssetsSummaryCard";
+import AssetSectionCard from "./components/assets/AssetSectionCard";
+import AddAssetModal from "./components/assets/AddAssetModal";
+import AssetTransferModal from "./components/assets/AssetTransferModal";
+import AssetDetailsList from "./components/assets/AssetDetailsList";
+import AssetsDashboard from "./components/assets/AssetsDashboard";
+import ExtraCashModal from "./components/assets/ExtraCashModal";
+import ExpenseSummaryReportCard from "./components/reports/ExpenseSummaryReportCard";
+import ExpenseDonut from "./components/reports/ExpenseDonut";
+import ExpenseReportLauncher from "./components/reports/ExpenseReportLauncher";
+import AssetTrendReportCard from "./components/reports/AssetTrendReportCard";
+import ExpenseReportModal from "./components/reports/ExpenseReportModal";
+import OverBudgetReportModal from "./components/reports/OverBudgetReportModal";
+import AssetTrendDetailsModal from "./components/reports/AssetTrendDetailsModal";
+import SalaryCapSettingsSection from "./components/settings/SalaryCapSettingsSection";
+import SettingsDashboard from "./components/settings/SettingsDashboard";
+import SettingsSubpageShell from "./components/settings/SettingsSubpageShell";
+import AccountSecuritySettings from "./components/settings/AccountSecuritySettings";
+import ResetDataSettings from "./components/settings/ResetDataSettings";
+import NotificationSettings from "./components/settings/NotificationSettings";
+import CreditCardsSettingsSection from "./components/settings/CreditCardsSettingsSection";
+import StructuralLiabilitiesSettingsSection from "./components/settings/StructuralLiabilitiesSettingsSection";
+import OpeningAssetForm from "./components/settings/OpeningAssetForm";
+import OpeningBalancesTable from "./components/settings/OpeningBalancesTable";
+import OpeningBalancesSettingsSection from "./components/settings/OpeningBalancesSettingsSection";
+import AuthScreen from "./components/common/AuthScreen";
+import StorageErrorScreen from "./components/common/StorageErrorScreen";
+import AppHeader from "./components/common/AppHeader";
+import CalendarDatePicker from "./components/common/CalendarDatePicker";
+import StructuralLiabilitiesCard from "./components/liabilities/StructuralLiabilitiesCard";
+import CurrentLiabilitiesCard from "./components/liabilities/CurrentLiabilitiesCard";
+import visualIdentity from "./theme/visualIdentity";
+import { LocaleProvider, currencyLabels, useLocale } from "./i18n/locale";
+import {
+  buildNotificationPlan,
+  notificationPermission,
+  registerNotificationServiceWorker,
+  showAppNotification,
+} from "./notifications/appNotifications";
 const CAT_ICONS = {
   طعام: "🍽️",
   مواصلات: "🚗",
@@ -78,6 +121,10 @@ const CATEGORY_TILE_STYLE = {
 const getCategoryTileStyle = (category) =>
   CATEGORY_TILE_STYLE[category] || { bg: "var(--gold-light)", icon: "var(--gold-dark)" };
 
+const createOperationId = () => Date.now();
+const getCurrencyLabel = (state) =>
+  currencyLabels[state.settings?.locale?.currency || "JOD"] || "JOD";
+
 const SUMMARY_CARD_STYLE = {
   total: {
     background: "#FFFBF0",
@@ -111,34 +158,23 @@ const summaryValue = (type) => ({
   fontVariantNumeric: "tabular-nums",
 });
 
-const labelText = {
-  fontSize: 10,
-  fontWeight: 700,
-  color: "var(--text-muted)",
-};
-
-const sectionHeading = {
-  fontSize: 12,
-  fontWeight: 800,
-  color: "var(--text-heading)",
-};
-
 const G = {
   app: {
     minHeight: "100vh",
-    background: "var(--bg-page)",
+    background: visualIdentity.gradients.appBackground,
     fontFamily: "'Tajawal', sans-serif",
     direction: "rtl",
-    color: "var(--text-body)",
+    color: visualIdentity.colors.white,
     maxWidth: 440,
     margin: "0 auto",
     position: "relative",
     paddingBottom: 82,
   },
   hdr: {
-    background: "linear-gradient(135deg, var(--bg-card) 0%, #FDF5E6 100%)",
-    borderBottom: "1px solid var(--border-soft)",
-    padding: "14px 16px 0",
+    background: "rgba(11,43,82,0.82)",
+    borderBottom: "1px solid rgba(255,255,255,0.10)",
+    padding: "12px 14px 1px",
+    backdropFilter: "blur(16px)",
     position: "sticky",
     top: 0,
     zIndex: 50,
@@ -212,321 +248,70 @@ const G = {
   }),
 };
 
-const NAV_ICONS = {
-  overview: (
-    <path d="M4 11.5 12 5l8 6.5V20a1 1 0 0 1-1 1h-4.5v-6h-5v6H5a1 1 0 0 1-1-1v-8.5Z" />
-  ),
-  reports: (
-    <>
-      <path d="M5 19V9" />
-      <path d="M12 19V5" />
-      <path d="M19 19v-7" />
-      <path d="M4 19h16" />
-    </>
-  ),
-  assets: (
-    <>
-      <path d="M4 8.5 12 4l8 4.5-8 4.5L4 8.5Z" />
-      <path d="m4 13 8 4.5L20 13" />
-      <path d="m4 17 8 4.5L20 17" />
-    </>
-  ),
-  liabilities: (
-    <>
-      <path d="M6 4h12v16H6z" />
-      <path d="M9 8h6" />
-      <path d="M9 12h6" />
-      <path d="M9 16h3" />
-    </>
-  ),
-  settings: (
-    <>
-      <path d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Z" />
-      <path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.05.05a2 2 0 0 1-2.83 2.83l-.05-.05A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 1.55V21a2 2 0 0 1-4 0v-.05A1.7 1.7 0 0 0 9 19.4a1.7 1.7 0 0 0-1.88.34l-.05.05a2 2 0 1 1-2.83-2.83l.05-.05A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.55-1H3a2 2 0 0 1 0-4h.05A1.7 1.7 0 0 0 4.6 9a1.7 1.7 0 0 0-.34-1.88l-.05-.05a2 2 0 1 1 2.83-2.83l.05.05A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-1.55V3a2 2 0 0 1 4 0v.05A1.7 1.7 0 0 0 15 4.6a1.7 1.7 0 0 0 1.88-.34l.05-.05a2 2 0 1 1 2.83 2.83l-.05.05A1.7 1.7 0 0 0 19.4 9a1.7 1.7 0 0 0 1.55 1H21a2 2 0 0 1 0 4h-.05A1.7 1.7 0 0 0 19.4 15Z" />
-    </>
-  ),
+const HOME_UI = {
+  overlay: {
+    position: "fixed",
+    inset: 0,
+    background: "rgba(4,20,40,0.76)",
+    backdropFilter: "blur(10px)",
+    display: "flex",
+    alignItems: "flex-end",
+    justifyContent: "center",
+  },
+  sheet: {
+    width: "100%",
+    maxWidth: 440,
+    maxHeight: "82vh",
+    overflowY: "auto",
+    padding: "18px 16px calc(24px + env(safe-area-inset-bottom))",
+    borderRadius: "20px 20px 0 0",
+    background: visualIdentity.gradients.appBackground,
+    border: visualIdentity.cards.outer.border,
+    boxShadow: "0 -18px 42px rgba(3,18,37,0.34)",
+    color: visualIdentity.colors.white,
+    direction: "rtl",
+  },
+  sheetHeader: {
+    position: "sticky",
+    top: 0,
+    zIndex: 20,
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 14,
+    paddingBottom: 12,
+    background: "rgba(18,58,107,0.94)",
+    borderBottom: "1px solid rgba(255,255,255,0.12)",
+  },
+  innerCard: {
+    padding: 14,
+    borderRadius: visualIdentity.cards.inner.borderRadius,
+    background: visualIdentity.gradients.outerCard,
+    border: visualIdentity.cards.outer.border,
+    boxShadow: visualIdentity.cards.outer.boxShadow,
+  },
+  row: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    minHeight: 44,
+    padding: "9px 0",
+    borderBottom: "1px solid rgba(255,255,255,0.11)",
+    color: visualIdentity.colors.white,
+    fontSize: 12,
+  },
+  lastRow: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    minHeight: 44,
+    padding: "9px 0",
+    color: visualIdentity.colors.white,
+    fontSize: 12,
+  },
+  muted: visualIdentity.colors.textSecondary,
 };
 
-function NavIcon({ id, active = false }) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      width={active ? "21" : "20"}
-      height={active ? "21" : "20"}
-      aria-hidden="true"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={active ? "2" : "1.85"}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      {NAV_ICONS[id] || NAV_ICONS.overview}
-    </svg>
-  );
-}
-
-function FloatingBottomBar({ tabs, activeTab, onSelect }) {
-  return (
-    <nav
-      aria-label="التنقل الرئيسي"
-      style={{
-        position: "fixed",
-        left: "50%",
-        bottom: 0,
-        transform: "translateX(-50%)",
-        width: "100%",
-        maxWidth: 440,
-        zIndex: 520,
-        direction: "rtl",
-        background: "var(--bg-card)",
-        borderTop: "1px solid var(--border-soft)",
-        padding: "4px 0 calc(1px + env(safe-area-inset-bottom))",
-      }}
-    >
-      <div
-        style={{
-          display: "flex",
-          alignItems: "stretch",
-          justifyContent: "space-around",
-        }}
-      >
-        {tabs.map((item) => {
-          const active = item.id === activeTab;
-
-          return (
-            <button
-              key={item.id}
-              type="button"
-              aria-label={item.label}
-              title={item.label}
-              aria-current={active ? "page" : undefined}
-              onClick={() => onSelect(item.id)}
-              style={{
-                position: "relative",
-                flex: "1 1 0",
-                border: "none",
-                borderTop: active ? "2.5px solid #FACC15" : "2.5px solid transparent",
-                marginTop: active ? -2.5 : 0,
-                background: active
-                  ? "linear-gradient(180deg, rgba(254,249,195,0.95), rgba(255,253,248,0))"
-                  : "transparent",
-                color: "#211A12",
-                cursor: "pointer",
-                display: "flex",
-                flexDirection: "column",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: 1,
-                minWidth: 0,
-                minHeight: 44,
-                padding: "3px 2px 2px",
-                transition: "color 0.18s ease, border-color 0.18s ease, background 0.18s ease, opacity 0.15s ease",
-                WebkitTapHighlightColor: "transparent",
-              }}
-            >
-              {active && (
-                <span
-                  aria-hidden="true"
-                  style={{
-                    position: "absolute",
-                    top: -3,
-                    left: "50%",
-                    width: 36,
-                    height: 28,
-                    transform: "translateX(-50%)",
-                    background:
-                      "radial-gradient(circle at 50% 0%, rgba(250,204,21,0.58), rgba(250,204,21,0.22) 42%, rgba(250,204,21,0) 72%)",
-                    pointerEvents: "none",
-                  }}
-                />
-              )}
-              {active && (
-                <span
-                  aria-hidden="true"
-                  style={{
-                    position: "absolute",
-                    top: 0,
-                    left: "50%",
-                    width: 24,
-                    height: 3,
-                    borderRadius: 99,
-                    transform: "translateX(-50%)",
-                    background: "#FACC15",
-                    boxShadow: "0 0 12px rgba(250,204,21,0.9)",
-                    pointerEvents: "none",
-                  }}
-                />
-              )}
-              <span
-                style={{
-                  position: "relative",
-                  zIndex: 1,
-                  color: active ? "#111111" : "#2B2418",
-                  filter: active ? "drop-shadow(0 0 5px rgba(250,204,21,0.52))" : "none",
-                  lineHeight: 1,
-                }}
-              >
-                <NavIcon id={item.id} active={active} />
-              </span>
-              <span
-                style={{
-                  position: "relative",
-                  zIndex: 1,
-                  color: active ? "#111111" : "#2B2418",
-                  fontSize: 8.5,
-                  fontWeight: 800,
-                  lineHeight: 1.15,
-                }}
-              >
-                {item.label}
-              </span>
-            </button>
-          );
-        })}
-      </div>
-    </nav>
-  );
-}
-
-function Tag({ label, col }) {
-  return (
-    <span
-      style={{
-        fontSize: 10,
-        padding: "2px 8px",
-        borderRadius: 99,
-        background: `${col}22`,
-        color: col,
-        fontWeight: 700,
-      }}
-    >
-      {label}
-    </span>
-  );
-}
-
-function SpendBar({ spent, cap }) {
-  const safeSpent = Number(spent || 0);
-  const safeCap = Number(cap || 0);
-  const remaining = Math.max(0, safeCap - safeSpent);
-  const pct = safeCap > 0 ? Math.min(100, Math.round((safeSpent / safeCap) * 100)) : 0;
-  const remainingRatio = safeCap > 0 ? remaining / safeCap : 0;
-
-  const col =
-    remainingRatio > 0.5
-      ? "linear-gradient(90deg,#22c55e,#16a34a)"
-      : remainingRatio > 0.2
-      ? "linear-gradient(90deg,#f59e0b,#f97316)"
-      : "linear-gradient(90deg,#ef4444,#dc2626)";
-
-  const pctColor =
-    remainingRatio > 0.5
-      ? "#16a34a"
-      : remainingRatio > 0.2
-      ? "#f59e0b"
-      : "#dc2626";
-
-  return (
-    <div style={{ width: "100%" }}>
-      <div
-        style={{
-          textAlign: "center",
-          fontSize: 12,
-          fontWeight: 900,
-          color: pctColor,
-          marginBottom: 6,
-          fontVariantNumeric: "tabular-nums",
-        }}
-      >
-        {pct}%
-      </div>
-
-      <div
-        style={{
-          position: "relative",
-          width: "100%",
-          height: 32,
-          borderRadius: 999,
-          background:
-            "linear-gradient(180deg, rgba(255,255,255,0.82), rgba(148,163,184,0.16))",
-          overflow: "hidden",
-          boxShadow:
-            "inset 0 1px 2px rgba(255,255,255,0.65), inset 0 -1px 3px rgba(15,23,42,0.08)",
-        }}
-      >
-        <div
-          style={{
-            position: "absolute",
-            top: 0,
-            bottom: 0,
-            right: 0,
-            width: `${pct}%`,
-            background: col,
-            borderRadius: 999,
-            boxShadow:
-              "inset 0 1px 0 rgba(255,255,255,0.35), 0 4px 12px rgba(34,197,94,0.14)",
-            transition: "width 0.25s ease",
-          }}
-        />
-
-        <div
-          style={{
-            position: "relative",
-            zIndex: 1,
-            height: "100%",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            padding: "0 10px",
-            direction: "ltr",
-            fontSize: 12,
-            fontWeight: 900,
-            fontVariantNumeric: "tabular-nums",
-          }}
-        >
-          <span
-            style={{
-              background: "rgba(255,255,255,0.94)",
-              color: "#166534",
-              padding: "2px 10px",
-              borderRadius: 999,
-              lineHeight: 1.4,
-              boxShadow: "0 1px 3px rgba(15,23,42,0.10)",
-            }}
-          >
-            {remaining.toFixed(0)}
-          </span>
-
-          <span
-            style={{
-              color: pct >= 18 ? "#fff" : "var(--text-heading)",
-              textAlign: "center",
-            }}
-          >
-            {safeSpent.toFixed(0)}
-          </span>
-        </div>
-      </div>
-
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "flex-end",
-          alignItems: "center",
-          gap: 5,
-          marginTop: 7,
-          fontSize: 11,
-          fontWeight: 800,
-          color: "var(--text-muted)",
-          fontVariantNumeric: "tabular-nums",
-        }}
-      >
-        <span>{safeCap.toFixed(0)} د.أ</span>
-        <span style={{ fontSize: 12, opacity: 0.75 }}>🎯</span>
-      </div>
-    </div>
-  );
-}
 function formatDate(value) {
   if (!value) return "غير محدد";
   const date = new Date(value);
@@ -538,17 +323,6 @@ function formatDate(value) {
     day: "numeric",
   }).format(date);
 }
-
-const incomeEntryStyle = (isIncome) =>
-  isIncome
-    ? {
-        background: "var(--green-bg)",
-        border: "1px solid var(--green-border)",
-        borderRadius: 12,
-        padding: "9px 10px",
-        marginBottom: 8,
-      }
-    : null;
 
 const incomeEntryAmount = (entry) =>
   Number(entry?.isIncomeEntry ? entry.originalAmount || 0 : entry?.amount || 0);
@@ -693,149 +467,6 @@ function buildAssetComparisons(points, state) {
   });
 }
 
-function ExpenseDonut({ expenses, mode = "donut" }) {
-  const expenseCats = Array.from(
-  new Set((expenses || []).map((e) => e.category).filter(Boolean))
-);
-
-const grouped = expenseCats.map((cat) => ({
-  name: cat,
-  value: (expenses || [])
-    .filter((e) => e.category === cat)
-    .reduce((sum, e) => sum + Number(e.amount || 0), 0),
-  color: CC[cat] || "var(--text-muted)",
-  })).filter((x) => x.value > 0);
-  const total = grouped.reduce((sum, x) => sum + x.value, 0);
-  const sortedGrouped = [...grouped].sort((a, b) => b.value - a.value);
-
-  if (!grouped.length) {
-    return (
-      <div
-        style={{
-          textAlign: "center",
-          color: "var(--text-disabled)",
-          padding: "24px 0",
-          fontSize: 13,
-        }}
-      >
-        لا توجد مصاريف بعد
-      </div>
-    );
-  }
-
-  if (mode === "bars") {
-    const maxValue = Math.max(1, ...sortedGrouped.map((item) => item.value));
-
-    return (
-      <div style={{ display: "grid", gap: 8, marginTop: 4 }}>
-        {sortedGrouped.map((item) => {
-          const pct = total ? Math.round((item.value / total) * 100) : 0;
-          const width = Math.max(8, (item.value / maxValue) * 100);
-
-          return (
-            <div key={item.name} style={{ textAlign: "right" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", gap: 8, marginBottom: 4 }}>
-                <span style={{ color: item.color, fontSize: 11, fontWeight: 900 }}>
-                  {item.value.toFixed(2)}
-                </span>
-                <span style={{ color: "var(--text-body)", fontSize: 12 }}>
-                  {item.name} · {pct}%
-                </span>
-              </div>
-              <div style={{ height: 7, background: "var(--bg-secondary)", borderRadius: 4, overflow: "hidden" }}>
-                <div
-                  style={{
-                    width: `${width}%`,
-                    height: "100%",
-                    background: item.color,
-                    borderRadius: 4,
-                  }}
-                />
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    );
-  }
-
-  return (
-    <div>
-      <div style={{ height: 180, position: "relative" }}>
-        <ResponsiveContainer width="100%" height={180}>
-          <PieChart>
-            <Pie
-              data={grouped}
-              cx="50%"
-              cy="50%"
-              innerRadius={58}
-              outerRadius={80}
-              dataKey="value"
-              paddingAngle={3}
-            >
-              {grouped.map((d, i) => (
-                <Cell key={i} fill={d.color} stroke="transparent" />
-              ))}
-            </Pie>
-            <Tooltip />
-          </PieChart>
-        </ResponsiveContainer>
-
-        <div
-          style={{
-            position: "absolute",
-            top: "50%",
-            left: "50%",
-            transform: "translate(-50%,-50%)",
-            textAlign: "center",
-            pointerEvents: "none",
-          }}
-        >
-          <div style={{ fontSize: 17, fontWeight: 800, color: "var(--gold-dark)", fontVariantNumeric: "tabular-nums" }}>
-            {total.toFixed(0)}
-          </div>
-          <div style={{ fontSize: 9, color: "var(--text-faint)" }}>د.أ</div>
-        </div>
-      </div>
-
-      <div
-        style={{
-          display: "flex",
-          flexWrap: "wrap",
-          gap: 6,
-          justifyContent: "center",
-          marginTop: 8,
-        }}
-      >
-        {grouped.map((d) => (
-          <div
-            key={d.name}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 5,
-            }}
-          >
-            <span style={{ color: "var(--text-body)", fontSize: 12, fontWeight: 700 }}>
-              {total ? Math.round((d.value / total) * 100) : 0}%
-            </span>
-            <span style={{ fontSize: 12, color: "var(--text-muted)" }}>{d.name}</span>
-            <span
-              style={{
-                width: 10,
-                height: 10,
-                borderRadius: "50%",
-                background: d.color,
-                display: "inline-block",
-              }}
-            />
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
 function rebalanceCurrentLiabilityCoverage(state) {
   const next = structuredClone(state);
   const currentLiabilities = next.currentLiabilities || [];
@@ -890,45 +521,114 @@ function rebalanceCurrentLiabilityCoverage(state) {
   return next;
 }
 
+function rebalanceExpenseCoverageAfterCapIncrease(state) {
+  const next = structuredClone(state);
+  let availableCap = Math.max(
+    0,
+    Number(next.session?.spendingCap || 0) -
+      Number(next.session?.coveredSpent || 0)
+  );
+
+  if (availableCap <= 0) return next;
+
+  for (const expense of next.expenses || []) {
+    if (availableCap <= 0) break;
+    if (expense.isIncomeEntry || Number(expense.overBudget || 0) <= 0) continue;
+
+    const moveAmount = Math.min(availableCap, Number(expense.overBudget || 0));
+    if (moveAmount <= 0) continue;
+
+    expense.budgetCovered = Number(
+      (Number(expense.budgetCovered || 0) + moveAmount).toFixed(2)
+    );
+    expense.overBudget = Number(
+      Math.max(0, Number(expense.overBudget || 0) - moveAmount).toFixed(2)
+    );
+    expense.isOverBudget = expense.overBudget > 0;
+
+    next.session.coveredSpent = Number(
+      (Number(next.session?.coveredSpent || 0) + moveAmount).toFixed(2)
+    );
+    next.session.overBudgetSpent = Number(
+      Math.max(0, Number(next.session?.overBudgetSpent || 0) - moveAmount).toFixed(2)
+    );
+    availableCap = Number((availableCap - moveAmount).toFixed(2));
+
+    const relatedLiabilities = (next.currentLiabilities || []).filter(
+      (item) => item.status !== "paid" && String(item.expenseId || "") === String(expense.id)
+    );
+
+    if (expense.paymentMethod === "card" && expense.cardId) {
+      const card = (next.currentLiabilities || []).find(
+        (item) => item.type === "card" && String(item.id) === String(expense.cardId)
+      );
+      if (card && !relatedLiabilities.includes(card)) relatedLiabilities.push(card);
+    }
+
+    if (expense.overBudgetFunding?.type === "card" && expense.overBudgetFunding.cardId) {
+      const fundingCard = (next.currentLiabilities || []).find(
+        (item) =>
+          item.type === "card" &&
+          String(item.id) === String(expense.overBudgetFunding.cardId)
+      );
+      if (fundingCard && !relatedLiabilities.includes(fundingCard)) {
+        relatedLiabilities.push(fundingCard);
+      }
+      expense.overBudgetFunding.capCovered = Number(
+        (Number(expense.overBudgetFunding.capCovered || 0) + moveAmount).toFixed(2)
+      );
+    }
+
+    relatedLiabilities.forEach((item) => {
+      item.payableBuffer = Number(
+        (Number(item.payableBuffer || 0) + moveAmount).toFixed(2)
+      );
+      item.uncoveredDebt = Number(
+        Math.max(0, Number(item.uncoveredDebt || 0) - moveAmount).toFixed(2)
+      );
+    });
+  }
+
+  return next;
+}
+
 function Overview({
   state,
   setState,
-  onOpenReports,
   onOpenDueLiabilities,
   onAllocateSurplus,
-  onClearState,
   readOnly = false,
 }) {
+  const { currencyLabel: localeCurrencyLabel, t } = useLocale();
   const budget = calcBudget(state);
-  const [showExpense, setShowExpense] = useState(false);
   const [selectedExpense, setSelectedExpense] = useState(null);
   const [showCategoryManager, setShowCategoryManager] = useState(false);
-
+  const [showAllExpenses, setShowAllExpenses] = useState(false);
+  const deficitLiabilityNameRef = useRef(null);
   const [amount, setAmount] = useState("");
   const [category, setCategory] = useState("طعام");
   const [paymentMethod, setPaymentMethod] = useState("cash");
   const [cardId, setCardId] = useState("");
   const [note, setNote] = useState("");
-const pendingExpenses = [];
-const setPendingExpenses = () => {};
+  const [pendingExpenses, setPendingExpenses] = useState([]);
   const [liabilityName, setLiabilityName] = useState("");
   const [dueDate, setDueDate] = useState("");
 
-  const [overBudgetSource, setOverBudgetSource] = useState("liability");
+const [deficitTransfer, setDeficitTransfer] = useState(null);
+const [, setOverBudgetSource] = useState("");
 const [overBudgetAssetKey, setOverBudgetAssetKey] = useState("cash");
+const [deficitFundingType, setDeficitFundingType] = useState("");
 const [overBudgetLiabilityName, setOverBudgetLiabilityName] = useState("تجاوز سقف الصرف");
 const [overBudgetDueDate, setOverBudgetDueDate] = useState("");
-const [isUnusualExpense, setIsUnusualExpense] = useState(false);
-const [showUnusualPicker, setShowUnusualPicker] = useState(false);
 const [unusualFundingMode, setUnusualFundingMode] = useState("asset");
 const [unusualCapAmount, setUnusualCapAmount] = useState("");
 const [unusualRemainderSource, setUnusualRemainderSource] = useState("asset");
-const [unusualAssetKey, setUnusualAssetKey] = useState("cash");
+const [unusualAssetKey, setUnusualAssetKey] = useState("");
 const [unusualLiabilityName, setUnusualLiabilityName] = useState("مصروف غير اعتيادي");
 const [unusualDueDate, setUnusualDueDate] = useState("");
-const [assetPaymentKey, setAssetPaymentKey] = useState("cash");
   const cards = state.currentLiabilities.filter((x) => x.type === "card");
   const recent = [...state.expenses].slice(-3).reverse();
+  const allExpenses = [...state.expenses].reverse();
   const dueCurrentLiabilities = (state.currentLiabilities || []).filter((l) => {
   if (!l.dueDate || l.status === "paid") return false;
 
@@ -941,6 +641,14 @@ const [assetPaymentKey, setAssetPaymentKey] = useState("cash");
   );
 });
   const assetSources = getAssetSources(state);
+  const isGoodsSource = (source) => {
+    if (source.type !== "custom") return false;
+    const id = Number(String(source.key).split(":")[1]);
+    return (state.assets.custom || []).some(
+      (item) => item.id === id && item.type === "unit"
+    );
+  };
+  const bankAssetSources = assetSources.filter((source) => source.type === "bank");
   const defaultExpenseCategories = [
   { id: "food", label: "طعام", icon: "🍽️", color: "#f59e0b", pinned: true },
   { id: "transport", label: "مواصلات", icon: "🚗", color: "#3b82f6", pinned: true },
@@ -974,16 +682,6 @@ const pinnedExpenseCategories = allExpenseCategories
   .filter((cat) => cat.pinned && !cat.isOther)
   .slice(0, 9);
 
-const otherExpenseCategory =
-  allExpenseCategories.find((cat) => cat.isOther) || {
-    id: "other",
-    label: "أخرى",
-    icon: "•••",
-    color: "var(--text-muted)",
-    isOther: true,
-    pinned: true,
-  };
-
 const mainExpenseCategories = pinnedExpenseCategories;
   const enteredAmount = Number(amount || 0);
   const pendingTotal = pendingExpenses.reduce(
@@ -995,10 +693,6 @@ const mainExpenseCategories = pinnedExpenseCategories;
     acc[item.category] = Number((Number(acc[item.category] || 0) + Number(item.amount || 0)).toFixed(2));
     return acc;
   }, {});
-  const displayOverBudget =
-    ["emergency", "asset"].includes(paymentMethod)
-      ? 0
-      : Math.max(0, enteredAmount - Number(budget.remainingCap || 0));
   const spendingProgress =
     Number(budget.spendingCap || 0) > 0
       ? Math.min(100, (Number(budget.coveredSpent || 0) / Number(budget.spendingCap || 0)) * 100)
@@ -1007,22 +701,13 @@ const mainExpenseCategories = pinnedExpenseCategories;
   const spentValue = Number(budget.coveredSpent || 0);
   const remainingValue = Math.max(0, Number(budget.remainingCap || 0));
 
-  const remainingRatio =
-    spendingCapValue > 0 ? remainingValue / spendingCapValue : 0;
-
-  const progressBarColor =
-    remainingRatio > 0.5
-      ? "linear-gradient(90deg,#22c55e,#16a34a)"
-      : remainingRatio > 0.2
-      ? "linear-gradient(90deg,#f59e0b,#f97316)"
-      : "linear-gradient(90deg,#ef4444,#dc2626)";
-  const saveButtonTitle = "تسجيل المصروف";
+  const saveButtonTitle = pendingCount > 0 ? t("expenses.logMany") : t("expenses.logOne");
   const saveButtonMeta =
     pendingCount === 0
       ? ""
       : pendingCount === 1
-      ? `قائمة مؤقتة: ${pendingTotal.toFixed(2)} د.أ | 1 عنصر`
-      : `قائمة مؤقتة: ${pendingTotal.toFixed(2)} د.أ | ${pendingCount} عناصر`;
+      ? `${t("expenses.pendingReview")}: ${pendingTotal.toFixed(2)} ${localeCurrencyLabel} | 1`
+      : `${t("expenses.pendingReview")}: ${pendingTotal.toFixed(2)} ${localeCurrencyLabel} | ${pendingCount}`;
   const selectedExpenseTotal = Number(
     selectedExpense?.originalAmount ?? selectedExpense?.amount ?? 0
   );
@@ -1034,20 +719,41 @@ const mainExpenseCategories = pinnedExpenseCategories;
     selectedExpense?.emergencyFunding?.assetAmount || 0
   );
 const hasSpendingCap = Number(budget.remainingCap || 0) > 0;
-const expectedOverBudget = ["emergency", "asset"].includes(paymentMethod) ? 0 : Math.max(
+const uncoveredAmount = Math.max(
   0,
   enteredAmount - Number(budget.remainingCap || 0)
 );
+const amountExceedsCap = enteredAmount > Number(budget.remainingCap || 0);
+const emergencyAssetRequired =
+  unusualFundingMode === "mix"
+    ? Math.max(0, enteredAmount - Number(unusualCapAmount || 0))
+    : enteredAmount;
+const selectedDeficitSource = deficitTransfer?.sources.find(
+  (source) => source.key === deficitTransfer.fromAsset
+);
+const deficitSourceNeedsSale = Boolean(
+  selectedDeficitSource &&
+    !["cash", "bank"].includes(selectedDeficitSource.type)
+);
+const showLegacyDeficitPanel = false;
 
 useEffect(() => {
-  if (!hasSpendingCap && paymentMethod === "cash") {
-    setPaymentMethod("asset");
-  }
+  const timer = window.setTimeout(() => {
+    if (!hasSpendingCap && unusualFundingMode === "mix") {
+      setUnusualFundingMode("asset");
+    }
 
-  if (!hasSpendingCap && unusualFundingMode === "mix") {
-    setUnusualFundingMode("asset");
-  }
-}, [hasSpendingCap, paymentMethod, unusualFundingMode]);
+    if (!hasSpendingCap && paymentMethod === "cash") {
+      setPaymentMethod("");
+    }
+
+    if (hasSpendingCap && !amountExceedsCap && ["", "asset"].includes(paymentMethod)) {
+      setPaymentMethod("cash");
+    }
+  }, 0);
+
+  return () => window.clearTimeout(timer);
+}, [amountExceedsCap, hasSpendingCap, paymentMethod, unusualFundingMode]);
 
   const resetExpenseDraft = () => {
     setAmount("");
@@ -1058,29 +764,18 @@ useEffect(() => {
     setPendingExpenses([]);
     setLiabilityName("");
     setDueDate("");
-    setOverBudgetSource("liability");
+    setOverBudgetSource("");
     setOverBudgetAssetKey("cash");
-    setAssetPaymentKey("cash");
+    setDeficitFundingType("");
+    setDeficitTransfer(null);
     setOverBudgetLiabilityName("تجاوز سقف الصرف");
     setOverBudgetDueDate("");
-    setIsUnusualExpense(false);
-    setShowUnusualPicker(false);
     setUnusualFundingMode("asset");
     setUnusualCapAmount("");
     setUnusualRemainderSource("asset");
-    setUnusualAssetKey("cash");
+    setUnusualAssetKey("");
     setUnusualLiabilityName("مصروف طارئ");
     setUnusualDueDate("");
-  };
-
-  const closeExpenseSheet = () => {
-    if (pendingExpenses.length > 0) {
-      const ok = window.confirm("لديك مصروفات غير مسجلة. هل تريد إلغائها والخروج؟");
-      if (!ok) return;
-    }
-
-    resetExpenseDraft();
-    setShowExpense(false);
   };
 
   const appendAmountDigit = (digit) => {
@@ -1096,7 +791,26 @@ useEffect(() => {
   const addPendingExpense = () => {
     const value = Number(amount || 0);
 
-    if (!value || value <= 0) return;
+    if (!value || value <= 0) {
+      alert("أدخل مبلغاً أكبر من صفر");
+      return;
+    }
+    if (!String(category || "").trim()) {
+      alert("اختر تصنيف المصروف");
+      return;
+    }
+    if (!paymentMethod) {
+      alert("اختر أسلوب الدفع قبل إضافة البند");
+      return;
+    }
+    if (paymentMethod === "emergency") {
+      alert("تسجيل عدة مصاريف مع المصروف الطارئ غير مدعوم حالياً. سجل كل مصروف على حدة.");
+      return;
+    }
+    if (paymentMethod === "asset") {
+      alert("المصاريف الممولة من الأصول تسجل حالياً بنداً بنداً لإكمال المناقلة بأمان.");
+      return;
+    }
 
     setPendingExpenses((prev) => [
       ...prev,
@@ -1105,52 +819,97 @@ useEffect(() => {
         category,
         amount: value,
         note,
+        date: new Date().toISOString().slice(0, 10),
+        paymentMethod,
+        cardId,
+        liabilityName,
+        dueDate,
       },
     ]);
     setAmount("");
     setNote("");
+    setCategory("طعام");
+  };
+
+  const removePendingExpense = (id) => {
+    setPendingExpenses((items) => items.filter((item) => item.id !== id));
+  };
+
+  const editExpenseNote = () => {
+    const nextNote = window.prompt("اكتب ملاحظة المصروف", note || "");
+    if (nextNote !== null) {
+      setNote(nextNote);
+    }
   };
 
   const changePaymentMethod = (value) => {
     if (pendingExpenses.length > 0 && value !== paymentMethod) {
-      alert("لديك مصروفات غير مسجلة. سجلها أولاً أو قم بإلغائها قبل تغيير طريقة الدفع.");
+      alert("لديك مصروفات غير مسجلة. سجلها أولاً أو قم بإلغائها قبل تغيير اسلوب الدفع.");
       return;
     }
 
     if (value === "emergency") {
       setPaymentMethod(value);
-      setIsUnusualExpense(true);
       setUnusualFundingMode("asset");
-      setShowUnusualPicker(false);
+      setUnusualAssetKey("");
+      return;
+    }
+
+    if (value === "asset") {
+      setPaymentMethod(value);
+      openDeficitTransfer("all");
       return;
     }
 
     setPaymentMethod(value);
-    setIsUnusualExpense(false);
     setUnusualFundingMode("");
-    setShowUnusualPicker(false);
   };
 
   const paymentOptions = [
     ...(hasSpendingCap ? [{ value: "cash", label: "كاش", icon: "💵" }] : []),
-    { value: "asset", label: "أصل", icon: "🏦" },
+    ...(amountExceedsCap ? [{ value: "asset", label: "أصل", icon: "🏦" }] : []),
     { value: "card", label: "بطاقة", icon: "💳" },
-    { value: "liability", label: "التزام", icon: "🧾" },
-    { value: "emergency", label: "طارئ", icon: "⚡" },
+    { value: "liability", label: "التزام جديد", icon: "🧾" },
+    { value: "emergency", label: "مصروف طارئ", icon: "⚡" },
   ];
 
-  const submitExpense = () => {
+  const submitExpenseWithState = (baseState, fundingOverride = null) => {
+    const effectivePaymentMethod =
+      fundingOverride?.paymentMethod ?? paymentMethod;
+    const effectiveOverBudgetSource = fundingOverride?.source ?? "";
+    const effectiveOverBudgetAssetKey = fundingOverride?.assetKey ?? "";
+    const effectiveEmergencyAssetKey =
+      fundingOverride?.assetKey ?? unusualAssetKey;
+    const effectiveOverBudget = ["emergency", "asset"].includes(
+      effectivePaymentMethod
+    )
+      ? 0
+      : uncoveredAmount;
+    const baseCards = (baseState.currentLiabilities || []).filter(
+      (item) => item.type === "card"
+    );
+
+    if (!effectivePaymentMethod) {
+      alert("اختر أسلوب الدفع");
+      return;
+    }
+
+    if (effectivePaymentMethod === "asset") {
+      alert("أكمل مناقلة الأصل أولاً لتسجيل المصروف");
+      return;
+    }
+
     if (!enteredAmount || enteredAmount <= 0) {
       alert("أدخل مبلغًا صحيحًا");
       return;
     }
 
-    if (paymentMethod === "liability" && !dueDate) {
+    if (effectivePaymentMethod === "liability" && !dueDate) {
   alert("أدخل تاريخ استحقاق الدين المباشر");
   return;
 }
-    if (paymentMethod === "card") {
-      const selectedCard = cards.find((card) => String(card.id) === String(cardId));
+    if (effectivePaymentMethod === "card") {
+      const selectedCard = baseCards.find((card) => String(card.id) === String(cardId));
       if (!selectedCard) {
         alert("اختر بطاقة صحيحة");
         return;
@@ -1165,11 +924,7 @@ useEffect(() => {
         return;
       }
     }
-    if (paymentMethod === "asset" && !assetPaymentKey) {
-      alert("اختر الأصل الذي سيدفع المصروف");
-      return;
-    }
-    if (paymentMethod === "emergency") {
+    if (effectivePaymentMethod === "emergency") {
       if (!unusualFundingMode) {
         alert("اختر طريقة تمويل المصروف الطارئ");
         return;
@@ -1192,7 +947,7 @@ useEffect(() => {
         }
 
         if (emergencyCapAmount > Number(budget.remainingCap || 0)) {
-          alert(`المتاح من سقف الصرف فقط ${Number(budget.remainingCap || 0).toFixed(2)} د.أ`);
+          alert(`المتاح من سقف الصرف فقط ${Number(budget.remainingCap || 0).toFixed(2)} ${localeCurrencyLabel}`);
           return;
         }
 
@@ -1202,7 +957,7 @@ useEffect(() => {
         }
       }
 
-      if (needsEmergencyAsset && !unusualAssetKey) {
+      if (needsEmergencyAsset && !effectiveEmergencyAssetKey) {
         alert("اختر الأصل الذي سيموّل المصروف الطارئ");
         return;
       }
@@ -1212,42 +967,56 @@ useEffect(() => {
         return;
       }
     }
-    if (expectedOverBudget > 0) {
+    if (effectiveOverBudget > 0) {
+  if (effectivePaymentMethod === "cash" && !effectiveOverBudgetSource) {
+    alert("رصيد الكاش لا يغطي المصروف. اختر طريقة تمويل العجز.");
+    return;
+  }
+
   if (
-  paymentMethod === "cash" &&
-  overBudgetSource === "liability" &&
-  !overBudgetDueDate
-) {
-  alert("أدخل تاريخ استحقاق الدين الإضافي الناتج عن العجز");
-  return;
-}
+    effectivePaymentMethod === "cash" &&
+    effectiveOverBudgetSource === "asset" &&
+    !effectiveOverBudgetAssetKey
+  ) {
+    alert("اختر الأصل الذي سيموّل العجز");
+    return;
+  }
+
+  if (
+    effectivePaymentMethod === "cash" &&
+    effectiveOverBudgetSource === "liability" &&
+    !dueDate
+  ) {
+    alert("أدخل تاريخ استحقاق الالتزام الناتج عن العجز");
+    return;
+  }
 
   const ok = window.confirm(
-    `هذا المصروف يتجاوز سقف الصرف بمبلغ ${expectedOverBudget.toFixed(
+    `هذا المصروف يتجاوز سقف الصرف بمبلغ ${effectiveOverBudget.toFixed(
       2
-    )} د.أ. هل تريد المتابعة؟`
+    )} ${localeCurrencyLabel}. هل تريد المتابعة؟`
   );
 
   if (!ok) return;
 }
 
-    const result = recordExpense(state, {
+    const operationId = createOperationId();
+    const result = recordExpense(baseState, {
       amount: Number(amount || 0),
       category,
-      paymentMethod,
+      paymentMethod: effectivePaymentMethod,
       cardId,
       note,
       liabilityName,
       dueDate,
-      assetKey: assetPaymentKey,
       emergencyFunding:
-        paymentMethod === "emergency"
+        effectivePaymentMethod === "emergency"
           ? {
               mode: unusualFundingMode,
               capAmount:
                 unusualFundingMode === "mix" ? Number(unusualCapAmount || 0) : 0,
               remainderSource: unusualRemainderSource,
-              assetKey: unusualAssetKey,
+              assetKey: effectiveEmergencyAssetKey,
               liabilityName: unusualLiabilityName,
               dueDate: unusualDueDate,
             }
@@ -1263,12 +1032,12 @@ useEffect(() => {
 const lastExpense =
   nextState.expenses[nextState.expenses.length - 1];
 
-if (lastExpense?.overBudget > 0 && paymentMethod !== "emergency") {
-  if (paymentMethod !== "card" && paymentMethod !== "liability") {
-    if (overBudgetSource === "asset") {
+if (lastExpense?.overBudget > 0 && effectivePaymentMethod !== "emergency") {
+  if (effectivePaymentMethod !== "card" && effectivePaymentMethod !== "liability") {
+    if (effectiveOverBudgetSource === "asset") {
       const deduction = deductFromAsset(
         nextState,
-        overBudgetAssetKey,
+        effectiveOverBudgetAssetKey,
         lastExpense.overBudget
       );
 
@@ -1280,50 +1049,276 @@ if (lastExpense?.overBudget > 0 && paymentMethod !== "emergency") {
       nextState = deduction.nextState;
 
       nextState.transactions.push({
-        id: Date.now(),
+        id: operationId,
         type: "over_budget_covered_from_asset",
         amount: lastExpense.overBudget,
-        assetKey: overBudgetAssetKey,
+        assetKey: effectiveOverBudgetAssetKey,
         expenseId: lastExpense.id,
         date: new Date().toISOString(),
       });
+      lastExpense.overBudgetFunding = {
+        type: "asset",
+        assetKey: effectiveOverBudgetAssetKey,
+        amount: Number(lastExpense.overBudget || 0),
+      };
     }
 
-    if (overBudgetSource === "liability") {
-nextState.currentLiabilities.push({
-  id: Date.now(),
-  type: "over_budget",
-  name: overBudgetLiabilityName || "تجاوز سقف الصرف",
-  amount: Number(lastExpense.overBudget || 0),
-  dueDate: overBudgetDueDate || "",
-  dueDay: overBudgetDueDate
-    ? new Date(overBudgetDueDate).getDate()
-    : 1,
-  status: "pending",
-  source: "over_budget_expense",
-  expenseId: lastExpense.id,
-});
-      nextState.transactions.push({
-        id: Date.now() + 1,
-        type: "over_budget_added_as_liability",
-        amount: lastExpense.overBudget,
-        expenseId: lastExpense.id,
-        date: new Date().toISOString(),
-      });
-    }
   }
 
   alert(
     `تنبيه: تجاوزت سقف الصرف بمبلغ ${lastExpense.overBudget.toFixed(
       2
-    )} د.أ في هذه العملية.`
+    )} ${localeCurrencyLabel} في هذه العملية.`
   );
 }
 
 setState(nextState);
     resetExpenseDraft();
-    setShowExpense(false);
   };
+  const submitPendingExpenses = () => {
+    if (Number(amount || 0) > 0) {
+      alert("أضف البند الحالي إلى قائمة المراجعة أولاً");
+      return;
+    }
+
+    const invalidItem = pendingExpenses.find(
+      (item) => Number(item.amount || 0) <= 0 || !String(item.category || "").trim()
+    );
+    if (invalidItem) {
+      alert("تحقق من مبلغ وتصنيف جميع البنود قبل التسجيل");
+      return;
+    }
+
+    if (paymentMethod === "emergency") {
+      alert("تسجيل عدة مصاريف مع المصروف الطارئ غير مدعوم حالياً. سجل كل مصروف على حدة.");
+      return;
+    }
+
+    if (paymentMethod === "asset") {
+      alert("المصاريف الممولة من الأصول تسجل حالياً بنداً بنداً لإكمال المناقلة بأمان.");
+      return;
+    }
+
+    if (!paymentMethod) {
+      alert("اختر أسلوب الدفع");
+      return;
+    }
+
+    if (paymentMethod === "cash" && pendingTotal > Number(budget.remainingCap || 0)) {
+      alert(
+        `إجمالي المصاريف المؤقتة ${pendingTotal.toFixed(2)} ${localeCurrencyLabel} يتجاوز المتاح من سقف الصرف ${Number(
+          budget.remainingCap || 0
+        ).toFixed(2)} ${localeCurrencyLabel}. سجل البنود التي تحتاج تغطية بشكل منفرد.`
+      );
+      return;
+    }
+
+    if (paymentMethod === "card" && !cardId) {
+      alert("اختر البطاقة التي ستستخدم لجميع البنود");
+      return;
+    }
+
+    if (paymentMethod === "liability" && !dueDate) {
+      alert("أدخل تاريخ استحقاق الالتزام قبل تسجيل البنود");
+      return;
+    }
+
+    let nextState = structuredClone(state);
+    const batchOperationId = Date.now();
+
+    for (let index = 0; index < pendingExpenses.length; index += 1) {
+      const item = pendingExpenses[index];
+      const operationId = batchOperationId + index * 10;
+      const result = recordExpense(nextState, {
+        id: operationId,
+        operationId,
+        amount: Number(item.amount || 0),
+        category: item.category,
+        note: item.note || "",
+        date: item.date,
+        paymentMethod,
+        cardId,
+        liabilityName,
+        dueDate,
+        emergencyFunding: null,
+      });
+
+      if (!result.success) {
+        alert(`لم يتم حفظ أي بند. تعذر تسجيل «${item.category}»: ${result.message}`);
+        return;
+      }
+
+      nextState = result.nextState;
+    }
+
+    setState(nextState);
+    resetExpenseDraft();
+    alert(`تم تسجيل ${pendingExpenses.length} مصاريف بنجاح`);
+  };
+
+  const submitExpense = () =>
+    pendingExpenses.length > 0
+      ? submitPendingExpenses()
+      : submitExpenseWithState(state);
+
+  const getSaleSources = (type) =>
+    assetSources.filter((source) => {
+      if (type === "all") {
+        return ["cash", "bank", "gold", "silver", "stock"].includes(
+          source.type
+        ) || isGoodsSource(source);
+      }
+      if (type === "gold") return source.type === "gold";
+      if (type === "stock") return source.type === "stock";
+      if (type === "goods") return isGoodsSource(source);
+      return false;
+    });
+
+  const openDeficitTransfer = (
+    type = "all",
+    context = "overBudget",
+    requiredAmount = uncoveredAmount
+  ) => {
+    const sources = getSaleSources(type);
+    if (!sources.length) {
+      alert("لا يوجد أصل متاح من هذا النوع للمناقلة");
+      return;
+    }
+
+    const transferValue = Number(requiredAmount || 0).toFixed(2);
+    setDeficitTransfer({
+      type,
+      context,
+      requiredAmount: Number(requiredAmount || 0),
+      sources,
+      fromAsset: sources[0].key,
+      amount: transferValue,
+      sourceUnits: "",
+      sourcePrice: "",
+      allocations: [
+        {
+          id: 1,
+          allocation: "cash",
+          amount: transferValue,
+          targetId: "",
+          assetName: "",
+          units: "",
+          price: "",
+        },
+      ],
+    });
+  };
+
+  const updateDeficitTransferRow = (patch) => {
+    setDeficitTransfer((current) => ({
+      ...current,
+      allocations: current.allocations.map((row) =>
+        row.id === 1 ? { ...row, ...patch } : row
+      ),
+    }));
+  };
+
+  const updateDeficitSaleField = (field, value) => {
+    setDeficitTransfer((current) => {
+      const next = { ...current, [field]: value };
+      const saleAmount = Number(next.sourceUnits || 0) * Number(next.sourcePrice || 0);
+      const amountValue = saleAmount > 0 ? saleAmount.toFixed(2) : "";
+      return {
+        ...next,
+        amount: amountValue,
+        allocations: next.allocations.map((row) => ({
+          ...row,
+          amount: amountValue,
+        })),
+      };
+    });
+  };
+
+  const confirmDeficitTransfer = () => {
+    if (!deficitTransfer) return;
+
+    const requiredAmount = Number(deficitTransfer.requiredAmount || 0);
+    const transferAmount = Number(deficitTransfer.amount || 0);
+    const row = deficitTransfer.allocations[0];
+    const allocationAmount = Number(row?.amount || 0);
+    const selectedSource = deficitTransfer.sources.find(
+      (source) => source.key === deficitTransfer.fromAsset
+    );
+
+    if (!selectedSource || requiredAmount <= 0) {
+      alert("تعذر تحديد مصدر التمويل أو المبلغ المطلوب");
+      return;
+    }
+
+    const completeExpense = (fundedState, destinationKey) => {
+      setDeficitTransfer(null);
+      submitExpenseWithState(fundedState, {
+        source: "asset",
+        assetKey: destinationKey,
+        paymentMethod:
+          deficitTransfer.context === "emergency" ? "emergency" : "cash",
+      });
+    };
+
+    if (["cash", "bank"].includes(selectedSource.type)) {
+      const finalReceiverBalance = getAssetAvailable(state, selectedSource.key);
+      if (finalReceiverBalance < requiredAmount) {
+        alert(
+          `الرصيد لا يغطي المبلغ المطلوب. الرصيد المتاح ${finalReceiverBalance.toFixed(2)} ${localeCurrencyLabel}`
+        );
+        return;
+      }
+      completeExpense(state, selectedSource.key);
+      return;
+    }
+
+    if (transferAmount <= 0 || allocationAmount <= 0) {
+      alert("أدخل مبلغ مناقلة صحيحًا");
+      return;
+    }
+    if (Math.abs(transferAmount - allocationAmount) > 0.01) {
+      alert("قيمة التوزيع يجب أن تساوي قيمة المناقلة");
+      return;
+    }
+
+    let destinationKey = "cash";
+    if (row.allocation === "bank") {
+      if (!row.targetId) {
+        alert("اختر الحساب البنكي المستلم");
+        return;
+      }
+      destinationKey = `bank:${row.targetId}`;
+    }
+
+    const transferResult = liquidateAssetUnits(
+      state,
+      deficitTransfer.fromAsset,
+      destinationKey,
+      deficitTransfer.sourceUnits,
+      deficitTransfer.sourcePrice
+    );
+
+    if (!transferResult.success) {
+      alert(transferResult.message);
+      return;
+    }
+
+    const finalReceiverBalance = getAssetAvailable(
+      transferResult.nextState,
+      destinationKey
+    );
+    if (finalReceiverBalance < requiredAmount) {
+      setState(transferResult.nextState);
+      setDeficitTransfer(null);
+      alert(
+        `تمت المناقلة، لكن رصيد الحساب المستلم غير كافٍ. الرصيد النهائي ${finalReceiverBalance.toFixed(2)} ${localeCurrencyLabel}`
+      );
+      return;
+    }
+
+    completeExpense(transferResult.nextState, destinationKey);
+  };
+
   function cancelExpense(expenseId) {
   const ok = window.confirm("هل تريد إلغاء هذا المصروف وعكس أثره المالي؟");
   if (!ok) return;
@@ -1379,6 +1374,35 @@ setState(nextState);
         if (Number(card.balance || 0) <= 0) {
           card.status = "paid";
         }
+      }
+    }
+
+    if (expense.overBudgetFunding?.type === "card") {
+      const fundingCard = (next.currentLiabilities || []).find(
+        (item) =>
+          item.type === "card" &&
+          String(item.id) === String(expense.overBudgetFunding.cardId)
+      );
+      const fundedAmount = Number(expense.overBudgetFunding.amount || 0);
+      const capCovered = Math.min(
+        fundedAmount,
+        Number(expense.overBudgetFunding.capCovered || 0)
+      );
+
+      if (fundingCard && fundedAmount > 0) {
+        fundingCard.balance = Number(
+          Math.max(0, Number(fundingCard.balance || 0) - fundedAmount).toFixed(2)
+        );
+        fundingCard.uncoveredDebt = Number(
+          Math.max(
+            0,
+            Number(fundingCard.uncoveredDebt || 0) - (fundedAmount - capCovered)
+          ).toFixed(2)
+        );
+        fundingCard.payableBuffer = Number(
+          Math.max(0, Number(fundingCard.payableBuffer || 0) - capCovered).toFixed(2)
+        );
+        if (fundingCard.balance <= 0) fundingCard.status = "paid";
       }
     }
 
@@ -1534,314 +1558,39 @@ function toggleExpenseCategoryPinned(catId) {
   });
 }
  return (
-    <div style={G.scr}>
-            <div style={G.card()}>
-           
-                     <div
-          style={{
-            background: "var(--bg-secondary)",
-            border: "1px solid rgba(148,163,184,0.14)",
-            borderRadius: 20,
-            padding: 14,
-            marginTop: 4,
-          }}
-        >
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              gap: 10,
-              marginBottom: 10,
-            }}
-          >
-                      <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "38px 1fr 38px",
-              alignItems: "center",
-              gap: 8,
-              marginBottom: 8,
-            }}
-          >
-                        <div
-              style={{
-                gridColumn: 1,
-                gridRow: 1,
-                zIndex: 1,
-                display: "flex",
-                justifyContent: "flex-start",
-              }}
-            >
-              {Number(dueCurrentLiabilities.length || 0) > 0 && (
-                <button
-                  type="button"
-                  onClick={onOpenDueLiabilities}
-                  title="الالتزامات المستحقة هذا الشهر"
-                  aria-label="الالتزامات المستحقة هذا الشهر"
-                 style={{
-  position: "relative",
-  width: 30,
-  height: 30,
-  borderRadius: 12,
-  border: "1px solid rgba(214,174,70,0.16)",
-  background: "rgba(255,255,255,0.38)",
-  color: "var(--gold-dark)",
-  display: "inline-flex",
-  alignItems: "center",
-  justifyContent: "center",
-  cursor: "pointer",
-  fontSize: 15,
-  fontWeight: 900,
-  fontFamily: "inherit",
-  boxShadow: "inset 0 1px 0 rgba(255,255,255,0.42)",
-}}
-                >
-                  🔔
-                  <span
-                    style={{
-  position: "absolute",
-  top: -5,
-  right: -5,
-  minWidth: 16,
-  height: 16,
-  padding: "0 4px",
-  borderRadius: 999,
-  background: "#ef4444",
-  color: "#fff",
-  display: "inline-flex",
-  alignItems: "center",
-  justifyContent: "center",
-  fontSize: 9,
-  fontWeight: 900,
-  lineHeight: 1,
-  boxShadow: "0 1px 4px rgba(239,68,68,0.18)",
-}}
-                  >
-                    {dueCurrentLiabilities.length}
-                  </span>
-                </button>
-              )}
-            </div>
-
-                                              <div
-              style={{
-                gridColumn: "1 / 4",
-                gridRow: 1,
-                width: "100%",
-                boxSizing: "border-box",
-                paddingInline: 48,
-                transform: "translateX(-55px)",
-                textAlign: "center",
-                fontSize: 14,
-                fontWeight: 800,
-                color: "var(--text-muted)",
-                letterSpacing: "0.2px",
-                pointerEvents: "none",
-              }}
-            >
-              سقف الصرف الشهري
-            </div>
-            <div style={{ gridColumn: 3 }} />
-          </div>
-
-          
-          </div>
-
-          <div
-            style={{
-              marginBottom: 8,
-              textAlign: "center",
-              fontSize: 13,
-              fontWeight: 900,
-              fontVariantNumeric: "tabular-nums",
-              color:
-                remainingRatio > 0.5
-                  ? "#16a34a"
-                  : remainingRatio > 0.2
-                  ? "#f59e0b"
-                  : "#dc2626",
-            }}
-          >
-            {spendingProgress.toFixed(0)}%
-          </div>
-
-                   <div
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              gap: 6,
-              direction: "ltr",
-              width: "100%",
-            }}
-          >
-            <div
-              style={{
-                position: "relative",
-                height: 34,
-                width: "100%",
-                borderRadius: 999,
-                background:
-                  "linear-gradient(180deg, rgba(255,255,255,0.55), rgba(148,163,184,0.14))",
-                overflow: "hidden",
-                boxShadow:
-                  "inset 0 1px 2px rgba(255,255,255,0.55), inset 0 -1px 3px rgba(15,23,42,0.08)",
-              }}
-            >
-              <div
-                style={{
-                  position: "absolute",
-                  top: 0,
-                  bottom: 0,
-                  right: 0,
-                  width: `${spendingProgress}%`,
-                  background: progressBarColor,
-                  borderRadius: 999,
-                  boxShadow:
-                    "inset 0 1px 0 rgba(255,255,255,0.35), 0 4px 12px rgba(34,197,94,0.18)",
-                  transition: "width 0.25s ease",
-                }}
-              />
-
-              <div
-                style={{
-                  position: "relative",
-                  zIndex: 1,
-                  height: "100%",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  padding: "0 10px",
-                  direction: "ltr",
-                  fontSize: 12,
-                  fontWeight: 900,
-                  fontVariantNumeric: "tabular-nums",
-                }}
-              >
-                <span
-                  style={{
-                    background: "rgba(255,255,255,0.94)",
-                    color: "#166534",
-                    padding: "2px 10px",
-                    borderRadius: 999,
-                    lineHeight: 1.4,
-                    boxShadow: "0 1px 3px rgba(15,23,42,0.10)",
-                  }}
-                >
-                  {remainingValue.toFixed(0)}
-                </span>
-
-                <span
-                  style={{
-                    color:
-                      spendingProgress >= 18 ? "#ffffff" : "var(--text-heading)",
-                    textAlign: "center",
-                  }}
-                >
-                  {spentValue.toFixed(0)}
-                </span>
-              </div>
-            </div>
-
-            <div
-              style={{
-                alignSelf: "flex-end",
-                color: "var(--text-muted)",
-                fontSize: 11,
-                fontWeight: 800,
-                fontVariantNumeric: "tabular-nums",
-                lineHeight: 1,
-                paddingInlineEnd: 2,
-              }}
-            >
-              {spendingCapValue.toFixed(0)}
-            </div>
-          </div>
-          
-                    {budget.overBudgetSpent > 0 && (
-            <div
-              style={{
-                marginTop: 12,
-                background: "rgba(239,68,68,0.10)",
-                border: "1px solid rgba(239,68,68,0.22)",
-                borderRadius: 14,
-                padding: "10px 12px",
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                gap: 8,
-              }}
-            >
-              <div
-                style={{
-                  fontSize: 12,
-                  color: "#b91c1c",
-                  fontWeight: 800,
-                }}
-              >
-                التجاوز
-              </div>
-
-              <div
-                style={{
-                  fontSize: 16,
-                  color: "#dc2626",
-                  fontWeight: 900,
-                  fontVariantNumeric: "tabular-nums",
-                }}
-              >
-                {Number(budget.overBudgetSpent || 0).toFixed(2)} د.أ
-              </div>
-            </div>
-          )}
-        </div>
-
-
-                {budget.overBudgetSpent > 0 && (
-          <div
-            style={{
-              marginTop: 12,
-              padding: "10px 12px",
-              borderRadius: 16,
-              background: "rgba(239,68,68,0.07)",
-              border: "1px solid rgba(239,68,68,0.16)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              gap: 10,
-            }}
-          >
-            <div
-              style={{
-                fontSize: 12,
-                color: "#b91c1c",
-                fontWeight: 800,
-              }}
-            >
-              التجاوز
-            </div>
-
-            <div
-              style={{
-                fontSize: 15,
-                color: "#dc2626",
-                fontWeight: 900,
-                fontVariantNumeric: "tabular-nums",
-              }}
-            >
-              {budget.overBudgetSpent.toFixed(2)} د.أ
-            </div>
-          </div>
-        )}
-
-      </div>
+    <div
+      className="overview-screen"
+      style={{
+        ...G.scr,
+        minHeight: "calc(100vh - 118px)",
+        background: "linear-gradient(180deg, #083B76 0%, #064886 52%, #073264 100%)",
+      }}
+    >
+<SpendingCapCard
+        spendingProgress={spendingProgress}
+        remainingValue={remainingValue}
+        spentValue={spentValue}
+        spendingCapValue={spendingCapValue}
+        overBudgetSpent={budget.overBudgetSpent}
+        dueLiabilitiesCount={dueCurrentLiabilities.length}
+        onOpenDueLiabilities={onOpenDueLiabilities}
+        recentExpenses={recent}
+        onSelectExpense={setSelectedExpense}
+        onShowAllExpenses={() => setShowAllExpenses(true)}
+        incomeAmount={incomeEntryAmount}
+        categoryColors={CC}
+      />
 
             {!readOnly && state.session.isOpen && (
         <div
+          className="home-expense-panel"
           style={{
-            ...G.card(),
-            margin: "14px 0 16px",
-            padding: 12,
+            background: visualIdentity.gradients.outerCard,
+            border: visualIdentity.cards.outer.border,
+            borderRadius: visualIdentity.cards.outer.borderRadius,
+            boxShadow: visualIdentity.cards.outer.boxShadow,
+            margin: "12px 0 14px",
+            padding: 10,
           }}
         >
           <div
@@ -1850,7 +1599,7 @@ function toggleExpenseCategoryPinned(catId) {
               alignItems: "center",
               justifyContent: "space-between",
               gap: 10,
-              marginBottom: 12,
+              marginBottom: 8,
             }}
           >
             <button
@@ -1859,17 +1608,17 @@ function toggleExpenseCategoryPinned(catId) {
               title="المزيد"
               aria-label="المزيد"
               style={{
-                width: 40,
-                height: 40,
-                borderRadius: 14,
-                border: "1px solid rgba(148,163,184,0.18)",
-                background: "var(--bg-page)",
-                color: "var(--text-muted)",
+                width: 34,
+                height: 34,
+                borderRadius: 11,
+                border: "1px solid rgba(255,255,255,0.16)",
+                background: "rgba(255,255,255,0.08)",
+                color: visualIdentity.colors.white,
                 display: "inline-flex",
                 alignItems: "center",
                 justifyContent: "center",
                 cursor: "pointer",
-                fontSize: 20,
+                fontSize: 17,
                 fontWeight: 900,
                 fontFamily: "inherit",
                 flex: "0 0 auto",
@@ -1880,223 +1629,86 @@ function toggleExpenseCategoryPinned(catId) {
 
             <div
               style={{
-                fontSize: 17,
+                fontSize: 14,
                 fontWeight: 900,
-                color: "var(--text-heading)",
+                color: visualIdentity.colors.white,
                 textAlign: "right",
+                flex: 1,
               }}
             >
-              اختر نوع المصروف
+              تسجيل مصروف
             </div>
           </div>
+
+<ExpenseCategoryGrid
+            categories={mainExpenseCategories}
+            selectedCategory={category}
+            onSelect={setCategory}
+            getTileStyle={getCategoryTileStyle}
+            icons={CAT_ICONS}
+            pendingByCategory={pendingByCategory}
+          />
 
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
-              gap: 8,
-              marginBottom: 12,
+              gridTemplateColumns: "42px minmax(0, 1fr)",
+              alignItems: "stretch",
+              gap: 7,
+              marginBottom: 9,
+              direction: "ltr",
             }}
           >
-            {mainExpenseCategories
-              .filter((catItem) => !catItem.isOther)
-              .slice(0, 8)
-              .map((catItem) => {
-                const cat = catItem.label;
-                const active = category === cat;
-                const tile = getCategoryTileStyle(cat);
-
-                return (
-                  <button
-                    key={cat}
-                    type="button"
-                    onClick={() => setCategory(cat)}
-                    style={{
-                      position: "relative",
-                      minHeight: 78,
-                      borderRadius: 16,
-                      border: active
-                        ? "1.5px solid #16a34a"
-                        : "1px solid rgba(148,163,184,0.16)",
-                      background: active
-                        ? "rgba(22,163,74,0.08)"
-                        : "var(--bg-page)",
-                      color: "var(--text-body)",
-                      display: "flex",
-                      flexDirection: "column",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      gap: 7,
-                      padding: "9px 5px",
-                      cursor: "pointer",
-                      fontFamily: "inherit",
-                      fontWeight: 800,
-                    }}
-                  >
-                    {active && (
-                      <span
-                        style={{
-                          position: "absolute",
-                          top: -7,
-                          right: -7,
-                          width: 22,
-                          height: 22,
-                          borderRadius: "999px",
-                          background: "#16a34a",
-                          color: "#fff",
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          fontSize: 12,
-                          fontWeight: 900,
-                        }}
-                      >
-                        ✓
-                      </span>
-                    )}
-
-                    <span
-                      style={{
-                        width: 40,
-                        height: 40,
-                        borderRadius: 14,
-                        background: tile.bg,
-                        color: tile.icon,
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        fontSize: 22,
-                        lineHeight: 1,
-                      }}
-                    >
-                      {catItem.icon || CAT_ICONS[cat] || "📌"}
-                    </span>
-
-                    <span
-                      style={{
-                        fontSize: 11,
-                        color: "var(--text-heading)",
-                        textAlign: "center",
-                        lineHeight: 1.2,
-                        maxWidth: "100%",
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                        whiteSpace: "nowrap",
-                      }}
-                    >
-                      {cat}
-                    </span>
-                  </button>
-                );
-              })}
+            <button
+              type="button"
+              onClick={submitExpense}
+              title="تسجيل المصروف"
+              aria-label="تسجيل المصروف"
+              style={{
+                width: 42,
+                minHeight: 42,
+                borderRadius: 12,
+                border: `1px solid ${visualIdentity.colors.gold}`,
+                background: visualIdentity.gradients.gold,
+                color: visualIdentity.colors.navy,
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                cursor: "pointer",
+                boxShadow: "0 6px 14px rgba(255,184,0,0.18)",
+              }}
+            >
+              <span aria-hidden="true" style={{ fontSize: 21, lineHeight: 1 }}>
+                💸
+              </span>
+            </button>
+            <input
+              className="expense-amount-input"
+              type="number"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              placeholder="المبلغ"
+              style={{ ...G.inp(), minHeight: 42, marginBottom: 0, fontSize: 18, direction: "rtl" }}
+            />
           </div>
 
-          <input
-            type="number"
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-            placeholder="المبلغ"
-            style={{ ...G.inp(), marginBottom: 10, fontSize: 22 }}
+          <PaymentMethodSelector
+            options={paymentOptions}
+            value={paymentMethod}
+            onChange={changePaymentMethod}
+            variant="glass"
           />
-
-          <div style={{ marginBottom: 10 }}>
-            <div
-              style={{
-                fontSize: 13,
-                fontWeight: 900,
-                color: "var(--text-heading)",
-                textAlign: "right",
-                marginBottom: 8,
-              }}
-            >
-              طريقة الدفع
-            </div>
-
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(5, minmax(0, 1fr))",
-                gap: 7,
-                background: "var(--bg-page)",
-                border: "1px solid rgba(148,163,184,0.14)",
-                borderRadius: 18,
-                padding: 6,
-              }}
-            >
-              {[
-                ...(hasSpendingCap
-                  ? [{ value: "cash", label: "كاش", icon: "💵" }]
-                  : []),
-                { value: "asset", label: "أصل", icon: "🏦" },
-                { value: "card", label: "بطاقة", icon: "💳" },
-                { value: "liability", label: "التزام", icon: "🧾" },
-                { value: "emergency", label: "طارئ", icon: "⚡" },
-              ].map((item) => {
-                const active = paymentMethod === item.value;
-
-                return (
-                  <button
-                    key={item.value}
-                    type="button"
-                    onClick={() => {
-                      const value = item.value;
-
-                      if (value === "emergency") {
-                        setPaymentMethod(value);
-                        setIsUnusualExpense(true);
-                        setUnusualFundingMode("asset");
-                        setShowUnusualPicker(false);
-                        return;
-                      }
-
-                      setPaymentMethod(value);
-                      setIsUnusualExpense(false);
-                      setUnusualFundingMode("");
-                      setShowUnusualPicker(false);
-                    }}
-                    style={{
-                      minHeight: 50,
-                      borderRadius: 14,
-                      border: active
-                        ? "1.5px solid #16a34a"
-                        : "1px solid transparent",
-                      background: active
-                        ? "rgba(22,163,74,0.10)"
-                        : "transparent",
-                      color: active ? "#166534" : "var(--text-muted)",
-                      display: "flex",
-                      flexDirection: "column",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      gap: 4,
-                      cursor: "pointer",
-                      fontFamily: "inherit",
-                      fontWeight: active ? 900 : 700,
-                      padding: "6px 3px",
-                    }}
-                  >
-                    <span style={{ fontSize: 17, lineHeight: 1 }}>
-                      {item.icon}
-                    </span>
-                    <span style={{ fontSize: 9, lineHeight: 1.1, whiteSpace: "nowrap" }}>
-                      {item.label}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
                     {(paymentMethod === "card" ||
-            paymentMethod === "asset" ||
             paymentMethod === "liability" ||
             paymentMethod === "emergency") && (
             <div
               style={{
                 marginBottom: 10,
-                background: "var(--bg-secondary)",
-                border: "1px solid var(--border-soft)",
-                borderRadius: 14,
+                background: visualIdentity.gradients.innerCard,
+                border: visualIdentity.cards.inner.border,
+                borderRadius: visualIdentity.cards.inner.borderRadius,
                 padding: 10,
+                boxShadow: visualIdentity.cards.inner.boxShadow,
               }}
             >
               {paymentMethod === "card" && (
@@ -2114,43 +1726,38 @@ function toggleExpenseCategoryPinned(catId) {
                 </select>
               )}
 
-              {paymentMethod === "asset" && (
-                <select
-                  value={assetPaymentKey}
-                  onChange={(e) => setAssetPaymentKey(e.target.value)}
-                  style={{ ...G.inp(), marginBottom: 0 }}
-                >
-                  {assetSources.map((s) => (
-                    <option key={s.key} value={s.key}>
-                      {s.label} — متاح {Number(s.available || 0).toFixed(2)} د.أ
-                    </option>
-                  ))}
-                </select>
-              )}
-
               {paymentMethod === "liability" && (
-                <>
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "42px minmax(0, 1fr)",
+                    alignItems: "center",
+                    gap: 7,
+                    direction: "ltr",
+                  }}
+                >
+                  <CalendarDatePicker
+                    value={dueDate}
+                    onChange={setDueDate}
+                    label="اختيار تاريخ استحقاق الالتزام"
+                  />
                   <input
                     value={liabilityName}
                     onChange={(e) => setLiabilityName(e.target.value)}
                     placeholder="اسم الالتزام"
-                    style={{ ...G.inp(), marginBottom: 8 }}
+                    style={{ ...G.inp(), marginBottom: 0, direction: "rtl" }}
                   />
-
-                  <input
-                    type="date"
-                    value={dueDate}
-                    onChange={(e) => setDueDate(e.target.value)}
-                    style={{ ...G.inp(), marginBottom: 0 }}
-                  />
-                </>
+                </div>
               )}
 
               {paymentMethod === "emergency" && (
                 <>
                   <select
                     value={unusualFundingMode}
-                    onChange={(e) => setUnusualFundingMode(e.target.value)}
+                    onChange={(e) => {
+                      setUnusualFundingMode(e.target.value);
+                      setUnusualAssetKey("");
+                    }}
                     style={{ ...G.inp(), marginBottom: 8 }}
                   >
                     <option value="asset">كاملًا من أصل</option>
@@ -2172,7 +1779,10 @@ function toggleExpenseCategoryPinned(catId) {
 
                       <select
                         value={unusualRemainderSource}
-                        onChange={(e) => setUnusualRemainderSource(e.target.value)}
+                        onChange={(e) => {
+                          setUnusualRemainderSource(e.target.value);
+                          setUnusualAssetKey("");
+                        }}
                         style={{ ...G.inp(), marginBottom: 8 }}
                       >
                         <option value="asset">الباقي من أصل</option>
@@ -2184,172 +1794,238 @@ function toggleExpenseCategoryPinned(catId) {
                   {(unusualFundingMode === "asset" ||
                     (unusualFundingMode === "mix" &&
                       unusualRemainderSource === "asset")) && (
-                    <select
-                      value={unusualAssetKey}
-                      onChange={(e) => setUnusualAssetKey(e.target.value)}
-                      style={{ ...G.inp(), marginBottom: 8 }}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (emergencyAssetRequired <= 0) {
+                          alert("أدخل مبلغ المصروف والجزء المغطى من السقف بشكل صحيح");
+                          return;
+                        }
+                        if (
+                          unusualFundingMode === "mix" &&
+                          Number(unusualCapAmount || 0) > Number(budget.remainingCap || 0)
+                        ) {
+                          alert(`المتاح من سقف الصرف فقط ${Number(budget.remainingCap || 0).toFixed(2)} ${localeCurrencyLabel}`);
+                          return;
+                        }
+                        openDeficitTransfer(
+                          "all",
+                          "emergency",
+                          emergencyAssetRequired
+                        );
+                      }}
+                      style={G.btn(
+                        "rgba(255,255,255,0.08)",
+                        visualIdentity.colors.white,
+                        {
+                          width: "100%",
+                          marginBottom: 8,
+                          border: visualIdentity.cards.inner.border,
+                        }
+                      )}
                     >
-                      {assetSources.map((s) => (
-                        <option key={s.key} value={s.key}>
-                          {s.label} — متاح {Number(s.available || 0).toFixed(2)} د.أ
-                        </option>
-                      ))}
-                    </select>
+                      اختيار الأصل وتمويل {emergencyAssetRequired.toFixed(2)} {localeCurrencyLabel}
+                    </button>
                   )}
 
                   {(unusualFundingMode === "liability" ||
                     (unusualFundingMode === "mix" &&
                       unusualRemainderSource === "liability")) && (
-                    <>
+                    <div
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns: "42px minmax(0, 1fr)",
+                        alignItems: "center",
+                        gap: 7,
+                        direction: "ltr",
+                      }}
+                    >
+                      <CalendarDatePicker
+                        value={unusualDueDate}
+                        onChange={setUnusualDueDate}
+                        label="اختيار تاريخ استحقاق الالتزام الطارئ"
+                      />
                       <input
                         value={unusualLiabilityName}
                         onChange={(e) => setUnusualLiabilityName(e.target.value)}
                         placeholder="اسم الدين"
-                        style={{ ...G.inp(), marginBottom: 8 }}
+                        style={{ ...G.inp(), marginBottom: 0, direction: "rtl" }}
                       />
-
-                      <input
-                        type="date"
-                        value={unusualDueDate}
-                        onChange={(e) => setUnusualDueDate(e.target.value)}
-                        style={{ ...G.inp(), marginBottom: 0 }}
-                      />
-                    </>
+                    </div>
                   )}
                 </>
               )}
             </div>
           )}
 
-          <div
-            style={{
-              marginBottom: 12,
-              background: "var(--bg-secondary)",
-              border: "1px solid var(--border-soft)",
-              borderRadius: 12,
-              padding: 10,
-            }}
-          >
+          {showLegacyDeficitPanel && amountExceedsCap && paymentMethod !== "emergency" && (
             <div
               style={{
-                display: "grid",
-                gridTemplateColumns: "1fr 92px",
-                gap: 8,
-                direction: "ltr",
-                alignItems: "stretch",
+                marginBottom: 9,
+                padding: 9,
+                background: "rgba(255,198,45,0.10)",
+                border: "1px solid rgba(255,198,45,0.28)",
+                borderRadius: visualIdentity.cards.inner.borderRadius,
               }}
             >
               <div
                 style={{
-                  display: "grid",
-                  gridTemplateColumns: "repeat(3, 1fr)",
-                  gap: 7,
+                  marginBottom: 8,
+                  color: visualIdentity.colors.gold,
+                  fontSize: 11,
+                  fontWeight: 900,
+                  lineHeight: 1.5,
+                  textAlign: "right",
                 }}
               >
-                {[
-                  { label: "1", action: () => appendAmountDigit("1") },
-                  { label: "2", action: () => appendAmountDigit("2") },
-                  { label: "3", action: () => appendAmountDigit("3") },
-                  { label: "4", action: () => appendAmountDigit("4") },
-                  { label: "5", action: () => appendAmountDigit("5") },
-                  { label: "6", action: () => appendAmountDigit("6") },
-                  { label: "7", action: () => appendAmountDigit("7") },
-                  { label: "8", action: () => appendAmountDigit("8") },
-                  { label: "9", action: () => appendAmountDigit("9") },
-                  { label: ".", action: () => appendAmountDigit(".") },
-                  { label: "0", action: () => appendAmountDigit("0") },
-                  {
-                    label: "⌫",
-                    action: () => setAmount((prev) => String(prev || "").slice(0, -1)),
-                  },
-                ].map((key) => (
-                  <button
-                    key={key.label}
-                    type="button"
-                    onClick={key.action}
-                    style={G.btn("var(--bg-card)", "var(--text-heading)", {
-                      minHeight: 44,
-                      padding: "9px",
-                      fontSize: key.label === "⌫" ? 18 : 16,
-                      fontWeight: 900,
-                    })}
-                  >
-                    {key.label}
-                  </button>
-                ))}
+                السقف يغطي {Number(budget.remainingCap || 0).toFixed(2)} {localeCurrencyLabel}، اختر تغطية الجزء غير المغطى ({uncoveredAmount.toFixed(2)} {localeCurrencyLabel})
               </div>
 
               <div
                 style={{
                   display: "grid",
-                  gridTemplateRows: "44px 1fr",
-                  gap: 7,
+                  gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+                  gap: 6,
+                  marginBottom: deficitFundingType ? 8 : 0,
                 }}
               >
-                <button
-                  type="button"
-                  title={note ? `ملاحظة: ${note}` : "ملاحظة"}
-                  aria-label="ملاحظة"
-                  onClick={() => {
-                    const nextNote = window.prompt("اكتب ملاحظة المصروف", note || "");
-                    if (nextNote !== null) {
-                      setNote(nextNote);
-                    }
-                  }}
-                  style={G.btn(note ? "rgba(22,163,74,0.14)" : "var(--bg-card)", "#16a34a", {
-                    minHeight: 44,
-                    padding: "9px",
-                    fontSize: 22,
-                    fontWeight: 900,
-                    border: note
-                      ? "1px solid rgba(22,163,74,0.55)"
-                      : "1px solid rgba(22,163,74,0.25)",
-                  })}
-                >
-                  📝
-                </button>
-
-                <button
-                  type="button"
-                  onClick={addPendingExpense}
-                  style={G.btn("linear-gradient(135deg,#22c55e,#16a34a)", "#fff", {
-                    width: "100%",
-                    minHeight: 139,
-                    padding: "10px",
-                    fontSize: 14,
-                    fontWeight: 900,
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    flexDirection: "column",
-                    gap: 6,
-                  })}
-                >
-                  <span style={{ fontSize: 26, lineHeight: 1 }}>+</span>
-                  <span>إضافة</span>
-                </button>
+                {[
+                  ["cash", "كاش ادخاري", "💵"],
+                  ["bank", "حساب بنكي", "🏦"],
+                  ["sell_gold", "بيع ذهب", "🥇"],
+                  ["sell_stock", "بيع أسهم", "📊"],
+                  ["sell_goods", "بيع بضاعة", "📦"],
+                  ["liability", "التزام جديد", "🧾"],
+                ].map(([value, label, icon]) => {
+                  const active = deficitFundingType === value;
+                  return (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => {
+                        if (value === "cash") {
+                          setDeficitFundingType(value);
+                          setOverBudgetSource("asset");
+                          setOverBudgetAssetKey("cash");
+                          return;
+                        }
+                        if (value === "bank") {
+                          if (!bankAssetSources.length) {
+                            alert("لا يوجد حساب بنكي متاح");
+                            return;
+                          }
+                          setDeficitFundingType(value);
+                          setOverBudgetSource("asset");
+                          setOverBudgetAssetKey(bankAssetSources[0].key);
+                          return;
+                        }
+                        if (value === "liability") {
+                          setDeficitFundingType(value);
+                          setOverBudgetSource("liability");
+                          window.setTimeout(() => {
+                            deficitLiabilityNameRef.current?.focus();
+                            deficitLiabilityNameRef.current?.scrollIntoView({
+                              behavior: "smooth",
+                              block: "center",
+                            });
+                          }, 0);
+                          return;
+                        }
+                        openDeficitTransfer(value.replace("sell_", ""));
+                      }}
+                      style={{
+                        minHeight: 42,
+                        borderRadius: 11,
+                        border: active
+                          ? `1.5px solid ${visualIdentity.colors.gold}`
+                          : "1px solid rgba(255,255,255,0.14)",
+                        background: active
+                          ? visualIdentity.gradients.gold
+                          : "rgba(255,255,255,0.07)",
+                        color: active
+                          ? visualIdentity.colors.navy
+                          : visualIdentity.colors.white,
+                        fontFamily: "inherit",
+                        fontSize: 10,
+                        fontWeight: 900,
+                        cursor: "pointer",
+                      }}
+                    >
+                      <span style={{ marginInlineEnd: 4 }}>{icon}</span>
+                      {label}
+                    </button>
+                  );
+                })}
               </div>
-            </div>
-          </div>
 
-          <button
-            type="button"
-            onClick={submitExpense}
-            style={G.btn("linear-gradient(135deg,#22c55e,#16a34a)", "#fff", {
-              width: "100%",
-              minHeight: 46,
-              marginTop: 6,
-              marginBottom: 0,
-              display: "block",
-            })}
-          >
-            <span style={{ display: "block" }}>✓ {saveButtonTitle}</span>
-            {saveButtonMeta && (
-              <span style={{ display: "block", marginTop: 3, fontSize: 11, fontWeight: 700 }}>
-                {saveButtonMeta}
-              </span>
-            )}
-          </button>
+              {deficitFundingType === "bank" && (
+                <select
+                  value={overBudgetAssetKey}
+                  onChange={(event) => setOverBudgetAssetKey(event.target.value)}
+                  style={{ ...G.inp(), marginBottom: 0 }}
+                >
+                  {bankAssetSources.map((source) => (
+                    <option key={source.key} value={source.key}>
+                      {source.label} — متاح {Number(source.available || 0).toFixed(2)} {localeCurrencyLabel}
+                    </option>
+                  ))}
+                </select>
+              )}
+
+              {deficitFundingType === "liability" && (
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "42px minmax(0, 1fr)",
+                    alignItems: "center",
+                    gap: 7,
+                    direction: "ltr",
+                  }}
+                >
+                  <CalendarDatePicker
+                    value={overBudgetDueDate}
+                    onChange={setOverBudgetDueDate}
+                    label="اختيار تاريخ استحقاق التزام العجز"
+                  />
+                  <input
+                    ref={deficitLiabilityNameRef}
+                    value={overBudgetLiabilityName}
+                    onChange={(event) => setOverBudgetLiabilityName(event.target.value)}
+                    placeholder="اسم الالتزام"
+                    style={{ ...G.inp(), marginBottom: 0, direction: "rtl" }}
+                  />
+                </div>
+              )}
+
+            </div>
+          )}
+
+<ExpenseEntryPad
+            onDigit={appendAmountDigit}
+            onBackspace={() =>
+              setAmount((prev) => String(prev || "").slice(0, -1))
+            }
+            note={note}
+            onEditNote={editExpenseNote}
+            onAdd={addPendingExpense}
+            buttonStyle={G.btn}
+          />
+
+          <PendingExpensesReview
+            items={pendingExpenses}
+            total={pendingTotal}
+            onRemove={removePendingExpense}
+          />
+
+          <ExpenseSubmitButton
+            onSubmit={submitExpense}
+            title={saveButtonTitle}
+            meta={saveButtonMeta}
+            buttonStyle={G.btn}
+            background={visualIdentity.gradients.gold}
+            color={visualIdentity.colors.navy}
+            minHeight={46}
+          />
         </div>
       )}
 
@@ -2397,219 +2073,142 @@ function toggleExpenseCategoryPinned(catId) {
               },
             }));
           }}
-          style={G.btn("linear-gradient(135deg,#22c55e,#16a34a)", "#fff", {
+          style={G.btn(visualIdentity.gradients.gold, visualIdentity.colors.navy, {
             width: "100%",
             marginBottom: 12,
+            borderRadius: 16,
           })}
         >
           🗓 بدء شهر تجريبي
         </button>
       )}
 
-      {!readOnly && Number(state.session?.pendingSurplus || 0) > 0 && (
-        <div
-          style={{
-            ...G.card("rgba(34,197,94,0.12)"),
-            border: "1px solid rgba(34,197,94,0.35)",
-            padding: 12,
-          }}
-        >
-          <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center" }}>
-            <button
-              type="button"
-              onClick={() => onAllocateSurplus(Number(state.session.pendingSurplus || 0))}
-              style={G.btn("#17341f", "#86efac", {
-                width: 42,
-                height: 34,
-                padding: 0,
-              })}
-            >
-              ↗
-            </button>
-            <div style={{ textAlign: "right" }}>
-              <div style={{ color: "#86efac", fontSize: 12, fontWeight: 900 }}>
-                فائض راتب ينتظر التوجيه
-              </div>
-              <div style={{ color: "var(--text-body)", fontSize: 18, fontWeight: 900 }}>
-                {Number(state.session.pendingSurplus || 0).toFixed(2)} د.أ
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {false && <div style={G.card()}>
-        {selectedExpenseTotal !== selectedExpenseRecorded && (
-          <div
-            style={{
-              background: "var(--bg-secondary)",
-              border: "1px solid rgba(232,201,106,0.22)",
-              borderRadius: 12,
-              padding: 10,
-              marginBottom: 10,
-            }}
-          >
-            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-              <span style={{ color: "var(--text-muted)", fontSize: 11 }}>إجمالي المصروف</span>
-              <b>{selectedExpenseTotal.toFixed(2)} د.أ</b>
-            </div>
-            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-              <span style={{ color: "var(--text-muted)", fontSize: 11 }}>من سقف الصرف</span>
-              <b style={{ color: "#86efac" }}>
-                {Number(selectedExpense.budgetCovered || 0).toFixed(2)} د.أ
-              </b>
-            </div>
-            {selectedExpenseDebt > 0 && (
-              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-                <span style={{ color: "var(--text-muted)", fontSize: 11 }}>سجل كدين</span>
-                <b style={{ color: "#fecaca" }}>{selectedExpenseDebt.toFixed(2)} د.أ</b>
-              </div>
-            )}
-            {selectedExpenseAsset > 0 && (
-              <div style={{ display: "flex", justifyContent: "space-between" }}>
-                <span style={{ color: "var(--text-muted)", fontSize: 11 }}>ممَول من أصل</span>
-                <b style={{ color: "var(--gold-border)" }}>{selectedExpenseAsset.toFixed(2)} د.أ</b>
-              </div>
-            )}
-          </div>
-        )}
-        <div style={{ textAlign: "right", marginBottom: 12, color: "var(--text-muted)" }}>
-          📊 توزيع المصاريف
-        </div>
-      </div>}
-
-      <div style={G.card()}>
-        <div style={{ textAlign: "right", marginBottom: 10, color: "var(--text-muted)" }}>
-          آخر المصاريف
-        </div>
-
-        {recent.map((e, i) => (
-          <div
-            key={e.id}
-            style={{
-              ...(i < recent.length - 1 ? G.row : G.lrow),
-              ...(incomeEntryStyle(e.isIncomeEntry) || {}),
-            }}
-          >
-            <div>
-              <div
-  style={{
-    display: "flex",
-    alignItems: "center",
-    gap: 8,
-  }}
->
-  <button
-onClick={() => setSelectedExpense(e)}    style={{
-      background: "transparent",
-      border: "none",
-      color: "var(--gold-border)",
-      fontSize: 16,
-      cursor: "pointer",
-      padding: 0,
-    }}
-  >
-    ✏️
-  </button>
-
-  <div style={{ fontSize: 15, fontWeight: 700 }}>
-    <span style={{ color: e.isIncomeEntry ? "#2A9E60" : "var(--text-heading)" }}>
-      {e.isIncomeEntry ? "+" : ""}
-      {incomeEntryAmount(e).toFixed(2)} د.أ
-    </span>
-  </div>
-</div>
-              <div style={{ fontSize: 10, color: e.isIncomeEntry ? "#2A9E60" : "var(--text-faint)" }}>
-                {incomeEntryMeta(e)}
-              </div>
-            </div>
-
-            <div style={{ textAlign: "right" }}>
-              <div style={{ fontSize: 13 }}>{e.note || e.category}</div>
-              <div
-                style={{
-                  fontSize: 10,
-                  color: e.isIncomeEntry ? "#2A9E60" : CC[e.category] || "var(--text-muted)",
-                  marginTop: 2,
-                }}
-              >
-                {e.category} | {e.paymentMethod}
-              </div>
-            </div>
-          </div>
-        ))}
-
-        {!recent.length && (
-          <div
-            style={{
-              textAlign: "center",
-              color: "var(--text-disabled)",
-              padding: "20px 0",
-              fontSize: 13,
-            }}
-          >
-            لا توجد مصاريف بعد
-          </div>
-        )}
-      </div>
-
       {!readOnly && (
-      <button
-        onClick={onClearState}
-        style={G.btn("#7f1d1d", "#fff", { width: "100%" })}
-      >
-        تصفير البيانات التجريبية
-      </button>
+        <PendingSurplusCard
+          amount={state.session?.pendingSurplus}
+          onAllocate={onAllocateSurplus}
+          cardStyle={G.card}
+          buttonStyle={G.btn}
+        />
       )}
+
+
+      <AssetTransferModal
+        open={Boolean(deficitTransfer)}
+        sources={deficitTransfer?.sources || []}
+        fromAsset={deficitTransfer?.fromAsset || ""}
+        amount={deficitTransfer?.amount || ""}
+        allocations={deficitTransfer?.allocations || []}
+        onClose={() => setDeficitTransfer(null)}
+        onFromAssetChange={(value) =>
+          setDeficitTransfer((current) => {
+            const source = current.sources.find((item) => item.key === value);
+            const isLiquid = ["cash", "bank"].includes(source?.type);
+            const nextAmount = isLiquid
+              ? Number(current.requiredAmount || 0).toFixed(2)
+              : "";
+            return {
+              ...current,
+              fromAsset: value,
+              amount: nextAmount,
+              sourceUnits: "",
+              sourcePrice: "",
+              allocations: current.allocations.map((row) => ({
+                ...row,
+                amount: nextAmount,
+              })),
+            };
+          })
+        }
+        onAmountChange={(value) =>
+          setDeficitTransfer((current) => ({ ...current, amount: value }))
+        }
+        onAddRow={() => {}}
+        onRemoveRow={() => {}}
+        onUpdateRow={(_, patch) => updateDeficitTransferRow(patch)}
+        getDestinationOptions={(allocation) =>
+          allocation === "bank" ? state.assets.banks || [] : []
+        }
+        onSubmit={confirmDeficitTransfer}
+        sourceSaleFields={
+          deficitSourceNeedsSale
+            ? {
+                units: deficitTransfer?.sourceUnits || "",
+                price: deficitTransfer?.sourcePrice || "",
+              }
+            : null
+        }
+        onSourceUnitsChange={(value) =>
+          updateDeficitSaleField("sourceUnits", value)
+        }
+        onSourcePriceChange={(value) =>
+          updateDeficitSaleField("sourcePrice", value)
+        }
+        amountReadOnly
+        showAllocations={deficitSourceNeedsSale}
+        allowMultiple={false}
+        allowedAllocations={["cash", "bank"]}
+        allowNewTarget={false}
+        inputStyle={G.inp()}
+        closeButtonStyle={G.btn("transparent", visualIdentity.colors.gold, {
+          width: 36,
+          height: 36,
+          padding: 0,
+        })}
+        addButtonStyle={G.btn("transparent", visualIdentity.colors.gold, {
+          width: 36,
+          height: 32,
+          padding: 0,
+        })}
+        removeButtonStyle={G.btn("rgba(255,100,100,0.12)", visualIdentity.colors.red, {
+          width: 36,
+          height: 36,
+          padding: 0,
+        })}
+        submitButtonStyle={G.btn(
+          visualIdentity.gradients.gold,
+          visualIdentity.colors.navy,
+          { width: "100%", marginTop: 10 }
+        )}
+      />
+
+      <AllExpensesModal
+        open={showAllExpenses}
+        items={allExpenses}
+        onClose={() => setShowAllExpenses(false)}
+        onSelect={setSelectedExpense}
+        incomeAmount={incomeEntryAmount}
+        categoryColors={CC}
+      />
 
       {!readOnly && selectedExpense && (
   <div
     onClick={(ev) => ev.target === ev.currentTarget && setSelectedExpense(null)}
     style={{
-      position: "fixed",
-      inset: 0,
-      background: "rgba(0,0,0,0.8)",
-      backdropFilter: "blur(8px)",
-      display: "flex",
-      alignItems: "flex-end",
-      justifyContent: "center",
+      ...HOME_UI.overlay,
       zIndex: 520,
     }}
   >
     <div
       style={{
+        ...HOME_UI.sheet,
         position: "relative",
-        background: "var(--bg-card)",
-        borderRadius: "22px 22px 0 0",
-        border: "1px solid var(--border-soft)",
-        padding: "22px 18px 34px",
-        width: "100%",
-        maxWidth: 440,
-        maxHeight: "82vh",
-        overflowY: "auto",
-        direction: "rtl",
       }}
     >
       <div
         style={{
-          position: "sticky",
-          top: 0,
-          zIndex: 20,
-          background: "var(--bg-card)",
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          marginBottom: 14,
-          paddingBottom: 12,
-          borderBottom: "1px solid rgba(148,163,184,0.12)",
+          ...HOME_UI.sheetHeader,
         }}
       >
         <button
           onClick={() => setSelectedExpense(null)}
           style={{
-            background: "transparent",
-            border: "none",
-            color: "var(--text-muted)",
+            width: 36,
+            height: 36,
+            borderRadius: 12,
+            background: "rgba(255,255,255,0.08)",
+            border: "1px solid rgba(255,255,255,0.16)",
+            color: visualIdentity.colors.white,
             fontSize: 24,
             cursor: "pointer",
           }}
@@ -2621,71 +2220,71 @@ onClick={() => setSelectedExpense(e)}    style={{
           <div style={{ fontSize: 18, fontWeight: 900 }}>
             إدارة المصروف
           </div>
-          <div style={{ fontSize: 11, color: "var(--text-faint)" }}>
+          <div style={{ fontSize: 11, color: HOME_UI.muted }}>
             تفاصيل العملية
           </div>
         </div>
       </div>
 
-      <div style={G.card()}>
+      <div style={HOME_UI.innerCard}>
         {selectedExpenseTotal !== selectedExpenseRecorded && (
           <div
             style={{
-              background: "var(--bg-secondary)",
-              border: "1px solid rgba(232,201,106,0.22)",
+              background: visualIdentity.gradients.innerCard,
+              border: "1px solid rgba(255,198,45,0.24)",
               borderRadius: 12,
               padding: 10,
               marginBottom: 10,
             }}
           >
             <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-              <span style={{ color: "var(--text-muted)", fontSize: 11 }}>إجمالي المصروف</span>
-              <b>{selectedExpenseTotal.toFixed(2)} د.أ</b>
+              <span style={{ color: HOME_UI.muted, fontSize: 11 }}>إجمالي المصروف</span>
+              <b>{selectedExpenseTotal.toFixed(2)} {localeCurrencyLabel}</b>
             </div>
             <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-              <span style={{ color: "var(--text-muted)", fontSize: 11 }}>من سقف الصرف</span>
+              <span style={{ color: HOME_UI.muted, fontSize: 11 }}>من سقف الصرف</span>
               <b style={{ color: "#86efac" }}>
-                {Number(selectedExpense.budgetCovered || 0).toFixed(2)} د.أ
+                {Number(selectedExpense.budgetCovered || 0).toFixed(2)} {localeCurrencyLabel}
               </b>
             </div>
             {selectedExpenseDebt > 0 && (
               <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-                <span style={{ color: "var(--text-muted)", fontSize: 11 }}>سجل كدين</span>
-                <b style={{ color: "#fecaca" }}>{selectedExpenseDebt.toFixed(2)} د.أ</b>
+                <span style={{ color: HOME_UI.muted, fontSize: 11 }}>سجل كدين</span>
+                <b style={{ color: "#fecaca" }}>{selectedExpenseDebt.toFixed(2)} {localeCurrencyLabel}</b>
               </div>
             )}
             {selectedExpenseAsset > 0 && (
               <div style={{ display: "flex", justifyContent: "space-between" }}>
-                <span style={{ color: "var(--text-muted)", fontSize: 11 }}>ممَول من أصل</span>
-                <b style={{ color: "var(--gold-border)" }}>{selectedExpenseAsset.toFixed(2)} د.أ</b>
+                <span style={{ color: HOME_UI.muted, fontSize: 11 }}>ممَول من أصل</span>
+                <b style={{ color: visualIdentity.colors.gold }}>{selectedExpenseAsset.toFixed(2)} {localeCurrencyLabel}</b>
               </div>
             )}
           </div>
         )}
-        <div style={G.row}>
-          <span style={{ color: "var(--text-muted)" }}>المبلغ</span>
-          <b>{Number(selectedExpense.amount || 0).toFixed(2)} د.أ</b>
+        <div style={HOME_UI.row}>
+          <span style={{ color: HOME_UI.muted }}>المبلغ</span>
+          <b>{Number(selectedExpense.amount || 0).toFixed(2)} {localeCurrencyLabel}</b>
         </div>
 
-        <div style={G.row}>
-          <span style={{ color: "var(--text-muted)" }}>التصنيف</span>
+        <div style={HOME_UI.row}>
+          <span style={{ color: HOME_UI.muted }}>التصنيف</span>
           <b>{selectedExpense.category}</b>
         </div>
 
-        <div style={G.row}>
-          <span style={{ color: "var(--text-muted)" }}>طريقة الدفع</span>
+        <div style={HOME_UI.row}>
+          <span style={{ color: HOME_UI.muted }}>اسلوب الدفع</span>
           <b>{selectedExpense.paymentMethod}</b>
         </div>
 
-        <div style={G.row}>
-          <span style={{ color: "var(--text-muted)" }}>المغطى من السقف</span>
-          <b>{Number(selectedExpense.budgetCovered || 0).toFixed(2)} د.أ</b>
+        <div style={HOME_UI.row}>
+          <span style={{ color: HOME_UI.muted }}>المغطى من السقف</span>
+          <b>{Number(selectedExpense.budgetCovered || 0).toFixed(2)} {localeCurrencyLabel}</b>
         </div>
 
-        <div style={G.lrow}>
-          <span style={{ color: "var(--text-muted)" }}>التجاوز</span>
-          <b style={{ color: Number(selectedExpense.overBudget || 0) > 0 ? "#ef4444" : "var(--text-heading)" }}>
-            {Number(selectedExpense.overBudget || 0).toFixed(2)} د.أ
+        <div style={HOME_UI.lastRow}>
+          <span style={{ color: HOME_UI.muted }}>التجاوز</span>
+          <b style={{ color: Number(selectedExpense.overBudget || 0) > 0 ? visualIdentity.colors.red : visualIdentity.colors.white }}>
+            {Number(selectedExpense.overBudget || 0).toFixed(2)} {localeCurrencyLabel}
           </b>
         </div>
         <button
@@ -2693,9 +2292,10 @@ onClick={() => setSelectedExpense(e)}    style={{
     cancelExpense(selectedExpense.id);
     setSelectedExpense(null);
   }}
-  style={G.btn("#7f1d1d", "#fff", {
+  style={G.btn("rgba(255,100,100,0.14)", visualIdentity.colors.red, {
     width: "100%",
     marginTop: 10,
+    border: "1px solid rgba(255,100,100,0.32)",
   })}
 >
   إلغاء المصروف
@@ -2711,25 +2311,14 @@ onClick={() => setSelectedExpense(e)}    style={{
       ev.target === ev.currentTarget && setShowCategoryManager(false)
     }
     style={{
-      position: "fixed",
-      inset: 0,
-      background: "rgba(0,0,0,0.8)",
-      backdropFilter: "blur(8px)",
-      display: "flex",
-      alignItems: "flex-end",
-      justifyContent: "center",
+      ...HOME_UI.overlay,
       zIndex: 1100,
     }}
   >
     <div
       style={{
+        ...HOME_UI.sheet,
         position: "relative",
-        background: "var(--bg-card)",
-        borderRadius: "22px 22px 0 0",
-        border: "1px solid var(--border-soft)",
-        padding: "22px 18px 34px",
-        width: "100%",
-        maxWidth: 440,
         height: "82vh",
 maxHeight: "82vh",
 overflow: "hidden",
@@ -2740,16 +2329,7 @@ flexDirection: "column",
     >
       <div
        style={{
-          position: "sticky",
-          top: 0,
-          zIndex: 20,
-          background: "var(--bg-card)",
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          marginBottom: 14,
-          paddingBottom: 12,
-          borderBottom: "1px solid rgba(148,163,184,0.12)",
+          ...HOME_UI.sheetHeader,
         }}
       >
        <button
@@ -2759,9 +2339,9 @@ flexDirection: "column",
     width: 36,
     height: 36,
     borderRadius: 12,
-    border: "1px solid rgba(148,163,184,0.28)",
-    background: "var(--bg-secondary)",
-    color: "var(--text-heading)",
+    border: "1px solid rgba(255,255,255,0.16)",
+    background: "rgba(255,255,255,0.08)",
+    color: visualIdentity.colors.white,
     fontSize: 22,
     cursor: "pointer",
     display: "flex",
@@ -2786,7 +2366,7 @@ flexDirection: "column",
     <div style={{ fontSize: 18, fontWeight: 900 }}>
       إدارة أنواع المصروف
     </div>
-    <div style={{ fontSize: 11, color: "var(--text-faint)" }}>
+    <div style={{ fontSize: 11, color: HOME_UI.muted }}>
       التصنيفات الإضافية
     </div>
   </div>
@@ -2795,7 +2375,7 @@ flexDirection: "column",
 
 <div
   style={{
-    ...G.card(),
+    ...HOME_UI.innerCard,
     flex: 1,
     overflowY: "auto",
     marginBottom: 14,
@@ -2804,7 +2384,7 @@ flexDirection: "column",
     <div
       style={{
         textAlign: "center",
-        color: "var(--text-faint)",
+        color: HOME_UI.muted,
         padding: "18px 0",
         fontSize: 13,
       }}
@@ -2815,7 +2395,7 @@ flexDirection: "column",
     allExpenseCategories
       .filter((cat) => !cat.isOther)
       .map((catItem) => (
-        <div key={catItem.id} style={G.row}>
+        <div key={catItem.id} style={HOME_UI.row}>
   <span>
     {catItem.icon} {catItem.label}
   </span>
@@ -2827,7 +2407,7 @@ flexDirection: "column",
       style={{
         background: "transparent",
         border: "none",
-        color: "var(--gold-border)",
+        color: visualIdentity.colors.gold,
         fontSize: 20,
         cursor: "pointer",
         padding: 0,
@@ -2843,9 +2423,10 @@ flexDirection: "column",
         setCategory(catItem.label);
         setShowCategoryManager(false);
       }}
-      style={G.btn("var(--bg-secondary)", "var(--gold-border)", {
+      style={G.btn("rgba(255,255,255,0.08)", visualIdentity.colors.gold, {
         padding: "7px 10px",
         fontSize: 12,
+        border: "1px solid rgba(255,198,45,0.30)",
       })}
     >
       اختيار
@@ -2858,9 +2439,10 @@ flexDirection: "column",
       <button
   type="button"
   onClick={addExtraExpenseCategory}
-  style={G.btn("linear-gradient(135deg,var(--gold-primary),var(--gold-border))", "var(--text-heading)", {
+  style={G.btn(visualIdentity.gradients.gold, visualIdentity.colors.navy, {
     width: "100%",
     marginTop: 10,
+    borderRadius: 16,
   })}
 >
   + إضافة نوع مصروف
@@ -2868,1137 +2450,6 @@ flexDirection: "column",
     </div>
   </div>
 )}
-      {false && showExpense && (
-        <div
-          onClick={(e) => e.target === e.currentTarget && closeExpenseSheet()}
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(250,247,242,0.72)",
-            backdropFilter: "blur(6px)",
-            display: "flex",
-            alignItems: "stretch",
-            justifyContent: "center",
-            zIndex: 900,
-          }}
-        >
-          <div
-            style={{
-              background: "var(--bg-card)",
-              height: "100dvh",
-              maxHeight: "100dvh",
-              overflowY: "auto",
-              overscrollBehavior: "contain",
-              border: "1px solid var(--border-soft)",
-              borderRadius: 0,
-              padding: "16px 18px calc(18px + env(safe-area-inset-bottom))",
-              width: "100%",
-              maxWidth: 440,
-              direction: "rtl",
-            }}
-          >
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                marginBottom: 14,
-                position: "sticky",
-                top: 0,
-                zIndex: 5,
-                background: "var(--bg-card)",
-                paddingBottom: 10,
-                borderBottom: "1px solid var(--border-soft)",
-              }}
-            >
-              <button
-                onClick={closeExpenseSheet}
-                style={G.btn("var(--bg-secondary)", "var(--text-muted)", {
-                  padding: "7px 12px",
-                  borderRadius: 10,
-                  fontSize: 12,
-                })}
-              >
-                رجوع
-              </button>
-
-              <span style={{ fontSize: 15, fontWeight: 700 }}>
-                تسجيل مصروف
-              </span>
-            </div>
-            <div
-  style={{
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 10,
-    margin: "4px 0 12px",
-  }}
->
-  <div
-    style={{
-      fontSize: 18,
-      fontWeight: 900,
-      color: "var(--text-heading)",
-      textAlign: "right",
-    }}
-  >
-    اختر نوع المصروف
-  </div>
-
-  <button
-    type="button"
-    onClick={() => setShowCategoryManager(true)}
-    title="المزيد"
-    aria-label="المزيد"
-    style={{
-      width: 42,
-      height: 42,
-      borderRadius: 14,
-      border: "1px solid rgba(148,163,184,0.18)",
-      background: "var(--bg-page)",
-      color: "var(--text-muted)",
-      display: "inline-flex",
-      alignItems: "center",
-      justifyContent: "center",
-      cursor: "pointer",
-      fontSize: 20,
-      fontWeight: 900,
-      fontFamily: "inherit",
-      boxShadow: "0 8px 18px rgba(15,23,42,0.06)",
-      flex: "0 0 auto",
-    }}
-  >
-    ⋯
-  </button>
-</div>
-
-<div
-  style={{
-    display: "grid",
-    gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
-    gap: 10,
-    marginBottom: 14,
-  }}
->
-  {mainExpenseCategories
-    .filter((catItem) => !catItem.isOther)
-    .slice(0, 8)
-    .map((catItem) => {
-      const cat = catItem.label;
-      const active = category === cat;
-      const tile = getCategoryTileStyle(cat);
-
-      return (
-        <button
-          key={cat}
-          type="button"
-          onClick={() => setCategory(cat)}
-          style={{
-            position: "relative",
-            minHeight: 86,
-            borderRadius: 18,
-            border: active
-              ? "1.5px solid #16a34a"
-              : "1px solid rgba(148,163,184,0.16)",
-            background: active
-              ? "rgba(22,163,74,0.08)"
-              : "var(--bg-page)",
-            color: "var(--text-body)",
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            justifyContent: "center",
-            gap: 8,
-            padding: "10px 6px",
-            cursor: "pointer",
-            fontFamily: "inherit",
-            fontWeight: 800,
-            boxShadow: active
-              ? "0 10px 24px rgba(22,163,74,0.12)"
-              : "0 8px 18px rgba(15,23,42,0.05)",
-          }}
-        >
-          {active && (
-            <span
-              style={{
-                position: "absolute",
-                top: -8,
-                right: -8,
-                width: 24,
-                height: 24,
-                borderRadius: "999px",
-                background: "#16a34a",
-                color: "#fff",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                fontSize: 13,
-                fontWeight: 900,
-                boxShadow: "0 6px 14px rgba(22,163,74,0.25)",
-              }}
-            >
-              ✓
-            </span>
-          )}
-
-          <span
-            style={{
-              width: 44,
-              height: 44,
-              borderRadius: 16,
-              background: tile.bg,
-              color: tile.icon,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              fontSize: 24,
-              lineHeight: 1,
-              flex: "0 0 auto",
-            }}
-          >
-            {catItem.icon || CAT_ICONS[cat] || "📌"}
-          </span>
-
-          <span
-            style={{
-              fontSize: 12,
-              color: "var(--text-heading)",
-              textAlign: "center",
-              lineHeight: 1.2,
-              maxWidth: "100%",
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              whiteSpace: "nowrap",
-            }}
-          >
-            {cat}
-          </span>
-        </button>
-      );
-    })}
-</div>
-
-            <input
-              type="number"
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-              placeholder="المبلغ"
-              style={{ ...G.inp(), marginBottom: 10, fontSize: 22 }}
-            />
-            <div
-  style={{
-    marginBottom: 10,
-  }}
->
-  <div
-    style={{
-      fontSize: 13,
-      fontWeight: 900,
-      color: "var(--text-heading)",
-      textAlign: "right",
-      marginBottom: 8,
-    }}
-  >
-    طريقة الدفع
-  </div>
-
-  <div
-    style={{
-      display: "grid",
-      gridTemplateColumns: "repeat(5, minmax(0, 1fr))",
-      gap: 7,
-      background: "var(--bg-page)",
-      border: "1px solid rgba(148,163,184,0.14)",
-      borderRadius: 18,
-      padding: 6,
-    }}
-  >
-    {[
-      ...(hasSpendingCap
-        ? [
-            {
-              value: "cash",
-              label: "كاش",
-              icon: "💵",
-            },
-          ]
-        : []),
-      {
-        value: "asset",
-        label: "أصل",
-        icon: "🏦",
-      },
-      {
-        value: "card",
-        label: "بطاقة",
-        icon: "💳",
-      },
-      {
-        value: "liability",
-        label: "التزام",
-        icon: "🧾",
-      },
-      {
-        value: "emergency",
-        label: "طارئ",
-        icon: "⚡",
-      },
-    ].map((item) => {
-      const active = paymentMethod === item.value;
-
-      return (
-        <button
-          key={item.value}
-          type="button"
-          onClick={() => {
-            const value = item.value;
-
-            if (value === "emergency") {
-              setPaymentMethod(value);
-              setIsUnusualExpense(true);
-              setUnusualFundingMode("asset");
-              setShowUnusualPicker(false);
-              return;
-            }
-
-            setPaymentMethod(value);
-            setIsUnusualExpense(false);
-            setUnusualFundingMode("");
-            setShowUnusualPicker(false);
-          }}
-          style={{
-            minHeight: 52,
-            borderRadius: 14,
-            border: active
-              ? "1.5px solid #16a34a"
-              : "1px solid transparent",
-            background: active
-              ? "rgba(22,163,74,0.10)"
-              : "transparent",
-            color: active ? "#166534" : "var(--text-muted)",
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            justifyContent: "center",
-            gap: 4,
-            cursor: "pointer",
-            fontFamily: "inherit",
-            fontWeight: active ? 900 : 700,
-            padding: "6px 3px",
-          }}
-        >
-          <span
-            style={{
-              fontSize: 17,
-              lineHeight: 1,
-            }}
-          >
-            {item.icon}
-          </span>
-
-          <span
-            style={{
-              fontSize: 9,
-              lineHeight: 1.1,
-              whiteSpace: "nowrap",
-            }}
-          >
-            {item.label}
-          </span>
-        </button>
-      );
-    })}
-  </div>
-</div>
-            <div
-  style={{
-    marginBottom: 12,
-    background: "var(--bg-secondary)",
-    border: "1px solid var(--border-soft)",
-    borderRadius: 12,
-    padding: 10,
-  }}
->
-  <div
-    style={{
-      height: 7,
-      background: "var(--bg-page)",
-      borderRadius: 99,
-      overflow: "hidden",
-      marginBottom: 10,
-    }}
-  >
-    <div
-      style={{
-        width: `${spendingProgress}%`,
-        height: "100%",
-        background:
-          spendingProgress >= 100
-            ? "#D95555"
-            : "linear-gradient(135deg,var(--gold-primary),var(--gold-border))",
-        borderRadius: 99,
-      }}
-    />
-  </div>
-
-  <div
-    style={{
-      display: "grid",
-      gridTemplateColumns: "1fr 92px",
-      gap: 8,
-      direction: "ltr",
-      alignItems: "stretch",
-    }}
-  >
-    <div
-      style={{
-        display: "grid",
-        gridTemplateColumns: "repeat(3, 1fr)",
-        gap: 7,
-      }}
-    >
-      {[
-        { label: "1", action: () => appendAmountDigit("1") },
-        { label: "2", action: () => appendAmountDigit("2") },
-        { label: "3", action: () => appendAmountDigit("3") },
-        { label: "4", action: () => appendAmountDigit("4") },
-        { label: "5", action: () => appendAmountDigit("5") },
-        { label: "6", action: () => appendAmountDigit("6") },
-        { label: "7", action: () => appendAmountDigit("7") },
-        { label: "8", action: () => appendAmountDigit("8") },
-        { label: "9", action: () => appendAmountDigit("9") },
-        { label: ".", action: () => appendAmountDigit(".") },
-        { label: "0", action: () => appendAmountDigit("0") },
-        {
-          label: "⌫",
-          action: () => setAmount((prev) => String(prev || "").slice(0, -1)),
-        },
-      ].map((key) => (
-        <button
-          key={key.label}
-          type="button"
-          onClick={key.action}
-          style={G.btn("var(--bg-card)", "var(--text-heading)", {
-            minHeight: 44,
-            padding: "9px",
-            fontSize: key.label === "⌫" ? 18 : 16,
-            fontWeight: 900,
-          })}
-        >
-          {key.label}
-        </button>
-      ))}
-    </div>
-
-    <div
-      style={{
-        display: "grid",
-        gridTemplateRows: "44px 1fr",
-        gap: 7,
-      }}
-    >
-            <button
-        type="button"
-        title={note ? `ملاحظة: ${note}` : "ملاحظة"}
-        aria-label="ملاحظة"
-        onClick={() => {
-          const nextNote = window.prompt("اكتب ملاحظة المصروف", note || "");
-          if (nextNote !== null) {
-            setNote(nextNote);
-          }
-        }}
-        style={G.btn(note ? "rgba(22,163,74,0.14)" : "var(--bg-card)", "#16a34a", {
-          minHeight: 44,
-          padding: "9px",
-          fontSize: 22,
-          fontWeight: 900,
-          border: note
-            ? "1px solid rgba(22,163,74,0.55)"
-            : "1px solid rgba(22,163,74,0.25)",
-        })}
-      >
-        📝
-      </button>
-
-      <button
-        type="button"
-        onClick={addPendingExpense}
-        style={G.btn("linear-gradient(135deg,#22c55e,#16a34a)", "#fff", {
-          width: "100%",
-          minHeight: 139,
-          padding: "10px",
-          fontSize: 14,
-          fontWeight: 900,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          flexDirection: "column",
-          gap: 6,
-        })}
-      >
-        <span style={{ fontSize: 26, lineHeight: 1 }}>+</span>
-        <span>إضافة</span>
-      </button>
-    </div>
-  </div>
-</div>
-          <div style={{ display: "none" }}>
- 
-{showUnusualPicker && (
-  <div
-    style={{
-      position: "fixed",
-      inset: 0,
-      background: "rgba(0,0,0,0.55)",
-      zIndex: 10000,
-      display: "flex",
-      alignItems: "flex-end",
-      justifyContent: "center",
-      padding: 16,
-    }}
-    onClick={() => setShowUnusualPicker(false)}
-  >
-    <div
-      onClick={(e) => e.stopPropagation()}
-      style={{
-        width: "100%",
-        maxWidth: 420,
-        background: "var(--bg-card)",
-        border: "1px solid rgba(148,163,184,0.22)",
-        borderRadius: "20px 20px 0 0",
-        padding: 16,
-        boxShadow: "0 -18px 40px rgba(0,0,0,0.35)",
-        direction: "rtl",
-      }}
-    >
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          marginBottom: 14,
-        }}
-      >
-        <div style={{ fontSize: 15, fontWeight: 900, color: "var(--text-heading)" }}>
-          ⚠️ تمويل المصروف
-        </div>
-
-        <button
-          type="button"
-          onClick={() => setShowUnusualPicker(false)}
-          style={{
-            width: 34,
-            height: 34,
-            borderRadius: 12,
-            border: "none",
-            background: "var(--bg-secondary)",
-            color: "var(--text-body)",
-            cursor: "pointer",
-            fontSize: 18,
-          }}
-        >
-          ×
-        </button>
-      </div>
-
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "1fr 1fr 1fr",
-          gap: 10,
-        }}
-      >
-        {[
-          ["asset", "🏦", "من أصل"],
-          ["liability", "🧾", "التزام"],
-          ["mix", "🔀", "مكس"],
-        ].map(([value, icon, label]) => (
-          <button
-            key={value}
-            type="button"
-            onClick={() => {
-              setIsUnusualExpense(true);
-              setUnusualFundingMode(value);
-              setShowUnusualPicker(false);
-            }}
-            style={{
-              minHeight: 76,
-              borderRadius: 16,
-              border:
-                unusualFundingMode === value
-                  ? "1px solid var(--gold-border)"
-                  : "1px solid rgba(148,163,184,0.24)",
-              background:
-                unusualFundingMode === value
-                  ? "rgba(232,201,106,0.12)"
-                  : "var(--bg-secondary)",
-              color: unusualFundingMode === value ? "var(--gold-border)" : "var(--text-heading)",
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: 6,
-              cursor: "pointer",
-              fontFamily: "inherit",
-              fontWeight: 900,
-            }}
-          >
-            <span style={{ fontSize: 24, lineHeight: 1 }}>{icon}</span>
-            <span style={{ fontSize: 12 }}>{label}</span>
-          </button>
-        ))}
-      </div>
-
-      {isUnusualExpense && (
-        <button
-          type="button"
-          onClick={() => {
-            setIsUnusualExpense(false);
-            setShowUnusualPicker(false);
-          }}
-          style={{
-            width: "100%",
-            marginTop: 12,
-            border: "none",
-            background: "transparent",
-            color: "var(--text-muted)",
-            fontSize: 12,
-            cursor: "pointer",
-            fontFamily: "inherit",
-          }}
-        >
-          إلغاء التحديد
-        </button>
-      )}
-    </div>
-  </div>
-)}
-{false && isUnusualExpense && (
-      <div style={{ marginTop: 10 }}>
-      <div
-        style={{
-          fontSize: 11,
-          color: "var(--text-body)",
-          marginBottom: 8,
-          textAlign: "right",
-        }}
-      >
-        توزيع المصروف غير الاعتيادي
-      </div>
-
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "1fr 1fr",
-          gap: 8,
-          marginBottom: 10,
-        }}
-      >
-        {[
-          ["asset", "كله من أصل"],
-          ["liability", "كله التزام"],
-          ["cap_asset", "جزء من السقف + أصل"],
-          ["cap_liability", "جزء من السقف + التزام"],
-        ].map(([value, label]) => (
-          <button
-            key={value}
-            type="button"
-            onClick={() => setUnusualFundingMode(value)}
-            style={{
-              border:
-                unusualFundingMode === value
-                  ? "1px solid var(--gold-border)"
-                  : "1px solid rgba(148,163,184,0.25)",
-              background:
-                unusualFundingMode === value
-                  ? "rgba(232,201,106,0.14)"
-                  : "var(--bg-secondary)",
-              color: unusualFundingMode === value ? "var(--gold-border)" : "var(--text-heading)",
-              borderRadius: 12,
-              padding: "9px 8px",
-              fontSize: 11,
-              fontWeight: 800,
-              cursor: "pointer",
-              fontFamily: "inherit",
-            }}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
-
-      {(unusualFundingMode === "cap_asset" ||
-        unusualFundingMode === "cap_liability") && (
-        <input
-          type="number"
-          value={unusualCapAmount}
-          onChange={(e) => setUnusualCapAmount(e.target.value)}
-          placeholder="المبلغ من السقف"
-          style={{ ...G.inp(), marginBottom: 8 }}
-        />
-      )}
-
-      {(unusualFundingMode === "asset" ||
-        unusualFundingMode === "cap_asset") && (
-        <select
-          value={unusualAssetKey}
-          onChange={(e) => setUnusualAssetKey(e.target.value)}
-          style={{ ...G.inp(), marginBottom: 8 }}
-        >
-          {assetSources.map((asset) => (
-            <option key={asset.key} value={asset.key}>
-              {asset.label}
-            </option>
-          ))}
-        </select>
-      )}
-
-      {(unusualFundingMode === "liability" ||
-        unusualFundingMode === "cap_liability") && (
-        <>
-          <input
-            value={unusualLiabilityName}
-            onChange={(e) => setUnusualLiabilityName(e.target.value)}
-            placeholder="اسم الالتزام"
-            style={{ ...G.inp(), marginBottom: 8 }}
-          />
-          <input
-            type="date"
-            value={unusualDueDate}
-            onChange={(e) => setUnusualDueDate(e.target.value)}
-            style={{ ...G.inp(), marginBottom: 0 }}
-          />
-        </>
-      )}
-    </div>
-  )}
-</div>
-{expectedOverBudget > 0 && (
-  <div
-    style={{
-      background: "var(--red-bg)",
-      border: "1.5px solid var(--red-border)",
-      borderRadius: 14,
-      padding: "10px 12px",
-      marginBottom: 10,
-      color: "#D95555",
-      fontSize: 12,
-      fontWeight: 700,
-      textAlign: "right",
-    }}
-  >
-    ⚠️ هذا المصروف يتجاوز سقف الصرف بمبلغ{" "}
-    {displayOverBudget.toFixed(2)} د.أ
-  </div>
-)}{false && expectedOverBudget > 0 && paymentMethod === "cash" && (
-  <div
-    style={{
-      background: "var(--bg-secondary)",
-      border: "1px solid var(--border-soft)",
-      borderRadius: 12,
-      padding: 12,
-      marginBottom: 12,
-    }}
-  >
-    <div
-      style={{
-        fontSize: 12,
-        color: "var(--gold-primary)",
-        fontWeight: 800,
-        marginBottom: 10,
-        textAlign: "right",
-      }}
-    >
-      تمويل العجز
-    </div>
-
-    <div
-      style={{
-        display: "grid",
-        gridTemplateColumns: "1fr 1fr",
-        gap: 8,
-        marginBottom: 10,
-      }}
-    >
-      <button
-        onClick={() => setOverBudgetSource("asset")}
-        style={G.btn(
-          overBudgetSource === "asset" ? "#a855f7" : "var(--bg-secondary)",
-          "#fff",
-          { padding: "10px" }
-        )}
-      >
-        من أصل
-      </button>
-
-      <button
-        onClick={() => setOverBudgetSource("liability")}
-        style={G.btn(
-          overBudgetSource === "liability" ? "#ef4444" : "var(--bg-secondary)",
-          "#fff",
-          { padding: "10px" }
-        )}
-      >
-        دين إضافي
-      </button>
-    </div>
-
-    {overBudgetSource === "asset" && (
-      <select
-        value={overBudgetAssetKey}
-        onChange={(e) => setOverBudgetAssetKey(e.target.value)}
-        style={{ ...G.inp(), marginBottom: 10 }}
-      >
-        {assetSources.map((s) => (
-          <option key={s.key} value={s.key}>
-            {s.label} — متاح {Number(s.available || 0).toFixed(2)} د.أ
-          </option>
-        ))}
-      </select>
-    )}
-
-    {overBudgetSource === "liability" && (
-      <>
-        <input
-          value={overBudgetLiabilityName}
-          onChange={(e) => setOverBudgetLiabilityName(e.target.value)}
-          placeholder="اسم الالتزام"
-          style={{ ...G.inp(), marginBottom: 10 }}
-        />
-
-        <input
-          type="date"
-          value={overBudgetDueDate}
-          onChange={(e) => setOverBudgetDueDate(e.target.value)}
-          style={{ ...G.inp(), marginBottom: 10 }}
-        />
-      </>
-    )}
-  </div>
-)}
-
-           
-            
-            {paymentMethod === "emergency" && isUnusualExpense && (
-  <div
-    style={{
-      display: "none",
-      marginTop: -4,
-      marginBottom: 10,
-      padding: "8px 10px",
-      borderRadius: 12,
-      background: "rgba(232,201,106,0.08)",
-      color: "var(--gold-border)",
-      fontSize: 12,
-      fontWeight: 800,
-      textAlign: "right",
-      border: "1px solid rgba(232,201,106,0.22)",
-    }}
-  >
-    ⚠️ مصروف طارئ ·{" "}
-    {unusualFundingMode === "asset"
-      ? "من أصل"
-      : unusualFundingMode === "liability"
-      ? "التزام"
-      : "مكس"}
-  </div>
-)}
-
-            {paymentMethod === "emergency" && isUnusualExpense && (
-  <div
-    style={{
-      background: "var(--bg-secondary)",
-      border: "1px solid rgba(232,201,106,0.28)",
-      borderRadius: 12,
-      padding: 12,
-      marginBottom: 12,
-      direction: "rtl",
-    }}
-  >
-    <div
-      style={{
-        fontSize: 12,
-        color: "var(--gold-border)",
-        fontWeight: 900,
-        marginBottom: 10,
-        textAlign: "right",
-      }}
-    >
-      تمويل المصروف من أصل
-    </div>
-
-    <select
-      value={unusualFundingMode}
-      onChange={(e) => setUnusualFundingMode(e.target.value)}
-      style={{ ...G.inp(), marginBottom: 8 }}
-    >
-      <option value="asset">كاملًا من أصل</option>
-      <option value="liability">كاملًا كدين</option>
-      {hasSpendingCap && (
-        <option value="mix">مكس: جزء من السقف والباقي من أصل أو دين</option>
-      )}
-    </select>
-
-    <div
-      style={{
-        display: "none",
-        gridTemplateColumns: "1fr",
-        gap: 8,
-        marginBottom: 10,
-      }}
-    >
-      {[
-        ["asset", "كاملًا من أصل"],
-        ["liability", "كاملًا كدين"],
-        ["mix", "مكس: جزء من سقف الصرف والباقي من أصل أو دين"],
-      ].map(([value, label]) => (
-        <button
-          key={value}
-          type="button"
-          onClick={() => setUnusualFundingMode(value)}
-          style={G.btn(
-            unusualFundingMode === value ? "var(--gold-primary)" : "var(--bg-secondary)",
-            unusualFundingMode === value ? "var(--text-heading)" : "#fff",
-            { padding: "10px", textAlign: "right" }
-          )}
-        >
-          {label}
-        </button>
-      ))}
-    </div>
-
-    {unusualFundingMode === "mix" && (
-      <>
-        <input
-          type="number"
-          value={unusualCapAmount}
-          onChange={(e) => setUnusualCapAmount(e.target.value)}
-          placeholder="الجزء من سقف الصرف"
-          style={{ ...G.inp(), marginBottom: 8 }}
-        />
-
-        <select
-          value={unusualRemainderSource}
-          onChange={(e) => setUnusualRemainderSource(e.target.value)}
-          style={{ ...G.inp(), marginBottom: 8 }}
-        >
-          <option value="asset">الباقي من أصل</option>
-          <option value="liability">الباقي كدين</option>
-        </select>
-
-        <div
-          style={{
-            display: "none",
-            gridTemplateColumns: "1fr 1fr",
-            gap: 8,
-            marginBottom: 8,
-          }}
-        >
-          <button
-            type="button"
-            onClick={() => setUnusualRemainderSource("asset")}
-            style={G.btn(
-              unusualRemainderSource === "asset" ? "#a855f7" : "var(--bg-secondary)",
-              "#fff",
-              { padding: "9px" }
-            )}
-          >
-            الباقي من أصل
-          </button>
-          <button
-            type="button"
-            onClick={() => setUnusualRemainderSource("liability")}
-            style={G.btn(
-              unusualRemainderSource === "liability" ? "#ef4444" : "var(--bg-secondary)",
-              "#fff",
-              { padding: "9px" }
-            )}
-          >
-            الباقي دين
-          </button>
-        </div>
-      </>
-    )}
-
-    {(unusualFundingMode === "asset" ||
-      (unusualFundingMode === "mix" && unusualRemainderSource === "asset")) && (
-      <select
-        value={unusualAssetKey}
-        onChange={(e) => setUnusualAssetKey(e.target.value)}
-        style={{ ...G.inp(), marginBottom: 8 }}
-      >
-        {assetSources.map((s) => (
-          <option key={s.key} value={s.key}>
-            {s.label} — متاح {Number(s.available || 0).toFixed(2)} د.أ
-          </option>
-        ))}
-      </select>
-    )}
-
-    {(unusualFundingMode === "liability" ||
-      (unusualFundingMode === "mix" && unusualRemainderSource === "liability")) && (
-      <>
-        <input
-          value={unusualLiabilityName}
-          onChange={(e) => setUnusualLiabilityName(e.target.value)}
-          placeholder="اسم الدين"
-          style={{ ...G.inp(), marginBottom: 8 }}
-        />
-
-        <input
-          type="date"
-          value={unusualDueDate}
-          onChange={(e) => setUnusualDueDate(e.target.value)}
-          style={{ ...G.inp(), marginBottom: 0 }}
-        />
-      </>
-    )}
-  </div>
-)}
-
-            {paymentMethod === "card" && (
-              <select
-                value={cardId}
-                onChange={(e) => setCardId(e.target.value)}
-                style={{ ...G.inp(), marginBottom: 10 }}
-              >
-                <option value="">اختر البطاقة</option>
-                {cards.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name} — الرصيد {Number(c.balance || 0).toFixed(2)}
-                  </option>
-                ))}
-              </select>
-            )}
-
-            {paymentMethod === "asset" && (
-              <select
-                value={assetPaymentKey}
-                onChange={(e) => setAssetPaymentKey(e.target.value)}
-                style={{ ...G.inp(), marginBottom: 10 }}
-              >
-                {assetSources.map((s) => (
-                  <option key={s.key} value={s.key}>
-                    {s.label} — متاح {Number(s.available || 0).toFixed(2)} د.أ
-                  </option>
-                ))}
-              </select>
-            )}
-
-            {paymentMethod === "liability" && (
-              <>
-                <input
-                  value={liabilityName}
-                  onChange={(e) => setLiabilityName(e.target.value)}
-                  placeholder="اسم الالتزام"
-                  style={{ ...G.inp(), marginBottom: 10 }}
-                />
-
-                <input
-                  type="date"
-                  value={dueDate}
-                  onChange={(e) => setDueDate(e.target.value)}
-                  style={{ ...G.inp(), marginBottom: 10 }}
-                />
-              </>
-            )}
-
-            {expectedOverBudget > 0 && paymentMethod === "cash" && (
-              <div
-                style={{
-                  background: "rgba(239,68,68,0.08)",
-                  border: "1px solid rgba(239,68,68,0.24)",
-                  borderRadius: 12,
-                  padding: 10,
-                  marginBottom: 10,
-                  textAlign: "right",
-                }}
-              >
-                <div
-                  style={{
-                    color: "#fecaca",
-                    fontSize: 11,
-                    fontWeight: 800,
-                    marginBottom: 8,
-                  }}
-                >
-                  تغطية التجاوز: {expectedOverBudget.toFixed(2)} د.أ
-                </div>
-
-                <select
-                  value={overBudgetSource}
-                  onChange={(e) => setOverBudgetSource(e.target.value)}
-                  style={{ ...G.inp(), marginBottom: 8 }}
-                >
-                  <option value="asset">خصم التجاوز من أصل</option>
-                  <option value="liability">تسجيل التجاوز كدين</option>
-                </select>
-
-                {overBudgetSource === "asset" && (
-                  <select
-                    value={overBudgetAssetKey}
-                    onChange={(e) => setOverBudgetAssetKey(e.target.value)}
-                    style={{ ...G.inp(), marginBottom: 0 }}
-                  >
-                    {assetSources.map((s) => (
-                      <option key={s.key} value={s.key}>
-                        {s.label} - متاح {Number(s.available || 0).toFixed(2)} د.أ
-                      </option>
-                    ))}
-                  </select>
-                )}
-
-                {overBudgetSource === "liability" && (
-                  <>
-                    <input
-                      value={overBudgetLiabilityName}
-                      onChange={(e) => setOverBudgetLiabilityName(e.target.value)}
-                      placeholder="اسم دين التجاوز"
-                      style={{ ...G.inp(), marginBottom: 8 }}
-                    />
-
-                    <input
-                      type="date"
-                      value={overBudgetDueDate}
-                      onChange={(e) => setOverBudgetDueDate(e.target.value)}
-                      style={{ ...G.inp(), marginBottom: 0 }}
-                    />
-                  </>
-                )}
-              </div>
-            )}
-
-                        {false && (
-              <input
-                value={note}
-                onChange={(e) => setNote(e.target.value)}
-                placeholder="ملاحظة"
-                style={{ ...G.inp(), marginBottom: 12 }}
-              />
-            )}
-
-            <button
-              type="button"
-              onClick={submitExpense}
-              style={G.btn("linear-gradient(135deg,var(--gold-primary),var(--gold-border))", "var(--text-heading)", {
-                width: "100%",
-                minHeight: 44,
-                marginTop: 6,
-                marginBottom: 0,
-                display: "block",
-              })}
-            >
-              <span style={{ display: "block" }}>✓ {saveButtonTitle}</span>
-              {saveButtonMeta && (
-                <span style={{ display: "block", marginTop: 3, fontSize: 11, fontWeight: 700 }}>
-                  {saveButtonMeta}
-                </span>
-              )}
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
@@ -4028,7 +2479,6 @@ function ReportsScreen({ state }) {
     (sum, item) => sum + Number(item.overBudget || 0),
     0
   );
-  const budget = calcBudget(state);
   const currentAssets = calcAssets(state);
   const assetTrendByMonth = new Map();
   (state.monthlySnapshots || []).forEach((snapshot) => {
@@ -4106,974 +2556,134 @@ function ReportsScreen({ state }) {
   });
   const bestAssetTrendChange = Math.max(0, ...assetTrendChanges);
   const assetChangeColor = assetChange > 0 ? "#B8922E" : assetChange < 0 ? "#D95555" : "var(--text-disabled)";
-  const pendingCurrent = [];
-  const getLiabilityAmount = () => 0;
-  const getCoveredAmount = () => 0;
-  const getUncoveredAmount = () => 0;
+  const assetTrendBars = assetTrendPoints.map((point, index) => {
+    const height =
+      assetTrendPoints.length === 1
+        ? 54
+        : 28 +
+          ((Number(point.totalAssets || 0) - minAssetTrendValue) /
+            assetTrendRange) *
+            52;
+    const previous = assetTrendPoints[index - 1];
+    const pointChange = previous
+      ? Number(point.totalAssets || 0) - Number(previous.totalAssets || 0)
+      : 0;
+    const color =
+      index === 0
+        ? "rgba(255,255,255,0.45)"
+        : pointChange < 0
+        ? "#F07A7A"
+        : pointChange === bestAssetTrendChange && bestAssetTrendChange > 0
+        ? "#60C698"
+        : "#FFC62D";
 
-  const getDueText = (item) => {
-    if (item.dueDate) return formatDate(item.dueDate);
-    if (item.dueDay) return `يوم ${item.dueDay}`;
-    return "غير محدد";
-  };
-
-  const updateCurrentPaymentMethod = (liability, value) => {
-    setState((prev) => ({
-      ...prev,
-      currentLiabilities: prev.currentLiabilities.map((item) =>
-        item.id === liability.id ? { ...item, paymentMethod: value } : item
-      ),
-    }));
-  };
-
-  const payCurrentFromReserved = (liability) => {
-    const amount = Number(
-      liability.payableBuffer ||
-        liability.dueThisMonth ||
-        liability.monthlyDue ||
-        liability.amount ||
-        liability.balance ||
-        0
-    );
-
-    setState((prev) => ({
-      ...prev,
-      currentLiabilities: prev.currentLiabilities.map((item) =>
-        item.id === liability.id
-          ? {
-              ...item,
-              balance: Math.max(0, Number(item.balance || item.amount || 0) - amount),
-              status: "paid",
-              paymentMethod: "salary",
-              salaryPaidAmount: 0,
-            }
-          : item
-      ),
-      transactions: [
-        ...(prev.transactions || []),
-        {
-          id: Date.now(),
-          type: "liability_paid_from_reserved_cap",
-          name: `سداد التزام - ${liability.name}`,
-          amount,
-          liabilityId: liability.id,
-          date: new Date().toISOString(),
-        },
-      ],
-    }));
-  };
-  const payCurrentFromCap = (liability) => {
-    const amount = getLiabilityAmount(liability);
-    const remainingCap = Math.max(
-      0,
-      Number(state.session?.spendingCap || 0) -
-        Number(state.session?.coveredSpent || 0)
-    );
-
-    if (remainingCap < amount) {
-      alert("الرصيد المتاح من سقف الصرف لا يكفي لسداد هذا الالتزام");
-      return;
-    }
-
-    setState((prev) => ({
-      ...prev,
-      session: {
-        ...prev.session,
-        coveredSpent: Number(
-          (Number(prev.session?.coveredSpent || 0) + amount).toFixed(2)
-        ),
-      },
-      currentLiabilities: prev.currentLiabilities.map((item) =>
-        item.id === liability.id
-          ? {
-              ...item,
-              balance: 0,
-              status: "paid",
-              paymentMethod: "cap",
-              payableBuffer: amount,
-              uncoveredDebt: 0,
-            }
-          : item
-      ),
-      transactions: [
-        ...(prev.transactions || []),
-        {
-          id: Date.now(),
-          type: "liability_paid_from_cap",
-          amount,
-          liabilityId: liability.id,
-          date: new Date().toISOString(),
-        },
-      ],
-    }));
-  };
-
-  const setPostponeDate = (liability, value) => {
-    setState((prev) => ({
-      ...prev,
-      currentLiabilities: prev.currentLiabilities.map((item) =>
-        item.id === liability.id ? { ...item, newDueDate: value } : item
-      ),
-    }));
-  };
-
-  const confirmPostpone = (liability) => {
-    setState((prev) => ({
-      ...prev,
-      currentLiabilities: prev.currentLiabilities.map((item) =>
-        item.id === liability.id
-          ? { ...item, dueDate: item.newDueDate, newDueDate: "" }
-          : item
-      ),
-    }));
-  };
-
-  const getPostponeParts = (item) => {
-    const source =
-      item.newDueDate ||
-      item.dueDate ||
-      new Date().toISOString().slice(0, 10);
-    const [year, month, day] = String(source).split("-");
     return {
-      year: year || String(new Date().getFullYear()),
-      month: month || "01",
-      day: day || "01",
+      id: `${point.month}-${index}`,
+      title: `${point.month}: ${Number(point.totalAssets || 0).toFixed(2)}`,
+      height,
+      color,
+      label: String(point.month || "").slice(5, 7) || "--",
     };
-  };
-  const setPostponePart = (liabilityId, part, value) => {
-    setState((prev) => ({
-      ...prev,
-      currentLiabilities: prev.currentLiabilities.map((liability) => {
-        if (liability.id !== liabilityId) return liability;
-        const parts = getPostponeParts(liability);
-        const nextParts = { ...parts, [part]: value };
-        return {
-          ...liability,
-          newDueDate: `${nextParts.year}-${nextParts.month}-${nextParts.day}`,
-        };
-      }),
-    }));
-  };
-  const confirmPostponeDate = (liabilityId) => {
-    setState((prev) => ({
-      ...prev,
-      currentLiabilities: prev.currentLiabilities.map((liability) =>
-        liability.id === liabilityId
-          ? {
-              ...liability,
-              dueDate: liability.newDueDate || liability.dueDate,
-              dueDay: Number(
-                String(liability.newDueDate || liability.dueDate || "")
-                  .split("-")[2] || liability.dueDay || 1
-              ),
-              newDueDate: "",
-              paymentMethod: "",
-            }
-          : liability
-      ),
-    }));
-  };
-  const coveredCurrentTotal = pendingCurrent.reduce(
-    (sum, item) => sum + getCoveredAmount(item),
-    0
-  );
-  const uncoveredCurrentTotal = pendingCurrent.reduce(
-    (sum, item) => sum + getUncoveredAmount(item),
-    0
-  );
+  });
+  const expenseReportRows = expenses.map((expense) => ({
+    id: expense.id,
+    expense,
+    isIncome: expense.isIncomeEntry,
+    amount: incomeEntryAmount(expense),
+    meta: incomeEntryMeta(expense),
+    title: expense.note || expense.category,
+    category: expense.category,
+    paymentMethod: expense.paymentMethod,
+    categoryColor: expense.isIncomeEntry
+      ? "#60C698"
+      : CC[expense.category] || "rgba(255,255,255,0.72)",
+  }));
+  const assetDetailDisplayRows = assetDetailRows.map((asset) => ({
+    ...asset,
+    width: Math.max(
+      8,
+      (Math.abs(asset.change) / maxAssetDetailChange) * 100
+    ),
+    isSelected: selectedTrendAsset?.key === asset.key,
+    color: asset.change >= 0 ? "#22c55e" : "#ef4444",
+  }));
 
   return (
     <div style={G.scr}>
-      <div style={G.card()}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-          <div style={{ display: "flex", gap: 6 }}>
-            {[
-              { id: "donut", icon: "◔", title: "دائرة المصاريف" },
-              { id: "bars", icon: "▥", title: "أعمدة المصاريف" },
-            ].map((item) => (
-              <button
-                key={item.id}
-                type="button"
-                title={item.title}
-                onClick={() => setExpenseChartMode(item.id)}
-                style={{
-                  width: 32,
-                  height: 32,
-                  borderRadius: 10,
-                  border:
-                    expenseChartMode === item.id
-                      ? "1.5px solid #0284C7"
-                      : "1px solid #7DD3FC",
-                  background: expenseChartMode === item.id ? "linear-gradient(135deg,#38BDF8,#0284C7)" : "#EEF5FE",
-                  color: expenseChartMode === item.id ? "#fff" : "#0369A1",
-                  cursor: "pointer",
-                  fontSize: 15,
-                  fontWeight: 800,
-                }}
-              >
-                {item.icon}
-              </button>
-            ))}
-          </div>
-          <div style={{ textAlign: "right", ...sectionHeading }}>
-            ملخص المصروفات
-          </div>
-        </div>
+<ExpenseSummaryReportCard
+        total={total}
+        overBudgetTotal={overBudgetTotal}
+        chartMode={expenseChartMode}
+        onChartModeChange={setExpenseChartMode}
+        onOpenOverBudget={() => setShowOverBudgetReport(true)}
+      >
+        <ExpenseDonut
+          expenses={state.expenses}
+          mode={expenseChartMode}
+          categoryColors={CC}
+        />
+      </ExpenseSummaryReportCard>
 
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: overBudgetTotal > 0 ? "1fr 1fr 1fr" : "1fr 1fr",
-            gap: 8,
-            marginBottom: 12,
-          }}
-        >
-          <div style={summaryCard("total")}>
-            <div style={{ fontSize: 10, color: "var(--text-faint)" }}>إجمالي المصروف</div>
-            <div style={summaryValue("total")}>
-              {total.toFixed(2)}
-            </div>
-          </div>
+<AssetTrendReportCard
+        change={assetChange}
+        changePct={assetChangePct}
+        changeColor={assetChangeColor}
+        currentAssets={Number(lastAssetPoint?.totalAssets || 0)}
+        months={assetTrendMonths}
+        bars={assetTrendBars}
+        detailsOpen={showAssetTrendDetails}
+        onToggleDetails={() => setShowAssetTrendDetails((value) => !value)}
+        onMonthsChange={setAssetTrendMonths}
+      />
 
-          
+<ExpenseReportLauncher onOpen={() => setShowExpenseReport(true)} />
 
-          {overBudgetTotal > 0 && (
-            <button
-              type="button"
-              onClick={() => setShowOverBudgetReport(true)}
-              style={{
-                ...summaryCard("danger"),
-                color: "#D95555",
-                cursor: "pointer",
-                fontFamily: "inherit",
-              }}
-            >
-              <div style={{ fontSize: 10, color: "var(--text-faint)" }}>التجاوز</div>
-              <div style={summaryValue("danger")}>
-                {overBudgetTotal.toFixed(2)}
-              </div>
-            </button>
-          )}
-        </div>
+<ExpenseReportModal
+        open={showExpenseReport}
+        rows={expenseReportRows}
+        selectedExpense={selectedExpense}
+        selectedTotal={selectedExpenseTotal}
+        selectedRecorded={selectedExpenseRecorded}
+        selectedDebt={selectedExpenseDebt}
+        selectedAsset={selectedExpenseAsset}
+        onClose={() => setShowExpenseReport(false)}
+        onSelect={(expense) => {
+          setShowExpenseReport(false);
+          setSelectedExpense(expense);
+        }}
+        onCloseSelected={() => setSelectedExpense(null)}
+      />
 
-        <ExpenseDonut expenses={state.expenses} mode={expenseChartMode} />
-      </div>
+<OverBudgetReportModal
+        open={showOverBudgetReport}
+        total={overBudgetTotal}
+        items={overBudgetItems}
+        onClose={() => setShowOverBudgetReport(false)}
+      />
 
-      <div style={G.card()}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-            <button
-              type="button"
-              title="تفاصيل التغير"
-              onClick={() => setShowAssetTrendDetails((v) => !v)}
-              style={{
-                width: 30,
-                height: 30,
-                borderRadius: 10,
-                border: "1px solid rgba(148,163,184,0.28)",
-                background: showAssetTrendDetails ? "var(--bg-secondary)" : "var(--bg-secondary)",
-                color: "var(--text-body)",
-                cursor: "pointer",
-                fontWeight: 900,
-              }}
-            >
-              ⓘ
-            </button>
-            <div
-              style={{
-                color: assetChangeColor,
-                fontSize: 12,
-                fontWeight: 900,
-                background: assetChange >= 0 ? "rgba(34,197,94,0.12)" : "rgba(239,68,68,0.12)",
-                border: `1px solid ${assetChange >= 0 ? "rgba(34,197,94,0.35)" : "rgba(239,68,68,0.35)"}`,
-                borderRadius: 999,
-                padding: "5px 8px",
-              }}
-            >
-              {assetChange >= 0 ? "+" : ""}
-              {assetChange.toFixed(2)}
-            </div>
-          </div>
-          <div style={{ textAlign: "right" }}>
-            <div style={sectionHeading}>
-              تغير الأصول الشهري
-            </div>
-            <select
-              value={assetTrendMonths}
-              onChange={(e) => setAssetTrendMonths(Number(e.target.value || 6))}
-              style={{
-                ...G.inp(),
-                width: 112,
-                padding: "5px 7px",
-                fontSize: 10,
-                marginTop: 4,
-              }}
-            >
-              <option value={3}>آخر 3 أشهر</option>
-              <option value={6}>آخر 6 أشهر</option>
-              <option value={9}>آخر 9 أشهر</option>
-              <option value={12}>آخر 12 شهر</option>
-            </select>
-          </div>
-        </div>
-
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 12 }}>
-          <div style={{ background: "var(--bg-secondary)", borderRadius: 10, padding: 9, textAlign: "right" }}>
-            <div style={labelText}>الأصول الآن</div>
-            <b style={{ ...summaryValue("total"), color: "var(--text-heading)" }}>{Number(lastAssetPoint?.totalAssets || 0).toFixed(2)}</b>
-          </div>
-          <div style={{ background: "var(--bg-secondary)", borderRadius: 10, padding: 9, textAlign: "right" }}>
-            <div style={labelText}>النسبة</div>
-            <b style={{ ...summaryValue("total"), color: assetChangeColor }}>
-              {assetChange >= 0 ? "+" : ""}
-              {assetChangePct.toFixed(1)}%
-            </b>
-          </div>
-        </div>
-
-        <div
-          style={{
-            height: 96,
-            display: "grid",
-            gridTemplateColumns: `repeat(${Math.max(assetTrendPoints.length, 1)}, 1fr)`,
-            gap: 7,
-            alignItems: "end",
-            borderTop: "1px solid var(--border-soft)",
-            paddingTop: 10,
-          }}
-        >
-          {assetTrendPoints.length ? (
-            assetTrendPoints.map((point, index) => {
-              const height =
-                assetTrendPoints.length === 1
-                  ? 54
-                  : 28 + ((Number(point.totalAssets || 0) - minAssetTrendValue) / assetTrendRange) * 52;
-              const previous = assetTrendPoints[index - 1];
-              const pointChange = previous
-                ? Number(point.totalAssets || 0) - Number(previous.totalAssets || 0)
-                : 0;
-              const pointColor =
-                index === 0
-                  ? "var(--text-disabled)"
-                  : pointChange < 0
-                  ? "#F07A7A"
-                  : pointChange === bestAssetTrendChange && bestAssetTrendChange > 0
-                  ? "#60C698"
-                  : "#E8A44A";
-
-              return (
-                <div key={`${point.month}-${index}`} style={{ textAlign: "center" }}>
-                  <div
-                    title={`${point.month}: ${Number(point.totalAssets || 0).toFixed(2)}`}
-                    style={{
-                      height,
-                      minHeight: 18,
-                      borderRadius: "8px 8px 4px 4px",
-                      background: pointColor,
-                      border: "none",
-                    }}
-                  />
-                  <div style={{ color: "var(--text-muted)", fontSize: 9, marginTop: 5 }}>
-                    {String(point.month || "").slice(5, 7) || "--"}
-                  </div>
-                </div>
-              );
-            })
-          ) : (
-            <div style={{ color: "var(--text-faint)", fontSize: 12, textAlign: "center" }}>
-              لا توجد لقطات شهرية بعد
-            </div>
-          )}
-        </div>
-      </div>
-
-      <div style={G.card()}>
-        <button
-          type="button"
-          onClick={() => setShowExpenseReport(true)}
-          style={G.btn("linear-gradient(135deg,var(--gold-primary),var(--gold-dark))", "#fff", {
-            width: "100%",
-            fontSize: 13,
-            fontWeight: 800,
-          })}
-        >
-          كشف المصروفات
-        </button>
-
-        {false && expenses.map((e, i) => (
-          <div
-            key={e.id}
-            style={{
-              ...(i < expenses.length - 1 ? G.row : G.lrow),
-              ...(incomeEntryStyle(e.isIncomeEntry) || {}),
-            }}
-          >
-            <div>
-              <div
-                style={{
-                  fontSize: 15,
-                  fontWeight: 800,
-                  color: e.isIncomeEntry ? "#2A9E60" : "var(--text-heading)",
-                }}
-              >
-                {e.isIncomeEntry ? "+" : ""}
-                {incomeEntryAmount(e).toFixed(2)} د.أ
-              </div>
-              <div style={{ fontSize: 10, color: e.isIncomeEntry ? "#2A9E60" : "var(--text-faint)" }}>
-                {incomeEntryMeta(e)}
-              </div>
-            </div>
-
-            <div style={{ textAlign: "right" }}>
-              <div style={{ fontSize: 13 }}>{e.note || e.category}</div>
-              <div
-                style={{
-                  fontSize: 10,
-                  color: e.isIncomeEntry ? "#2A9E60" : CC[e.category] || "var(--text-muted)",
-                  marginTop: 2,
-                }}
-              >
-                {e.category} | {e.paymentMethod}
-              </div>
-            </div>
-          </div>
-        ))}
-
-        {false && !expenses.length && (
-          <div
-            style={{
-              textAlign: "center",
-              color: "var(--text-disabled)",
-              padding: "20px 0",
-              fontSize: 13,
-            }}
-          >
-            لا توجد مصروفات بعد
-          </div>
-        )}
-      </div>
-
-      {showExpenseReport && (
-        <div
-          onClick={(e) => e.target === e.currentTarget && setShowExpenseReport(false)}
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(0,0,0,0.78)",
-            backdropFilter: "blur(8px)",
-            display: "flex",
-            alignItems: "flex-end",
-            justifyContent: "center",
-            zIndex: 555,
-          }}
-        >
-          <div
-            style={{
-              background: "var(--bg-card)",
-              border: "1px solid var(--border-soft)",
-              borderRadius: "22px 22px 0 0",
-              width: "100%",
-              maxWidth: 440,
-              maxHeight: "82vh",
-              overflowY: "auto",
-              padding: "18px 16px 28px",
-              direction: "rtl",
-            }}
-          >
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-              <button
-                type="button"
-                onClick={() => setShowExpenseReport(false)}
-                style={{
-                  width: 34,
-                  height: 34,
-                  borderRadius: 10,
-                  border: "1px solid rgba(148,163,184,0.28)",
-                  background: "var(--bg-secondary)",
-                  color: "var(--text-body)",
-                  cursor: "pointer",
-                  fontSize: 20,
-                }}
-              >
-                ×
-              </button>
-              <div style={{ textAlign: "right" }}>
-                <div style={{ color: "var(--gold-primary)", fontWeight: 900, fontSize: 15 }}>
-                  كشف المصروفات
-                </div>
-                <div style={{ color: "var(--text-faint)", fontSize: 10 }}>
-                  {expenses.length} حركة
-                </div>
-              </div>
-            </div>
-
-            {expenses.map((e, i) => (
-              <div
-                key={e.id}
-                style={{
-                  ...(i < expenses.length - 1 ? G.row : G.lrow),
-                  ...(incomeEntryStyle(e.isIncomeEntry) || {}),
-                }}
-              >
-                <div>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <button
-                      type="button"
-                      title="تفاصيل المصروف"
-                      onClick={() => {
-                        setShowExpenseReport(false);
-                        setSelectedExpense(e);
-                      }}
-                      style={{
-                        width: 28,
-                        height: 28,
-                        borderRadius: 9,
-                        border: "1px solid var(--gold-border)",
-                        background: "var(--gold-light)",
-                        color: "var(--gold-dark)",
-                        cursor: "pointer",
-                        fontSize: 13,
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                      }}
-                    >
-                      ✎
-                    </button>
-                    <div
-                      style={{
-                        fontSize: 15,
-                        fontWeight: 800,
-                        color: e.isIncomeEntry ? "#2A9E60" : "var(--text-heading)",
-                      }}
-                    >
-                      {e.isIncomeEntry ? "+" : ""}
-                      {incomeEntryAmount(e).toFixed(2)} د.أ
-                    </div>
-                  </div>
-                  <div style={{ fontSize: 10, color: e.isIncomeEntry ? "#2A9E60" : "var(--text-faint)" }}>
-                    {incomeEntryMeta(e)}
-                  </div>
-                </div>
-
-                <div style={{ textAlign: "right" }}>
-                  <div style={{ fontSize: 13 }}>{e.note || e.category}</div>
-                  <div
-                    style={{
-                      fontSize: 10,
-                      color: e.isIncomeEntry ? "#2A9E60" : CC[e.category] || "var(--text-muted)",
-                      marginTop: 2,
-                    }}
-                  >
-                    {e.category} | {e.paymentMethod}
-                  </div>
-                </div>
-              </div>
-            ))}
-
-            {!expenses.length && (
-              <div
-                style={{
-                  textAlign: "center",
-                  color: "var(--text-disabled)",
-                  padding: "20px 0",
-                  fontSize: 13,
-                }}
-              >
-                لا توجد مصروفات بعد
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {selectedExpense && (
-        <div
-          onClick={(e) => e.target === e.currentTarget && setSelectedExpense(null)}
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(0,0,0,0.78)",
-            backdropFilter: "blur(8px)",
-            display: "flex",
-            alignItems: "flex-end",
-            justifyContent: "center",
-            zIndex: 559,
-          }}
-        >
-          <div
-            style={{
-              background: "var(--bg-card)",
-              border: "1px solid var(--border-soft)",
-              borderRadius: "22px 22px 0 0",
-              width: "100%",
-              maxWidth: 440,
-              maxHeight: "82vh",
-              overflowY: "auto",
-              padding: "18px 16px 28px",
-              direction: "rtl",
-            }}
-          >
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-              <button
-                type="button"
-                onClick={() => setSelectedExpense(null)}
-                style={{
-                  width: 34,
-                  height: 34,
-                  borderRadius: 10,
-                  border: "1px solid rgba(148,163,184,0.28)",
-                  background: "var(--bg-secondary)",
-                  color: "var(--text-body)",
-                  cursor: "pointer",
-                  fontSize: 20,
-                }}
-              >
-                ×
-              </button>
-              <div style={{ textAlign: "right" }}>
-                <div style={{ color: "var(--gold-primary)", fontWeight: 900, fontSize: 15 }}>
-                  تفاصيل المصروف
-                </div>
-                <div style={{ color: "var(--text-faint)", fontSize: 10 }}>
-                  عرض من كشف المصروفات
-                </div>
-              </div>
-            </div>
-
-            {selectedExpenseTotal !== selectedExpenseRecorded && (
-              <div
-                style={{
-                  background: "var(--bg-secondary)",
-                  border: "1px solid rgba(232,201,106,0.22)",
-                  borderRadius: 12,
-                  padding: 10,
-                  marginBottom: 10,
-                }}
-              >
-                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-                  <span style={{ color: "var(--text-muted)", fontSize: 11 }}>إجمالي المصروف</span>
-                  <b>{selectedExpenseTotal.toFixed(2)} د.أ</b>
-                </div>
-                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-                  <span style={{ color: "var(--text-muted)", fontSize: 11 }}>من سقف الصرف</span>
-                  <b style={{ color: "#2A9E60" }}>
-                    {Number(selectedExpense.budgetCovered || 0).toFixed(2)} د.أ
-                  </b>
-                </div>
-                {selectedExpenseDebt > 0 && (
-                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-                    <span style={{ color: "var(--text-muted)", fontSize: 11 }}>سجل كدين</span>
-                    <b style={{ color: "#D95555" }}>{selectedExpenseDebt.toFixed(2)} د.أ</b>
-                  </div>
-                )}
-                {selectedExpenseAsset > 0 && (
-                  <div style={{ display: "flex", justifyContent: "space-between" }}>
-                    <span style={{ color: "var(--text-muted)", fontSize: 11 }}>ممّول من أصل</span>
-                    <b style={{ color: "var(--gold-dark)" }}>{selectedExpenseAsset.toFixed(2)} د.أ</b>
-                  </div>
-                )}
-              </div>
-            )}
-
-            <div style={G.card()}>
-              <div style={G.row}>
-                <span style={{ color: "var(--text-muted)" }}>المبلغ</span>
-                <b>{Number(selectedExpense.amount || 0).toFixed(2)} د.أ</b>
-              </div>
-              <div style={G.row}>
-                <span style={{ color: "var(--text-muted)" }}>التصنيف</span>
-                <b>{selectedExpense.category}</b>
-              </div>
-              <div style={G.row}>
-                <span style={{ color: "var(--text-muted)" }}>طريقة الدفع</span>
-                <b>{selectedExpense.paymentMethod}</b>
-              </div>
-              <div style={G.row}>
-                <span style={{ color: "var(--text-muted)" }}>المغطى من السقف</span>
-                <b>{Number(selectedExpense.budgetCovered || 0).toFixed(2)} د.أ</b>
-              </div>
-              <div style={G.row}>
-                <span style={{ color: "var(--text-muted)" }}>الملاحظة</span>
-                <b>{selectedExpense.note || "بدون ملاحظة"}</b>
-              </div>
-              <div style={G.lrow}>
-                <span style={{ color: "var(--text-muted)" }}>التجاوز</span>
-                <b style={{ color: Number(selectedExpense.overBudget || 0) > 0 ? "#D95555" : "var(--text-heading)" }}>
-                  {Number(selectedExpense.overBudget || 0).toFixed(2)} د.أ
-                </b>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {showOverBudgetReport && (
-        <div
-          onClick={(e) => e.target === e.currentTarget && setShowOverBudgetReport(false)}
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(0,0,0,0.78)",
-            backdropFilter: "blur(8px)",
-            display: "flex",
-            alignItems: "flex-end",
-            justifyContent: "center",
-            zIndex: 558,
-          }}
-        >
-          <div
-            style={{
-              background: "var(--bg-card)",
-              border: "1px solid var(--border-soft)",
-              borderRadius: "22px 22px 0 0",
-              width: "100%",
-              maxWidth: 440,
-              maxHeight: "82vh",
-              overflowY: "auto",
-              padding: "18px 16px 28px",
-              direction: "rtl",
-            }}
-          >
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-              <button
-                type="button"
-                onClick={() => setShowOverBudgetReport(false)}
-                style={{
-                  width: 34,
-                  height: 34,
-                  borderRadius: 10,
-                  border: "1px solid rgba(148,163,184,0.28)",
-                  background: "var(--bg-secondary)",
-                  color: "var(--text-body)",
-                  cursor: "pointer",
-                  fontSize: 20,
-                }}
-              >
-                ×
-              </button>
-              <div style={{ textAlign: "right" }}>
-                <div style={{ color: "#fecaca", fontWeight: 900, fontSize: 15 }}>
-                  تفاصيل التجاوز
-                </div>
-                <div style={{ color: "var(--text-faint)", fontSize: 10 }}>
-                  الإجمالي {overBudgetTotal.toFixed(2)} د.أ
-                </div>
-              </div>
-            </div>
-
-            {overBudgetItems.map((item) => (
-              <div
-                key={item.id}
-                style={{
-                  background: "rgba(239,68,68,0.10)",
-                  border: "1px solid rgba(239,68,68,0.28)",
-                  borderRadius: 12,
-                  padding: 10,
-                  marginBottom: 8,
-                }}
-              >
-                <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
-                  <b style={{ color: "#fecaca" }}>
-                    {Number(item.overBudget || 0).toFixed(2)} د.أ
-                  </b>
-                  <div style={{ textAlign: "right" }}>
-                    <div style={{ color: "var(--text-heading)", fontSize: 13, fontWeight: 800 }}>
-                      {item.category || "مصروف"}
-                    </div>
-                    <div style={{ color: "var(--text-muted)", fontSize: 10 }}>
-                      {item.note || "بدون ملاحظة"}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            ))}
-
-            {!overBudgetItems.length && (
-              <div style={{ color: "var(--text-faint)", fontSize: 12, textAlign: "center", padding: 20 }}>
-                لا يوجد تجاوز في هذا الشهر
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {showAssetTrendDetails && (
-        <div
-          onClick={(e) => e.target === e.currentTarget && setShowAssetTrendDetails(false)}
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(0,0,0,0.78)",
-            backdropFilter: "blur(8px)",
-            display: "flex",
-            alignItems: "flex-end",
-            justifyContent: "center",
-            zIndex: 560,
-          }}
-        >
-          <div
-            style={{
-              background: "var(--bg-card)",
-              border: "1px solid var(--border-soft)",
-              borderRadius: "22px 22px 0 0",
-              width: "100%",
-              maxWidth: 440,
-              maxHeight: "82vh",
-              overflowY: "auto",
-              padding: "18px 16px 28px",
-              direction: "rtl",
-            }}
-          >
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-              <button
-                type="button"
-                onClick={() => setShowAssetTrendDetails(false)}
-                style={{
-                  width: 34,
-                  height: 34,
-                  borderRadius: 10,
-                  border: "1px solid rgba(148,163,184,0.28)",
-                  background: "var(--bg-secondary)",
-                  color: "var(--text-body)",
-                  cursor: "pointer",
-                  fontSize: 20,
-                }}
-              >
-                ×
-              </button>
-              <div style={{ textAlign: "right" }}>
-                <div style={{ color: "var(--gold-primary)", fontWeight: 900, fontSize: 15 }}>
-                  تفاصيل تغير الأصول
-                </div>
-                <div style={{ color: "var(--text-faint)", fontSize: 10 }}>
-                  {assetTrendMonths} أشهر
-                </div>
-              </div>
-            </div>
-
-            {assetDetailRows.length ? (
-              <>
-                <div style={{ display: "grid", gap: 8, marginBottom: 12 }}>
-                  {assetDetailRows.map((asset) => {
-                    const width = Math.max(8, (Math.abs(asset.change) / maxAssetDetailChange) * 100);
-                    const isSelected = selectedTrendAsset?.key === asset.key;
-                    const color = asset.change >= 0 ? "#22c55e" : "#ef4444";
-
-                    return (
-                      <button
-                        key={asset.key}
-                        type="button"
-                        onClick={() => setSelectedTrendAssetKey(asset.key)}
-                        style={{
-                          border: `1px solid ${isSelected ? color : "var(--bg-secondary)"}`,
-                          background: isSelected ? "rgba(201,168,76,0.12)" : "var(--bg-card)",
-                          borderRadius: 12,
-                          padding: 9,
-                          color: "var(--text-heading)",
-                          cursor: "pointer",
-                          fontFamily: "inherit",
-                          textAlign: "right",
-                        }}
-                      >
-                        <div style={{ display: "grid", gridTemplateColumns: "0.8fr 1.2fr", gap: 8, alignItems: "center" }}>
-                          <div style={{ textAlign: "left" }}>
-                            <b style={{ color }}>
-                              {asset.change >= 0 ? "+" : ""}
-                              {asset.change.toFixed(2)}
-                            </b>
-                            <div style={{ color: "var(--text-faint)", fontSize: 10 }}>
-                              {asset.change >= 0 ? "نما" : "نقص"}
-                            </div>
-                          </div>
-                          <div>
-                            <div style={{ fontSize: 12, fontWeight: 800 }}>{asset.label}</div>
-                            <div style={{ height: 7, background: "var(--bg-secondary)", borderRadius: 4, marginTop: 6, overflow: "hidden" }}>
-                              <div
-                                style={{
-                                  height: "100%",
-                                  width: `${width}%`,
-                                  background: color,
-                                  borderRadius: 4,
-                                }}
-                              />
-                            </div>
-                          </div>
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-
-                {selectedTrendAsset && (
-                  <div style={{ background: "var(--bg-secondary)", border: "1px solid var(--border-soft)", borderRadius: 12, padding: 10 }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
-                      <b style={{ color: selectedTrendAsset.change >= 0 ? "#86efac" : "#fecaca" }}>
-                        {selectedTrendAsset.change >= 0 ? "+" : ""}
-                        {selectedTrendAsset.change.toFixed(2)}
-                      </b>
-                      <span style={{ color: "var(--text-body)", fontSize: 12 }}>{selectedTrendAsset.label}</span>
-                    </div>
-
-                    {selectedTrendAsset.months.map((month) => (
-                      <div key={`${selectedTrendAsset.key}-${month.month}`} style={{ borderTop: "1px solid var(--border-soft)", paddingTop: 7, marginTop: 7 }}>
-                        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, marginBottom: 5 }}>
-                          <span style={{ color: month.change >= 0 ? "#86efac" : "#fecaca" }}>
-                            {month.change >= 0 ? "+" : ""}
-                            {month.change.toFixed(2)}
-                          </span>
-                          <span style={{ color: "var(--text-muted)" }}>{month.month}</span>
-                        </div>
-
-                        {month.reasons.real.length > 0 ? (
-                          month.reasons.real.map((reason) => (
-                            <div key={`${month.month}-${reason.reason}`} style={{ display: "flex", justifyContent: "space-between", fontSize: 11, marginBottom: 4 }}>
-                              <span style={{ color: "#fecaca" }}>-{reason.amount.toFixed(2)}</span>
-                              <span style={{ color: "var(--text-body)" }}>{reason.reason}</span>
-                            </div>
-                          ))
-                        ) : (
-                          <div style={{ color: "var(--text-faint)", fontSize: 11, marginBottom: 4 }}>
-                            لا يوجد سبب مصروف مباشر مسجل
-                          </div>
-                        )}
-
-                        {month.reasons.transfers.length > 0 && (
-                          <div style={{ marginTop: 6, paddingTop: 6, borderTop: "1px dashed var(--border-soft)" }}>
-                            {month.reasons.transfers.map((reason) => (
-                              <div key={`${month.month}-${reason.reason}`} style={{ display: "flex", justifyContent: "space-between", fontSize: 11, marginBottom: 4 }}>
-                                <span style={{ color: "#93c5fd" }}>{reason.amount.toFixed(2)}</span>
-                                <span style={{ color: "#93c5fd" }}>{reason.reason} · ليست نقصاً فعلياً</span>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </>
-            ) : (
-              <div style={{ color: "var(--text-faint)", fontSize: 12, textAlign: "center", padding: 20 }}>
-                تحتاج إلى إغلاق شهرين على الأقل للمقارنة
-              </div>
-            )}
-          </div>
-        </div>
-      )}
+<AssetTrendDetailsModal
+        open={showAssetTrendDetails}
+        months={assetTrendMonths}
+        rows={assetDetailDisplayRows}
+        selectedAsset={selectedTrendAsset}
+        onSelect={setSelectedTrendAssetKey}
+        onClose={() => setShowAssetTrendDetails(false)}
+      />
     </div>
   );
 }
 
 function AssetsScreen({ state, setState, onAddExtraCash, readOnly = false }) {
   const assets = calcAssets(state);
+  const currencyLabel = getCurrencyLabel(state);
 
   const [showAddAsset, setShowAddAsset] = useState(false);
   const [showTransfer, setShowTransfer] = useState(false);
 
   const [fromAsset, setFromAsset] = useState("cash");
-  const [toAsset, setToAsset] = useState("cash");
   const [transferAmount, setTransferAmount] = useState("");
+  const [transferSourceUnits, setTransferSourceUnits] = useState("");
+  const [transferSourcePrice, setTransferSourcePrice] = useState("");
   const [transferAllocations, setTransferAllocations] = useState([
     { id: 1, allocation: "cash", amount: "", targetId: "", assetName: "", units: "", price: "" },
   ]);
@@ -5086,6 +2696,16 @@ function AssetsScreen({ state, setState, onAddExtraCash, readOnly = false }) {
   const [openAssetCard, setOpenAssetCard] = useState("cash");
 
   const sources = getAssetSources(state);
+  const selectedTransferSource = sources.find((source) => source.key === fromAsset);
+  const transferSourceNeedsSale = Boolean(
+    selectedTransferSource &&
+      !["cash", "bank"].includes(selectedTransferSource.type) &&
+      (selectedTransferSource.type !== "custom" ||
+        (state.assets.custom || []).some(
+          (item) =>
+            `custom:${item.id}` === selectedTransferSource.key && item.type === "unit"
+        ))
+  );
 
   const bankTotal = (state.assets.banks || []).reduce(
     (sum, b) => sum + Number(b.balance || 0),
@@ -5128,84 +2748,6 @@ function AssetsScreen({ state, setState, onAddExtraCash, readOnly = false }) {
     setAssetPrice("");
     setShowAddAsset(true);
   };
-
-  const assetCardStyle = (color) => ({
-    ...G.card(`${color}22`),
-    padding: "12px",
-  });
-
-  const renderAssetHeader = ({ id, icon, title, total, color, addKind }) => {
-    const isOpen = openAssetCard === id;
-
-    return (
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          gap: 10,
-        }}
-      >
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          {!readOnly && addKind && (
-            <button
-              type="button"
-              title="إضافة"
-              onClick={(e) => {
-                e.stopPropagation();
-                openAddAsset(addKind);
-              }}
-              style={{
-                width: 30,
-                height: 30,
-                borderRadius: 10,
-                border: `1px solid ${color}66`,
-                background: "var(--bg-secondary)",
-                color,
-                cursor: "pointer",
-                fontWeight: 900,
-              }}
-            >
-              +
-            </button>
-          )}
-          <button
-            type="button"
-            title={isOpen ? "إخفاء" : "فتح"}
-            onClick={() => setOpenAssetCard(isOpen ? "" : id)}
-            style={{
-              width: 30,
-              height: 30,
-              borderRadius: 10,
-              border: "1px solid var(--border-soft)",
-              background: isOpen ? `${color}22` : "var(--bg-secondary)",
-              color,
-              cursor: "pointer",
-              fontWeight: 900,
-            }}
-          >
-            {isOpen ? "-" : "⋯"}
-          </button>
-        </div>
-
-        <div style={{ textAlign: "right", flex: 1 }}>
-          <div style={{ color, fontSize: 14, fontWeight: 900 }}>
-            {icon} {title}
-          </div>
-          <div style={{ fontSize: 21, fontWeight: 900, marginTop: 2 }}>
-            {Number(total || 0).toFixed(2)}
-            <span style={{ fontSize: 11, color: "var(--text-faint)" }}> د.أ</span>
-          </div>
-        </div>
-      </div>
-    );
-  };
-
-  const renderEmptyAsset = (text) => (
-    <div style={{ textAlign: "center", color: "var(--text-faint)", fontSize: 12, padding: "12px 0 4px" }}>
-      {text}
-    </div>
-  );
 
   const addNewAsset = () => {
   if (!assetName.trim()) return alert("أدخل اسم الأصل");
@@ -5481,6 +3023,46 @@ function AssetsScreen({ state, setState, onAddExtraCash, readOnly = false }) {
   const applyTransfer = () => {
     const amount = Number(transferAmount || 0);
     if (amount <= 0) return alert("أدخل قيمة المناقلة");
+
+    if (transferSourceNeedsSale) {
+      const row = transferAllocations[0];
+      if (!row || !["cash", "bank"].includes(row.allocation)) {
+        alert("اختر الكاش الادخاري أو حساباً بنكياً لاستلام حصيلة البيع");
+        return;
+      }
+
+      let destinationKey = "cash";
+      if (row.allocation === "bank") {
+        if (!row.targetId) {
+          alert("اختر الحساب البنكي المستلم");
+          return;
+        }
+        destinationKey = `bank:${row.targetId}`;
+      }
+
+      const result = liquidateAssetUnits(
+        state,
+        fromAsset,
+        destinationKey,
+        transferSourceUnits,
+        transferSourcePrice
+      );
+      if (!result.success) {
+        alert(result.message);
+        return;
+      }
+
+      setState(result.nextState);
+      setShowTransfer(false);
+      setTransferAmount("");
+      setTransferSourceUnits("");
+      setTransferSourcePrice("");
+      setTransferAllocations([
+        { id: 1, allocation: "cash", amount: "", targetId: "", assetName: "", units: "", price: "" },
+      ]);
+      return;
+    }
+
     const now = new Date().toISOString();
 
     const rows = transferAllocations.map((row) => ({
@@ -5725,555 +3307,519 @@ function AssetsScreen({ state, setState, onAddExtraCash, readOnly = false }) {
     ]);
   };
 
+  const changeTransferSource = (value) => {
+    const source = sources.find((item) => item.key === value);
+    const needsSale = Boolean(
+      source &&
+        !["cash", "bank"].includes(source.type) &&
+        (source.type !== "custom" ||
+          (state.assets.custom || []).some(
+            (item) => `custom:${item.id}` === source.key && item.type === "unit"
+          ))
+    );
+    setFromAsset(value);
+    setTransferSourceUnits("");
+    setTransferSourcePrice("");
+    setTransferAmount("");
+    if (needsSale) {
+      setTransferAllocations([
+        { id: 1, allocation: "cash", amount: "", targetId: "", assetName: "", units: "", price: "" },
+      ]);
+    }
+  };
+
+  const updateTransferSaleField = (field, value) => {
+    const nextUnits = field === "units" ? value : transferSourceUnits;
+    const nextPrice = field === "price" ? value : transferSourcePrice;
+    if (field === "units") setTransferSourceUnits(value);
+    if (field === "price") setTransferSourcePrice(value);
+    const saleAmount = Number(nextUnits || 0) * Number(nextPrice || 0);
+    const amountValue = saleAmount > 0 ? saleAmount.toFixed(2) : "";
+    setTransferAmount(amountValue);
+    setTransferAllocations((rows) =>
+      rows.map((row) => ({ ...row, amount: amountValue }))
+    );
+  };
+
+  const cashAssetRows = [
+    {
+      id: "cash",
+      assetKey: "cash",
+      assetKind: "cash",
+      name: "ادخار نقدي",
+      value: Number(state.assets.cash || 0),
+      nameStyle: { color: visualIdentity.colors.textSecondary, fontSize: 12 },
+    },
+  ];
+  const bankAssetRows = (state.assets.banks || []).map((bank) => ({
+    id: bank.id,
+    name: bank.name,
+    value: Number(bank.balance || 0),
+  }));
+  const stockAssetRows = (state.assets.stocks || []).map((stock) => ({
+    id: stock.id,
+    name: stock.name,
+    value: Number(stock.units || 0) * Number(stock.currentPrice || 0),
+    meta: `${Number(stock.units || 0).toFixed(4)} سهم · سعر ${Number(
+      stock.currentPrice || 0
+    ).toFixed(4)} · متوسط ${Number(stock.wac || 0).toFixed(4)}`,
+  }));
+  const goldAssetRows = (state.assets.gold || []).map((gold) => ({
+    id: gold.id,
+    name: gold.label,
+    value: Number(gold.units || 0) * goldPrice,
+    meta: `${Number(gold.units || 0).toFixed(4)} غ · متوسط ${Number(
+      gold.wac || 0
+    ).toFixed(4)}`,
+    metaColor: visualIdentity.colors.textSecondary,
+    metaWeight: 700,
+  }));
+  const silverAssetRows = (state.assets.silver || []).map((silver) => ({
+    id: silver.id,
+    name: silver.label,
+    value: Number(silver.units || 0) * silverPrice,
+    meta: `${Number(silver.units || 0).toFixed(4)} غ · سعر ${silverPrice.toFixed(
+      4
+    )} · متوسط ${Number(silver.wac || 0).toFixed(4)}`,
+  }));
+  const customAssetRows = (state.assets.custom || []).map((asset) => ({
+    id: asset.id,
+    name: asset.name,
+    value:
+      asset.type === "fixed"
+        ? Number(asset.amount || 0)
+        : Number(asset.units || 0) * Number(asset.price || 0),
+    meta:
+      asset.type === "unit"
+        ? `${Number(asset.units || 0).toFixed(4)} وحدة · سعر ${Number(
+            asset.price || 0
+          ).toFixed(4)}`
+        : "",
+  }));
+
+  const percentChange = (value, cost) =>
+    Number(cost || 0) > 0
+      ? ((Number(value || 0) - Number(cost || 0)) / Number(cost || 0)) * 100
+      : 0;
+  const goldCost = (state.assets.gold || []).reduce(
+    (sum, item) => sum + Number(item.units || 0) * Number(item.wac || 0),
+    0
+  );
+  const summaryItems = [
+    { key: "cash", label: "كاش", icon: "cash", value: Number(state.assets.cash || 0), change: 0, color: visualIdentity.colors.green },
+    { key: "banks", label: "بنوك", icon: "bank", value: bankTotal, change: 0, color: visualIdentity.colors.sky },
+    { key: "gold", label: "ذهب", icon: "gold", value: goldTotal, change: percentChange(goldTotal, goldCost), color: "#FFC62D" },
+    { key: "stocks", label: "أسهم", icon: "stock", value: stockTotal, change: percentChange(stockTotal, stockCostTotal), color: visualIdentity.colors.purple },
+    { key: "other", label: "بضائع/أخرى", icon: "goods", value: customTotal, change: 0, color: visualIdentity.colors.coral },
+  ];
+  const dashboardRows = [
+    {
+      id: "cash",
+      name: "الكاش الادخاري",
+      value: Number(state.assets.cash || 0),
+      change: 0,
+      icon: "cash",
+      color: visualIdentity.colors.green,
+      meta: "رصيد سائل متاح",
+    },
+    ...(state.assets.banks || []).map((item) => ({
+      id: `bank-${item.id}`,
+      assetKey: `bank:${item.id}`,
+      assetKind: "bank",
+      assetId: item.id,
+      name: item.name,
+      value: Number(item.balance || 0),
+      change: 0,
+      icon: "bank",
+      color: visualIdentity.colors.sky,
+      meta: "حساب بنكي",
+    })),
+    ...(state.assets.gold || []).map((item) => ({
+      id: `gold-${item.id}`,
+      assetKey: `gold:${item.id}`,
+      assetKind: "gold",
+      assetId: item.id,
+      name: item.label,
+      value: Number(item.units || 0) * goldPrice,
+      change: percentChange(goldPrice, item.wac),
+      icon: "gold",
+      color: "#FFC62D",
+      meta: `${Number(item.units || 0).toFixed(4)} غرام · سعر ${goldPrice.toFixed(2)}`,
+    })),
+    ...(state.assets.stocks || []).map((item) => ({
+      id: `stock-${item.id}`,
+      assetKey: `stock:${item.id}`,
+      assetKind: "stocks",
+      assetId: item.id,
+      name: item.name,
+      value: Number(item.units || 0) * Number(item.currentPrice || 0),
+      change: percentChange(item.currentPrice, item.wac),
+      icon: "stock",
+      color: visualIdentity.colors.purple,
+      meta: `${Number(item.units || 0).toFixed(4)} سهم · سعر ${Number(item.currentPrice || 0).toFixed(2)}`,
+    })),
+    ...(state.assets.silver || []).map((item) => ({
+      id: `silver-${item.id}`,
+      assetKey: `silver:${item.id}`,
+      assetKind: "silver",
+      assetId: item.id,
+      name: item.label,
+      value: Number(item.units || 0) * silverPrice,
+      change: percentChange(silverPrice, item.wac),
+      icon: "silver",
+      color: "#B7D3EA",
+      meta: `${Number(item.units || 0).toFixed(4)} غرام · سعر ${silverPrice.toFixed(2)}`,
+    })),
+    ...(state.assets.custom || []).map((item) => ({
+      id: `custom-${item.id}`,
+      assetKey: `custom:${item.id}`,
+      assetKind: "custom",
+      assetId: item.id,
+      name: item.name,
+      value: item.type === "fixed"
+        ? Number(item.amount || 0)
+        : Number(item.units || 0) * Number(item.price || 0),
+      change: 0,
+      icon: item.type === "fixed" ? "fixed" : "goods",
+      color: "#42CFE6",
+      meta: item.type === "unit"
+        ? `${Number(item.units || 0).toFixed(4)} وحدة · سعر ${Number(item.price || 0).toFixed(2)}`
+        : "أصل ثابت",
+    })),
+  ];
+  const movementLabels = {
+    asset_units_liquidated: "تسييل وحدات من الأصل",
+    transfer_out: "مناقلة صادرة",
+    transfer_to_cash: "مناقلة إلى الكاش الادخاري",
+    transfer_to_bank: "مناقلة إلى الحساب البنكي",
+    transfer_in_units: "إضافة وحدات بالمناقلة",
+    opening_balance: "رصيد افتتاحي",
+    opening_asset: "إضافة أصل افتتاحي",
+    extra_cash: "دخل إضافي",
+  };
+  const movementRows = (row) =>
+    (state.assetHistory || [])
+      .filter((movement) => {
+        const directKeyMatch = [
+          movement.assetKey,
+          movement.destinationKey,
+          movement.from,
+          movement.to,
+        ].includes(row.assetKey);
+        const idMatch =
+          row.assetId != null &&
+          String(movement.assetId ?? "") === String(row.assetId) &&
+          (!movement.assetKind || movement.assetKind === row.assetKind);
+        const cashMatch =
+          row.assetKey === "cash" && movement.assetKind === "cash";
+        const nameMatch =
+          row.name &&
+          [movement.assetName, movement.name].some(
+            (name) => String(name || "").trim() === String(row.name).trim()
+          );
+        return directKeyMatch || idMatch || cashMatch || nameMatch;
+      })
+      .map((movement, index) => {
+        const isOutgoing =
+          movement.assetKey === row.assetKey ||
+          movement.from === row.assetKey ||
+          ["transfer_out", "asset_units_liquidated"].includes(movement.type) &&
+            movement.destinationKey !== row.assetKey;
+        const date = movement.date ? new Date(movement.date) : null;
+        return {
+          id: `${movement.id ?? index}-${row.id}`,
+          label: movementLabels[movement.type] || movement.note || "حركة على الأصل",
+          amount: Number(movement.amount || 0),
+          direction: isOutgoing ? "out" : "in",
+          date:
+            date && !Number.isNaN(date.getTime())
+              ? date.toLocaleDateString("en-GB")
+              : "—",
+          sortDate: date?.getTime() || 0,
+        };
+      })
+      .sort((a, b) => b.sortDate - a.sortDate);
+  const dashboardRowsWithMovements = dashboardRows.map((row) => ({
+    ...row,
+    movements: movementRows(row),
+  }));
+  const otherTotal = silverTotal + customTotal;
+  const distributionBase = [
+    { key: "cash", label: "كاش", value: Number(state.assets.cash || 0), color: "#55E892" },
+    { key: "banks", label: "بنوك", value: bankTotal, color: "#35AEEF" },
+    { key: "gold", label: "ذهب", value: goldTotal, color: "#FFC62D" },
+    { key: "stocks", label: "أسهم", value: stockTotal, color: "#9A72F5" },
+    { key: "other", label: "أخرى", value: otherTotal, color: "#3B91A9" },
+  ].filter((item) => item.value > 0);
+  const distributionTotal = distributionBase.reduce((sum, item) => sum + item.value, 0);
+  const distribution = distributionBase.map((item) => ({
+    ...item,
+    percent: distributionTotal > 0 ? (item.value / distributionTotal) * 100 : 0,
+  }));
+  const trendPoints = distributionBase.reduce(
+    (points, item) => [
+      ...points,
+      { value: Number((points[points.length - 1].value + item.value).toFixed(2)) },
+    ],
+    [{ value: 0 }]
+  );
+  const showLegacyAssetsLayout = false;
+
   return (
-    <div style={G.scr}>
+    <div
+      className="assets-screen"
+      style={{
+        ...G.scr,
+        minHeight: "calc(100vh - 118px)",
+        background: visualIdentity.gradients.appBackground,
+        "--ambient-beam-color": visualIdentity.lighting.ambientBeam,
+        "--ambient-light-duration": visualIdentity.motion.ambientLightDuration,
+      }}
+    >
+      <AssetsDashboard
+        totalAssets={assets.totalAssets}
+        summaryItems={summaryItems}
+        assetRows={dashboardRowsWithMovements}
+        distribution={distribution}
+        trendPoints={trendPoints}
+        onAddIncome={onAddExtraCash}
+        onTransfer={() => setShowTransfer(true)}
+        readOnly={readOnly}
+        currencyLabel={currencyLabel}
+      />
+
+      {showLegacyAssetsLayout && (
+        <>
       {!readOnly && (
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 44px", gap: 8, marginBottom: 12 }}>
-        <button
-          onClick={onAddExtraCash}
-          style={{
-            background: "#22c55e",
-            color: "white",
-            padding: "9px 14px",
-            fontSize: 12,
-            border: "0",
-            borderRadius: 12,
-            cursor: "pointer",
-            width: "100%",
-          }}
-        >
-          + دخل إضافي
-        </button>
-        <button
-          type="button"
-          title="مناقلة"
-          onClick={() => setShowTransfer(true)}
-          style={{
-            width: 44,
-            height: 38,
-            borderRadius: 12,
-            border: "1px solid var(--border-soft)",
-            background: "var(--bg-secondary)",
-            color: "var(--text-body)",
-            cursor: "pointer",
-            fontWeight: 900,
-          }}
-        >
-          {ICONS.transfer}
-        </button>
-      </div>
+        <AssetsToolbar
+          onAddIncome={onAddExtraCash}
+          onTransfer={() => setShowTransfer(true)}
+          transferIcon={ICONS.transfer}
+        />
       )}
 
-      <div style={{ ...G.card("rgba(201,168,76,0.14)"), textAlign: "right" }}>
-        <div style={{ fontSize: 12, color: "var(--gold-primary)" }}>إجمالي الأصول</div>
-        <div style={{ fontSize: 32, fontWeight: 900 }}>
-          {assets.totalAssets.toFixed(2)}{" "}
-          <span style={{ fontSize: 13, color: "var(--text-faint)" }}>د.أ</span>
-        </div>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 10 }}>
-          <div style={summaryCard("success")}>
-            <div style={{ fontSize: 10, color: "var(--text-faint)" }}>ادخار سائل</div>
-            <b style={summaryValue("success")}>{(Number(state.assets.cash || 0) + bankTotal).toFixed(2)}</b>
-          </div>
-          <div style={summaryCard("total")}>
-            <div style={{ fontSize: 10, color: "var(--text-muted)" }}>صافي</div>
-            <b style={summaryValue("total")}>{assets.netWorth.toFixed(2)}</b>
-          </div>
-        </div>
-      </div>
+      <AssetsSummaryCard
+        totalAssets={assets.totalAssets}
+        liquidSavings={Number(state.assets.cash || 0) + bankTotal}
+        netWorth={assets.netWorth}
+        cardStyle={G.card("rgba(201,168,76,0.14)")}
+        liquidCardStyle={summaryCard("success")}
+        liquidValueStyle={summaryValue("success")}
+        netCardStyle={summaryCard("total")}
+        netValueStyle={summaryValue("total")}
+      />
 
-      <div style={assetCardStyle("#22c55e")}>
-        {renderAssetHeader({
-          id: "cash",
-          icon: ICONS.cash,
-          title: "الكاش الاحتياطي",
-          total: Number(state.assets.cash || 0),
-          color: "#22c55e",
-        })}
+      <AssetSectionCard
+        icon={ICONS.cash}
+        title="الكاش الاحتياطي"
+        total={Number(state.assets.cash || 0)}
+        color={visualIdentity.colors.green}
+        isOpen={openAssetCard === "cash"}
+        readOnly={readOnly}
+        onAdd={openAddAsset}
+        onToggle={() => setOpenAssetCard(openAssetCard === "cash" ? "" : "cash")}
+      >
         {openAssetCard === "cash" && (
-          <div style={{ ...G.lrow, marginTop: 8 }}>
-            <strong>{Number(state.assets.cash || 0).toFixed(2)} د.أ</strong>
-            <span style={{ color: "var(--text-muted)", fontSize: 12 }}>ادخار نقدي</span>
-          </div>
+          <AssetDetailsList
+            rows={cashAssetRows}
+            rowStyle={G.row}
+            lastRowStyle={G.lrow}
+          />
         )}
-      </div>
+      </AssetSectionCard>
 
-      <div style={assetCardStyle("#3b82f6")}>
-        {renderAssetHeader({
-          id: "banks",
-          icon: ICONS.bank,
-          title: "الحسابات البنكية",
-          total: bankTotal,
-          color: "#3b82f6",
-        })}
+      <AssetSectionCard
+        icon={ICONS.bank}
+        title="الحسابات البنكية"
+        total={bankTotal}
+        color={visualIdentity.colors.cyan}
+        isOpen={openAssetCard === "banks"}
+        readOnly={readOnly}
+        onAdd={openAddAsset}
+        onToggle={() => setOpenAssetCard(openAssetCard === "banks" ? "" : "banks")}
+      >
         {openAssetCard === "banks" && (
-          <div style={{ marginTop: 8 }}>
-            {(state.assets.banks || []).map((b, i) => (
-              <div key={b.id} style={i < state.assets.banks.length - 1 ? G.row : G.lrow}>
-                <strong>{Number(b.balance || 0).toFixed(2)} د.أ</strong>
-                <span>{b.name}</span>
-              </div>
-            ))}
-            {!state.assets.banks?.length && renderEmptyAsset("لا توجد حسابات")}
-          </div>
+          <AssetDetailsList
+            rows={bankAssetRows}
+            emptyText="لا توجد حسابات"
+            rowStyle={G.row}
+            lastRowStyle={G.lrow}
+          />
         )}
-      </div>
+      </AssetSectionCard>
 
-      <div style={assetCardStyle("#a855f7")}>
-        {renderAssetHeader({
-          id: "stocks",
-          icon: ICONS.stock,
-          title: "الأسهم",
-          total: stockTotal,
-          color: "#a855f7",
-        })}
-        <div style={{ fontSize: 10, color: "var(--text-muted)", textAlign: "right", marginTop: 6 }}>
+      <AssetSectionCard
+        icon={ICONS.stock}
+        title="الأسهم"
+        total={stockTotal}
+        color="#B48CFF"
+        isOpen={openAssetCard === "stocks"}
+        readOnly={readOnly}
+        onAdd={openAddAsset}
+        onToggle={() => setOpenAssetCard(openAssetCard === "stocks" ? "" : "stocks")}
+      >
+        <div style={{ fontSize: 10, color: visualIdentity.colors.textSecondary, textAlign: "right", marginTop: 6 }}>
           {stockUnitsTotal.toFixed(4)} سهم · متوسط {stockAverageCost.toFixed(4)}
         </div>
         {openAssetCard === "stocks" && (
-          <div style={{ marginTop: 8 }}>
-            {(state.assets.stocks || []).map((s, i) => {
-              const value = Number(s.units || 0) * Number(s.currentPrice || 0);
-
-              return (
-                <div key={s.id} style={i < state.assets.stocks.length - 1 ? G.row : G.lrow}>
-                  <div>
-                    <strong>{value.toFixed(2)} د.أ</strong>
-                    <div style={{ fontSize: 10, color: "var(--text-faint)" }}>
-                      {Number(s.units || 0).toFixed(4)} سهم · سعر {Number(s.currentPrice || 0).toFixed(4)} · متوسط {Number(s.wac || 0).toFixed(4)}
-                    </div>
-                  </div>
-                  <span>{s.name}</span>
-                </div>
-              );
-            })}
-            {!state.assets.stocks?.length && renderEmptyAsset("لا توجد أسهم")}
-          </div>
+          <AssetDetailsList
+            rows={stockAssetRows}
+            emptyText="لا توجد أسهم"
+            rowStyle={G.row}
+            lastRowStyle={G.lrow}
+          />
         )}
-      </div>
+      </AssetSectionCard>
 
-      <div style={assetCardStyle("#f59e0b")}>
-        {renderAssetHeader({
-          id: "gold",
-          icon: ICONS.gold,
-          title: "الذهب",
-          total: goldTotal,
-          color: "#f59e0b",
-        })}
+      <AssetSectionCard
+        icon={ICONS.gold}
+        title="الذهب"
+        total={goldTotal}
+        color={visualIdentity.colors.gold}
+        isOpen={openAssetCard === "gold"}
+        readOnly={readOnly}
+        onAdd={openAddAsset}
+        onToggle={() => setOpenAssetCard(openAssetCard === "gold" ? "" : "gold")}
+      >
         {openAssetCard === "gold" && (
-          <div style={{ marginTop: 8 }}>
-            {(state.assets.gold || []).map((g, i) => {
-              const value = Number(g.units || 0) * goldPrice;
-
-              return (
-                <div key={g.id} style={i < state.assets.gold.length - 1 ? G.row : G.lrow}>
-                  <div>
-                    <strong>{value.toFixed(2)} د.أ</strong>
-                    <div style={{ fontSize: 10, color: "var(--text-body)", fontWeight: 700 }}>
-                      {Number(g.units || 0).toFixed(4)} غ · متوسط {Number(g.wac || 0).toFixed(4)}
-                    </div>
-                  </div>
-                  <span>{g.label}</span>
-                </div>
-              );
-            })}
-            {!state.assets.gold?.length && renderEmptyAsset("لا يوجد ذهب")}
-          </div>
+          <AssetDetailsList
+            rows={goldAssetRows}
+            emptyText="لا يوجد ذهب"
+            rowStyle={G.row}
+            lastRowStyle={G.lrow}
+          />
         )}
-      </div>
+      </AssetSectionCard>
 
-      <div style={assetCardStyle("var(--text-muted)")}>
-        {renderAssetHeader({
-          id: "silver",
-          icon: ICONS.silver,
-          title: "الفضة",
-          total: silverTotal,
-          color: "var(--text-muted)",
-        })}
+      <AssetSectionCard
+        icon={ICONS.silver}
+        title="الفضة"
+        total={silverTotal}
+        color={visualIdentity.colors.textSecondary}
+        isOpen={openAssetCard === "silver"}
+        readOnly={readOnly}
+        onAdd={openAddAsset}
+        onToggle={() => setOpenAssetCard(openAssetCard === "silver" ? "" : "silver")}
+      >
         {openAssetCard === "silver" && (
-          <div style={{ marginTop: 8 }}>
-            {(state.assets.silver || []).map((s, i) => {
-              const value = Number(s.units || 0) * silverPrice;
-
-              return (
-                <div key={s.id} style={i < state.assets.silver.length - 1 ? G.row : G.lrow}>
-                  <div>
-                    <strong>{value.toFixed(2)} د.أ</strong>
-                    <div style={{ fontSize: 10, color: "var(--text-faint)" }}>
-                      {Number(s.units || 0).toFixed(4)} غ · سعر {silverPrice.toFixed(4)} · متوسط {Number(s.wac || 0).toFixed(4)}
-                    </div>
-                  </div>
-                  <span>{s.label}</span>
-                </div>
-              );
-            })}
-            {!state.assets.silver?.length && renderEmptyAsset("لا توجد فضة")}
-          </div>
+          <AssetDetailsList
+            rows={silverAssetRows}
+            emptyText="لا توجد فضة"
+            rowStyle={G.row}
+            lastRowStyle={G.lrow}
+          />
         )}
-      </div>
+      </AssetSectionCard>
 
-      <div style={assetCardStyle("var(--text-faint)")}>
-        {renderAssetHeader({
-          id: "custom",
-          icon: ICONS.goods,
-          title: "بضائع / أخرى",
-          total: customTotal,
-          color: "var(--text-muted)",
-        })}
+      <AssetSectionCard
+        icon={ICONS.goods}
+        title="بضائع / أخرى"
+        total={customTotal}
+        color={visualIdentity.colors.cyan}
+        isOpen={openAssetCard === "custom"}
+        readOnly={readOnly}
+        onAdd={openAddAsset}
+        onToggle={() => setOpenAssetCard(openAssetCard === "custom" ? "" : "custom")}
+      >
         {openAssetCard === "custom" && (
-          <div style={{ marginTop: 8 }}>
-            {(state.assets.custom || []).map((c, i) => {
-              const value =
-                c.type === "fixed"
-                  ? Number(c.amount || 0)
-                  : Number(c.units || 0) * Number(c.price || 0);
-
-              return (
-                <div key={c.id} style={i < state.assets.custom.length - 1 ? G.row : G.lrow}>
-                  <div>
-                    <strong>{value.toFixed(2)} د.أ</strong>
-                    {c.type === "unit" && (
-                      <div style={{ fontSize: 10, color: "var(--text-faint)" }}>
-                        {Number(c.units || 0).toFixed(4)} وحدة · سعر {Number(c.price || 0).toFixed(4)}
-                      </div>
-                    )}
-                  </div>
-                  <span>{c.name}</span>
-                </div>
-              );
-            })}
-            {!state.assets.custom?.length && renderEmptyAsset("لا توجد بضائع")}
-          </div>
+          <AssetDetailsList
+            rows={customAssetRows}
+            emptyText="لا توجد بضائع"
+            rowStyle={G.row}
+            lastRowStyle={G.lrow}
+          />
         )}
-      </div>
+      </AssetSectionCard>
 
-      {showAddAsset && (
-        <div
-          onClick={(e) => e.target === e.currentTarget && setShowAddAsset(false)}
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(0,0,0,0.8)",
-            backdropFilter: "blur(8px)",
-            display: "flex",
-            alignItems: "flex-end",
-            justifyContent: "center",
-            zIndex: 400,
-          }}
-        >
-          <div
-            style={{
-              position: "relative",
-              background: "var(--bg-card)",
-              borderRadius: "22px 22px 0 0",
-              border: "1px solid var(--border-soft)",
-              padding: "22px 18px 44px",
-              width: "100%",
-              maxWidth: 440,
-              direction: "rtl",
-            }}
-          >
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                marginBottom: 14,
-              }}
-            >
-              <button
-                onClick={() => setShowAddAsset(false)}
-                style={G.btn("var(--bg-secondary)", "var(--text-muted)", {
-                  padding: "5px 12px",
-                  borderRadius: 8,
-                })}
-              >
-                ✕
-              </button>
-              <span style={{ fontSize: 15, fontWeight: 700 }}>
-                ➕ أصل جديد
-              </span>
-            </div>
-
-            <select
-              value={assetKind}
-              onChange={(e) => setAssetKind(e.target.value)}
-              style={{ ...G.inp(), marginBottom: 10 }}
-            >
-              <option value="bank">حساب بنكي</option>
-              <option value="gold">ذهب</option>
-              <option value="silver">فضة</option>
-              <option value="stock">أسهم</option>
-              <option value="fixed">أصل مبلغ ثابت</option>
-              <option value="unit">أصل وحدات مخصص</option>
-            </select>
-
-            <input
-              value={assetName}
-              onChange={(e) => setAssetName(e.target.value)}
-              placeholder="اسم الأصل"
-              style={{ ...G.inp(), marginBottom: 10 }}
-            />
-
-            {(assetKind === "bank" || assetKind === "fixed") && (
-              <input
-                type="number"
-                value={assetAmount}
-                onChange={(e) => setAssetAmount(e.target.value)}
-                placeholder="القيمة / الرصيد"
-                style={{ ...G.inp(), marginBottom: 10 }}
-              />
-            )}
-
-            {["gold", "silver", "stock", "unit"].includes(assetKind) && (
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "1fr 1fr",
-                  gap: 8,
-                  marginBottom: 10,
-                }}
-              >
-                <input
-                  type="number"
-                  value={assetUnits}
-                  onChange={(e) => setAssetUnits(e.target.value)}
-                  placeholder="عدد الوحدات"
-                  style={G.inp()}
-                />
-                <input
-                  type="number"
-                  value={assetPrice}
-                  onChange={(e) => setAssetPrice(e.target.value)}
-                  placeholder="سعر الوحدة"
-                  style={G.inp()}
-                />
-              </div>
-            )}
-
-            <button
-              onClick={addNewAsset}
-              style={G.btn("linear-gradient(135deg,var(--gold-primary),var(--gold-border))", "var(--text-heading)", {
-                width: "100%",
-              })}
-            >
-              ✓ إضافة الأصل
-            </button>
-          </div>
-        </div>
+        </>
       )}
 
-      {showTransfer && (
-        <div
-          onClick={(e) => e.target === e.currentTarget && setShowTransfer(false)}
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(0,0,0,0.8)",
-            backdropFilter: "blur(8px)",
-            display: "flex",
-            alignItems: "flex-end",
-            justifyContent: "center",
-            zIndex: 450,
-          }}
-        >
-          <div
-            style={{
-              background: "var(--bg-card)",
-              borderRadius: "22px 22px 0 0",
-              border: "1px solid var(--border-soft)",
-              padding: "22px 18px 44px",
-              width: "100%",
-              maxWidth: 440,
-              direction: "rtl",
-            }}
-          >
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                marginBottom: 14,
-              }}
-            >
-              <button
-                onClick={() => setShowTransfer(false)}
-                style={G.btn("var(--bg-secondary)", "var(--text-muted)", {
-                  padding: "5px 12px",
-                  borderRadius: 8,
-                })}
-              >
-                ✕
-              </button>
+<AddAssetModal
+        open={showAddAsset}
+        kind={assetKind}
+        name={assetName}
+        amount={assetAmount}
+        units={assetUnits}
+        price={assetPrice}
+        onClose={() => setShowAddAsset(false)}
+        onKindChange={setAssetKind}
+        onNameChange={setAssetName}
+        onAmountChange={setAssetAmount}
+        onUnitsChange={setAssetUnits}
+        onPriceChange={setAssetPrice}
+        onSubmit={addNewAsset}
+        inputStyle={G.inp()}
+        closeButtonStyle={G.btn("rgba(255,255,255,0.08)", visualIdentity.colors.gold, {
+          padding: "5px 12px",
+          borderRadius: 8,
+          border: "1px solid rgba(255,255,255,0.16)",
+        })}
+        submitButtonStyle={G.btn(
+          visualIdentity.gradients.gold,
+          visualIdentity.colors.navy,
+          { width: "100%" }
+        )}
+      />
 
-              <span style={{ fontSize: 15, fontWeight: 700 }}>
-                ⇄ مناقلة بين الأصول
-              </span>
-            </div>
-
-            <label style={{ fontSize: 11, color: "var(--text-faint)" }}>من أصل</label>
-            <select
-              value={fromAsset}
-              onChange={(e) => setFromAsset(e.target.value)}
-              style={{ ...G.inp(), marginBottom: 10 }}
-            >
-              {sources.map((s) => (
-                <option key={s.key} value={s.key}>
-                  {s.label} — متاح {Number(s.available || 0).toFixed(2)} د.أ
-                </option>
-              ))}
-            </select>
-
-            <input
-              type="number"
-              value={transferAmount}
-              onChange={(e) => setTransferAmount(e.target.value)}
-              placeholder="قيمة المناقلة"
-              style={{ ...G.inp(), marginBottom: 12 }}
-            />
-
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-              <button
-                type="button"
-                onClick={addTransferAllocationRow}
-                style={G.btn("var(--bg-secondary)", "var(--text-body)", { padding: "7px 10px", fontSize: 12 })}
-              >
-                +
-              </button>
-              <div style={{ fontSize: 12, color: "var(--text-muted)" }}>توزيع القيمة</div>
-            </div>
-
-            {transferAllocations.map((row) => {
-              const needsUnits = ["stock", "gold", "silver", "goods"].includes(row.allocation);
-              const needsName = ["bank", "stock", "gold", "silver", "goods"].includes(row.allocation);
-              const options = transferDestinationOptions(row.allocation);
-
-              return (
-                <div
-                  key={row.id}
-                  style={{
-                    border: "1px solid var(--border-soft)",
-                    borderRadius: 12,
-                    padding: 10,
-                    marginBottom: 10,
-                    background: "var(--bg-card)",
-                  }}
-                >
-                  <div style={{ display: "grid", gridTemplateColumns: "42px 1fr", gap: 8, marginBottom: 8 }}>
-                    <button
-                      type="button"
-                      onClick={() => removeTransferAllocationRow(row.id)}
-                      style={G.iconBtn(false, "#ef4444")}
-                    >
-                      ×
-                    </button>
-                    <select
-                      value={row.allocation}
-                      onChange={(e) =>
-                        updateTransferAllocation(row.id, {
-                          allocation: e.target.value,
-                          targetId: "",
-                          assetName: "",
-                          units: "",
-                          price: "",
-                        })
-                      }
-                      style={G.inp()}
-                    >
-                      <option value="cash">كاش احتياطي</option>
-                      <option value="spendingCap">سقف الصرف</option>
-                      <option value="bank">حساب بنكي</option>
-                      <option value="stock">أسهم</option>
-                      <option value="gold">ذهب</option>
-                      <option value="silver">فضة</option>
-                      <option value="goods">بضاعة</option>
-                    </select>
-                  </div>
-
-                  <input
-                    type="number"
-                    value={row.amount}
-                    onChange={(e) => updateTransferAllocation(row.id, { amount: e.target.value })}
-                    placeholder="المبلغ"
-                    style={{ ...G.inp(), marginBottom: 8 }}
-                  />
-                  
-
-                  {options.length > 0 && (
-                    <select
-                      value={row.targetId}
-                      onChange={(e) => {
-                        const value = e.target.value;
-                        const preset = options.find((item) => String(item.id) === value && item.isPreset);
-                        if (preset) {
-                          updateTransferAllocation(row.id, {
-                            targetId: "",
-                            assetName: preset.label,
-                          });
-                          return;
-                        }
-                        updateTransferAllocation(row.id, { targetId: value, assetName: "" });
-                      }}
-                      style={{ ...G.inp(), marginBottom: 8 }}
-                    >
-                      <option value="">أصل جديد</option>
-                      {options.map((item) => (
-                        <option key={item.id} value={item.id}>
-                          {item.name || item.label}
-                        </option>
-                      ))}
-                    </select>
-                  )}
-
-                  {needsName && !row.targetId && (
-                    <input
-                      value={row.assetName}
-                      onChange={(e) => updateTransferAllocation(row.id, { assetName: e.target.value })}
-                      placeholder={row.allocation === "gold" ? "مثال: ذهب 21" : "اسم الأصل"}
-                      style={{ ...G.inp(), marginBottom: 8 }}
-                    />
-                  )}
-
-                  {needsUnits && (
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-                      <input
-                        type="number"
-                        value={row.units}
-                        onChange={(e) => updateTransferAllocation(row.id, { units: e.target.value })}
-                        placeholder={row.allocation === "stock" ? "عدد الأسهم" : "عدد الوحدات"}
-                        style={G.inp()}
-                      />
-                      <input
-                        type="number"
-                        value={row.price}
-                        onChange={(e) => updateTransferAllocation(row.id, { price: e.target.value })}
-                        placeholder="سعر الشراء"
-                        style={G.inp()}
-                      />
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-
-            <button
-              onClick={applyTransfer}
-              style={G.btn("linear-gradient(135deg,var(--gold-primary),var(--gold-border))", "var(--text-heading)", {
-                width: "100%",
-              })}
-            >
-              تنفيذ المناقلة
-            </button>
-          </div>
-        </div>
-      )}
+<AssetTransferModal
+        open={showTransfer}
+        sources={sources}
+        fromAsset={fromAsset}
+        amount={transferAmount}
+        allocations={transferAllocations}
+        onClose={() => {
+          setShowTransfer(false);
+          setTransferAmount("");
+          setTransferSourceUnits("");
+          setTransferSourcePrice("");
+          setTransferAllocations([
+            { id: 1, allocation: "cash", amount: "", targetId: "", assetName: "", units: "", price: "" },
+          ]);
+        }}
+        onFromAssetChange={changeTransferSource}
+        onAmountChange={setTransferAmount}
+        onAddRow={addTransferAllocationRow}
+        onRemoveRow={removeTransferAllocationRow}
+        onUpdateRow={updateTransferAllocation}
+        getDestinationOptions={transferDestinationOptions}
+        onSubmit={applyTransfer}
+        sourceSaleFields={
+          transferSourceNeedsSale
+            ? { units: transferSourceUnits, price: transferSourcePrice }
+            : null
+        }
+        onSourceUnitsChange={(value) => updateTransferSaleField("units", value)}
+        onSourcePriceChange={(value) => updateTransferSaleField("price", value)}
+        amountReadOnly={transferSourceNeedsSale}
+        allowMultiple={!transferSourceNeedsSale}
+        allowedAllocations={transferSourceNeedsSale ? ["cash", "bank"] : undefined}
+        allowNewTarget={!transferSourceNeedsSale}
+        inputStyle={G.inp()}
+        closeButtonStyle={G.btn("rgba(255,255,255,0.08)", visualIdentity.colors.gold, {
+          padding: "5px 12px",
+          borderRadius: 8,
+          border: "1px solid rgba(255,255,255,0.16)",
+        })}
+        addButtonStyle={G.btn("rgba(255,255,255,0.08)", visualIdentity.colors.gold, {
+          padding: "7px 10px",
+          fontSize: 12,
+          border: "1px solid rgba(255,255,255,0.16)",
+        })}
+        removeButtonStyle={G.iconBtn(false, visualIdentity.colors.red)}
+        submitButtonStyle={G.btn(
+          visualIdentity.gradients.gold,
+          visualIdentity.colors.navy,
+          { width: "100%" }
+        )}
+      />
     </div>
   );
 }
 
 function LiabilitiesScreen({ state, setState, focusDueOnly = false }) {
+  const { currencyLabel, t } = useLocale();
   const [showStructuralDetails, setShowStructuralDetails] = useState(false);
-const [showCurrentDetails, setShowCurrentDetails] = useState(false);
+const [showCurrentDetails, setShowCurrentDetails] = useState(focusDueOnly);
 
 const structuralList = state.structural || state.structuralLiabilities || [];
 const currentList = state.currentLiabilities || [];
@@ -6313,162 +3859,12 @@ const getCurrentDebtBalance = (l) => {
   return Number(l.balance ?? l.amount ?? 0);
 };
 
-const getDueAmountThisMonth = (l) => {
-  return Number(
-    l.dueThisMonth ??
-      l.monthlyDue ??
-      l.installment ??
-      l.minimumPayment ??
-      l.amount ??
-      0
-  );
-};
-
-const currentMonthKey =
-  state.currentMonth || new Date().toISOString().slice(0, 7);
-
-
-
 const currentDebtTotal = pendingCurrent.reduce(
   (sum, l) => sum + getCurrentDebtBalance(l),
   0
 );
-
-const dueThisMonthList = pendingCurrent.filter(isDueThisMonth);
-
-const dueThisMonthTotal = dueThisMonthList.reduce(
-  (sum, l) => sum + getDueAmountThisMonth(l),
-  0
-);
-
-const futureCurrentList = pendingCurrent.filter((l) => !isDueThisMonth(l));
-const [cardName, setCardName] = useState("");
-const [cardBalance, setCardBalance] = useState("");
-const [cardLimit, setCardLimit] = useState("");
-const [cardDueDate, setCardDueDate] = useState("");
-const [showAddCard, setShowAddCard] = useState(false);
-const [selectedCardId, setSelectedCardId] = useState("");
-const [cardMode, setCardMode] = useState("");
 const [openCurrentId, setOpenCurrentId] = useState(null);
 const [liabilityAssetKey, setLiabilityAssetKey] = useState("cash");
-const [editCardName, setEditCardName] = useState("");
-const [editCardBalance, setEditCardBalance] = useState("");
-
-useEffect(() => {
-  if (focusDueOnly) {
-    setShowCurrentDetails(true);
-  }
-}, [focusDueOnly]);
-
-const addCreditCard = () => {
-  if (!cardName.trim()) return alert("أدخل اسم البطاقة");
-
-  const balance = Number(cardBalance || 0);
-  const creditLimit = Number(cardLimit || 0);
-  if (creditLimit <= 0) return alert("أدخل سقف البطاقة الائتمانية");
-  if (balance > creditLimit) return alert("رصيد البطاقة الحالي لا يجوز أن يتجاوز سقفها");
-  if (!cardDueDate) return alert("أدخل تاريخ استحقاق البطاقة");
-  if (balance < 0) return alert("رصيد البطاقة لا يجوز أن يكون سالبًا");
-
-  setState((p) => ({
-    ...p,
-    currentLiabilities: [
-      ...(p.currentLiabilities || []),
-      {
-        id: Date.now(),
-        type: "card",
-        name: cardName.trim(),
-        amount: balance,
-        balance,
-        creditLimit,
-        payableBuffer: 0,
-        uncoveredDebt: balance,
-        dueDate: cardDueDate,
-        dueDay: new Date(cardDueDate).getDate(),
-        status: "active",
-        source: "manual_card",
-        createdAt: new Date().toISOString(),
-        date: new Date().toISOString().split("T")[0],
-      },
-    ],
-  }));
-
-  setCardName("");
-  setCardBalance("");
-  setCardLimit("");
-  setCardDueDate("");
-  setShowAddCard(false);
-};
-
-const deleteCreditCard = (id) => {
-  const card = (state.currentLiabilities || []).find((item) => item.id === id);
-  if (!card) return;
-
-  const balance = Number(card.balance || 0);
-
-  if (balance > 0) {
-    return alert("لا يمكن حذف بطاقة عليها رصيد. يجب تصفير الرصيد أولًا.");
-  }
-
-  if (!window.confirm("هل تريد حذف هذه البطاقة؟")) return;
-
-  setState((p) => ({
-    ...p,
-    currentLiabilities: (p.currentLiabilities || []).filter(
-      (item) => item.id !== id
-    ),
-  }));
-};
-const deleteSelectedCreditCard = () => {
-  if (!selectedCardId) return alert("اختر البطاقة المراد حذفها");
-
-  deleteCreditCard(Number(selectedCardId));
-  setSelectedCardId("");
-};
-const saveEditCreditCard = () => {
-  if (!selectedCardId) return alert("اختر البطاقة المراد تعديلها");
-  if (!editCardName.trim()) return alert("أدخل اسم البطاقة");
-
-  const balance = Number(editCardBalance || 0);
-  if (balance < 0) return alert("الرصيد لا يجوز أن يكون سالبًا");
-
-  setState((p) => ({
-    ...p,
-    currentLiabilities: (p.currentLiabilities || []).map((item) =>
-      String(item.id) === String(selectedCardId)
-        ? {
-            ...item,
-            name: editCardName.trim(),
-            amount: balance,
-            balance,
-            uncoveredDebt: balance,
-            updatedAt: new Date().toISOString(),
-          }
-        : item
-    ),
-  }));
-
-  setSelectedCardId("");
-  setEditCardName("");
-  setEditCardBalance("");
-  setCardMode("");
-};
-const prepareEditCreditCard = (id) => {
-  setSelectedCardId(id);
-
-  const card = (state.currentLiabilities || []).find(
-    (item) => String(item.id) === String(id)
-  );
-
-  if (!card) {
-    setEditCardName("");
-    setEditCardBalance("");
-    return;
-  }
-
-  setEditCardName(card.name || "");
-  setEditCardBalance(String(card.balance || card.amount || 0));
-};
 
   const getPostponeParts = (item) => {
     const source =
@@ -6516,11 +3912,6 @@ const prepareEditCreditCard = (id) => {
     }));
   };
 
-  const totalCurrent = pendingCurrent.reduce((sum, l) => {
-    if (l.type === "card") return sum + Number(l.balance || 0);
-    return sum + Number(l.balance ?? l.amount ?? 0);
-  }, 0);
-
   const getLiabilityAmount = (l) => {
     if (l.type === "card") return Number(l.balance || 0);
     return Number(l.balance ?? l.amount ?? 0);
@@ -6532,20 +3923,6 @@ const prepareEditCreditCard = (id) => {
     if (l.type === "personal") return "شخصي";
     if (l.type === "loan") return "قرض";
     return l.type || "أخرى";
-  };
-
-  const getTypeColor = (l) => {
-    if (l.type === "card") return "#3b82f6";
-    if (l.type === "over_budget") return "#ef4444";
-    if (l.type === "personal") return "#f59e0b";
-    return "var(--text-muted)";
-  };
-
-  const getStatusLabel = (status) => {
-    if (status === "paid") return "مسدد";
-    if (status === "overdue") return "متأخر";
-    if (status === "pending") return "مستحق";
-    return status || "غير محدد";
   };
 
   const getStructuralAmount = (item) =>
@@ -6672,9 +4049,7 @@ const prepareEditCreditCard = (id) => {
           {
             id: expenseId,
             amount,
-            category: "سداد التزام",
             paymentMethod: "cap_liability",
-            note: `سداد من سقف الصرف - ${current.name || "التزام"}`,
             date: now.slice(0, 10),
             createdAt: now,
             budgetCovered: capCharge,
@@ -6767,946 +4142,141 @@ const prepareEditCreditCard = (id) => {
     });
     setOpenCurrentId(null);
   };
-
-  return (
-    <div style={G.scr}>
-      <button
-        type="button"
-        onClick={() => setShowStructuralDetails((v) => !v)}
-        style={{
-          ...G.card("#ef444422"),
-          width: "100%",
-          textAlign: "right",
-          cursor: "pointer",
-          color: "var(--text-heading)",
-          fontFamily: "inherit",
-        }}
-      >
-        <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
-          <div>
-            <div style={{ fontSize: 15, color: "var(--text-heading)", fontWeight: 900, marginBottom: 4 }}>
-              الالتزامات الهيكلية
-            </div>
-            <div style={{ fontSize: 11, color: "var(--text-faint)" }}>
-              أقساط ثابتة قادمة من الإعدادات
-            </div>
-          </div>
-          <div style={{ textAlign: "left" }}>
-            <div style={{ fontSize: 22, fontWeight: 900, color: "#ef4444" }}>
-              {structuralTotal.toFixed(2)}
-              <span style={{ fontSize: 11, color: "var(--text-faint)" }}> د.أ</span>
-            </div>
-            <div style={{ fontSize: 11, color: "var(--gold-border)" }}>
-              {showStructuralDetails ? "إخفاء التفاصيل" : "عرض التفاصيل"}
-            </div>
-          </div>
-        </div>
-
-        {showStructuralDetails && (
-          <div style={{ marginTop: 12, borderTop: "1px solid var(--border-soft)", paddingTop: 8 }}>
-            {structuralList.map((item, index) => (
-              <div key={item.id || index} style={index < structuralList.length - 1 ? G.row : G.lrow}>
-                <strong>{getStructuralAmount(item).toFixed(2)} د.أ</strong>
-                <div style={{ textAlign: "right", display: "flex", gap: 10, alignItems: "center" }}>
-                  <div
-                    style={{
-                      width: 36,
-                      height: 36,
-                      borderRadius: 12,
-                      background: "var(--bg-secondary)",
-                      color: "var(--gold-border)",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      fontSize: 18,
-                      flexShrink: 0,
-                    }}
-                  >
-                    🏗
-                  </div>
-                  <div>
-                  <div style={{ fontSize: 13 }}>{item.name}</div>
-                  <div style={{ fontSize: 10, color: "var(--text-faint)" }}>
-                    يوم السداد: {item.dueDay || "-"}
-                  </div>
-                </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </button>
-
-      <div style={G.card("#ef444422")}>
-        <div
-          onClick={() => setShowCurrentDetails((v) => !v)}
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            gap: 12,
-            marginBottom: 12,
-            cursor: "pointer",
-          }}
-        >
-          <div style={{ textAlign: "right" }}>
-            <div style={{ fontSize: 15, fontWeight: 900 }}>الالتزامات الجارية</div>
-            <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 3 }}>
-              ديون قصيرة الأجل وبطاقات مستحقة
-            </div>
-          </div>
-          <div style={{ textAlign: "left" }}>
-            <div style={{ fontSize: 22, fontWeight: 900, color: "#ef4444" }}>
-              {currentDebtTotal.toFixed(2)}
-              <span style={{ fontSize: 11, color: "var(--text-faint)" }}> د.أ</span>
-            </div>
-            <div style={{ fontSize: 10, color: "var(--text-muted)" }}>
-              {showCurrentDetails ? "إخفاء التفاصيل" : "عرض التفاصيل"}
-            </div>
-          </div>
-        </div>
-
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 12 }}>
-          <div style={summaryCard("success")}>
-            <div style={{ fontSize: 10, color: "var(--text-faint)" }}>محجوز من السقف</div>
-            <div style={summaryValue("success")}>
-              {coveredCurrentTotal.toFixed(2)}
-            </div>
-          </div>
-          <div style={summaryCard("danger")}>
-            <div style={{ fontSize: 10, color: "var(--text-faint)" }}>غير مغطى</div>
-            <div style={summaryValue("danger")}>
-              {uncoveredCurrentTotal.toFixed(2)}
-            </div>
-          </div>
-        </div>
-
-        {showCurrentDetails && sortedCurrent.map((item) => {
-          const amount = getLiabilityAmount(item);
-          const covered = getCoveredAmount(item);
-          const uncovered = getUncoveredAmount(item);
-          const coveragePct = amount > 0 ? Math.min(100, (covered / amount) * 100) : 0;
-          const isCard = item.type === "card";
-          const isOpen = openCurrentId === item.id;
-          const creditLimit = Number(item.creditLimit || 0);
-          const availableCredit = Math.max(0, creditLimit - Number(item.balance || 0));
-          const itemIcon = isCard ? "💳" : item.type === "over_budget" ? "⚠" : "🧾";
-          const primaryName = isCard ? item.name || "بطاقة ائتمانية" : item.name || "دائن";
-          const remainingCap = Math.max(
-            0,
-            Number(state.session?.spendingCap || 0) -
-              Number(state.session?.coveredSpent || 0)
-          );
-          const capAvailableForPayment = remainingCap + Math.min(covered, amount);
-
-          return (
-            <div
-              key={item.id}
-              style={{
-                background: isOpen ? "var(--bg-secondary)" : "var(--bg-secondary)",
-                border: isOpen ? "1px solid rgba(232,201,106,0.62)" : "1px solid var(--border-soft)",
-                borderRadius: 12,
-                padding: 12,
-                marginBottom: 10,
-                boxShadow: isOpen ? "0 12px 28px rgba(232,201,106,0.10)" : "none",
-              }}
-            >
-              <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
-                <div style={{ textAlign: "right", display: "flex", gap: 10, alignItems: "center" }}>
-                  <div
-                    style={{
-                      width: 36,
-                      height: 36,
-                      borderRadius: 12,
-                      background: isCard ? "var(--gold-light)" : "var(--bg-secondary)",
-                      color: isCard ? "#93c5fd" : "var(--gold-border)",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      fontSize: 18,
-                      flexShrink: 0,
-                    }}
-                  >
-                    {itemIcon}
-                  </div>
-                  <div>
-                  <div style={{ fontSize: 14, fontWeight: 900, color: "var(--text-heading)" }}>{primaryName}</div>
-                  {isCard && (
-                    <div style={{ ...labelText, color: "var(--text-muted)", marginTop: 3 }}>
-                      السقف: {creditLimit.toFixed(2)} · المستخدم: {Number(item.balance || 0).toFixed(2)} · المتاح: {availableCredit.toFixed(2)}
-                    </div>
-                  )}
-                  {!isCard && (
-                    <div style={{ ...labelText, color: "var(--text-muted)", marginTop: 3 }}>
-                      اسم الدائن
-                    </div>
-                  )}
-                  <div style={{ display: openCurrentId === item.id ? "block" : "none", ...labelText, color: "var(--text-muted)", marginTop: 3 }}>
-                    {getTypeLabel(item)} · الاستحقاق: {getDueText(item)}
-                  </div>
-                </div>
-                </div>
-                <div style={{ textAlign: "left" }}>
-                  <div style={{ fontSize: 17, fontWeight: 900, color: "var(--text-heading)" }}>
-                    {amount.toFixed(2)}
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setOpenCurrentId(openCurrentId === item.id ? null : item.id)
-                      }
-                      style={{
-                        marginRight: 8,
-                        width: 30,
-                        height: 30,
-                        borderRadius: 10,
-                        border: "1px solid var(--border-soft)",
-                        background: "var(--bg-secondary)",
-                        color: "var(--gold-border)",
-                        cursor: "pointer",
-                        fontWeight: 900,
-                      }}
-                    >
-                      ⋯
-                    </button>
-                  </div>
-                  <div style={{ fontSize: 10, color: "var(--text-faint)" }}>د.أ</div>
-                </div>
-              </div>
-
-              <div style={{ display: openCurrentId === item.id ? "block" : "none", height: 7, background: "var(--bg-secondary)", borderRadius: 999, overflow: "hidden", marginTop: 10 }}>
-                <div style={{ width: `${coveragePct}%`, height: "100%", background: "linear-gradient(90deg,#22c55e,var(--gold-border))" }} />
-              </div>
-
-              <div style={{ display: openCurrentId === item.id ? "grid" : "none", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 10 }}>
-                <div style={{ fontSize: 11, color: "#86efac" }}>
-                  مغطى ومحجوز: <b>{covered.toFixed(2)}</b>
-                </div>
-                <div style={{ fontSize: 11, color: "#fecaca" }}>
-                  غير مغطى: <b>{uncovered.toFixed(2)}</b>
-                </div>
-              </div>
-
-              <div style={{ display: openCurrentId === item.id ? "block" : "none", marginTop: 10 }}>
-                <div
-                  style={{
-                    display: "flex",
-                    justifyContent: "flex-start",
-                    gap: 8,
-                    marginBottom: 8,
-                    direction: "ltr",
-                  }}
-                >
-                  {covered > 0 && (
-                    <button
-                      type="button"
-                      title="سداد من المحجوز"
-                      onClick={() => payCurrentFromReserved(item)}
-                      style={G.iconBtn(false, "#86efac")}
-                    >
-                      ✓
-                    </button>
-                  )}
-                  {amount > 0 && capAvailableForPayment >= amount && (
-                    <button
-                      type="button"
-                      title="سداد من سقف الصرف"
-                      onClick={() => payCurrentFromCap(item)}
-                      style={G.iconBtn(false, "#38bdf8")}
-                    >
-                      ⌁
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    title="سداد من أصل"
-                    onClick={() => updateCurrentPaymentMethod(item, item.paymentMethod === "assets" ? "" : "assets")}
-                    style={G.iconBtn(item.paymentMethod === "assets", "var(--gold-border)")}
-                  >
-                    ◈
-                  </button>
-                  <button
-                    type="button"
-                    title="تأجيل الاستحقاق"
-                    onClick={() => updateCurrentPaymentMethod(item, item.paymentMethod === "postpone" ? "" : "postpone")}
-                    style={G.iconBtn(item.paymentMethod === "postpone", "var(--text-body)")}
-                  >
-                    ◷
-                  </button>
-                </div>
-
-                {item.paymentMethod === "assets" && (
-                  <>
-                    <select
-                      value={liabilityAssetKey}
-                      onChange={(e) => setLiabilityAssetKey(e.target.value)}
-                      style={{ ...G.inp(), marginBottom: 8 }}
-                    >
-                      {liabilityAssetSources.map((asset) => (
-                        <option key={asset.key} value={asset.key}>
-                          {asset.label} - متاح {Number(asset.available || 0).toFixed(2)} د.أ
-                        </option>
-                      ))}
-                    </select>
-                    <button
-                      type="button"
-                      onClick={() => payCurrentFromAsset(item)}
-                      style={G.btn("var(--bg-secondary)", "var(--gold-border)", { width: "100%", padding: "9px" })}
-                    >
-                      تأكيد السداد من الأصل
-                    </button>
-                  </>
-                )}
-                {item.paymentMethod === "postpone" && (() => {
-                  const parts = getPostponeParts(item);
-                  const currentYear = new Date().getFullYear();
-                  return (
-                    <div
-                      style={{
-                        display: "grid",
-                        gridTemplateColumns: "0.8fr 0.8fr 1fr 42px",
-                        gap: 6,
-                        alignItems: "center",
-                        direction: "rtl",
-                      }}
-                    >
-                      <select
-                        value={parts.day}
-                        onChange={(e) => setPostponePart(item.id, "day", e.target.value)}
-                        style={{ ...G.inp(), marginBottom: 0, padding: "9px 8px", fontSize: 12 }}
-                      >
-                        {Array.from({ length: 31 }, (_, i) => String(i + 1).padStart(2, "0")).map((day) => (
-                          <option key={day} value={day}>{day}</option>
-                        ))}
-                      </select>
-                      <select
-                        value={parts.month}
-                        onChange={(e) => setPostponePart(item.id, "month", e.target.value)}
-                        style={{ ...G.inp(), marginBottom: 0, padding: "9px 8px", fontSize: 12 }}
-                      >
-                        {Array.from({ length: 12 }, (_, i) => String(i + 1).padStart(2, "0")).map((month) => (
-                          <option key={month} value={month}>{month}</option>
-                        ))}
-                      </select>
-                      <select
-                        value={parts.year}
-                        onChange={(e) => setPostponePart(item.id, "year", e.target.value)}
-                        style={{ ...G.inp(), marginBottom: 0, padding: "9px 8px", fontSize: 12 }}
-                      >
-                        {Array.from({ length: 4 }, (_, i) => String(currentYear + i)).map((year) => (
-                          <option key={year} value={year}>{year}</option>
-                        ))}
-                      </select>
-                      <button
-                        type="button"
-                        title="تأكيد التاريخ"
-                        onClick={() => confirmPostponeDate(item.id)}
-                        style={G.iconBtn(false, "#86efac")}
-                      >
-                        ✓
-                      </button>
-                    </div>
-                  );
-                })()}
-              </div>
-            </div>
-          );
-        })}
-
-        {!sortedCurrent.length && (
-          <div style={{ textAlign: "center", color: "var(--text-faint)", padding: "18px 0", fontSize: 13 }}>
-            لا توجد التزامات جارية
-          </div>
-        )}
-      </div>
-
-      <div style={{ ...G.card(), display: "none" }}>
-        <div style={{ fontSize: 13, fontWeight: 900, marginBottom: 10, textAlign: "right" }}>
-          إدارة البطاقات الائتمانية
-        </div>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-          <button type="button" onClick={() => setCardMode(cardMode === "add" ? "" : "add")} style={G.btn("var(--bg-secondary)", "var(--text-body)", { width: "100%" })}>
-            إضافة بطاقة
-          </button>
-          <button type="button" onClick={() => setCardMode(cardMode === "delete" ? "" : "delete")} style={G.btn("#2b1111", "#fecaca", { width: "100%" })}>
-            حذف بطاقة
-          </button>
-        </div>
-        {cardMode === "add" && (
-          <div style={{ marginTop: 12 }}>
-            <input
-              value={cardName}
-              onChange={(e) => setCardName(e.target.value)}
-              placeholder="اسم البطاقة"
-              style={{ ...G.inp(), marginBottom: 8 }}
-            />
-            <input
-              type="number"
-              value={cardLimit}
-              onChange={(e) => setCardLimit(e.target.value)}
-              placeholder="سقف البطاقة"
-              style={{ ...G.inp(), marginBottom: 8 }}
-            />
-            <input
-              type="number"
-              value={cardBalance}
-              onChange={(e) => setCardBalance(e.target.value)}
-              placeholder="الرصيد المستخدم حاليًا"
-              style={{ ...G.inp(), marginBottom: 8 }}
-            />
-            <input
-              type="date"
-              value={cardDueDate}
-              onChange={(e) => setCardDueDate(e.target.value)}
-              style={{ ...G.inp(), marginBottom: 8 }}
-            />
-            <button
-              type="button"
-              onClick={addCreditCard}
-              style={G.btn("#17341f", "#86efac", { width: "100%" })}
-            >
-              حفظ البطاقة
-            </button>
-          </div>
-        )}
-        {cardMode === "delete" && (
-          <div style={{ marginTop: 12 }}>
-            <select
-              value={selectedCardId}
-              onChange={(e) => setSelectedCardId(e.target.value)}
-              style={{ ...G.inp(), marginBottom: 8 }}
-            >
-              <option value="">اختر البطاقة</option>
-              {currentList
-                .filter((item) => item.type === "card")
-                .map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.name} - الرصيد: {Number(item.balance || 0).toFixed(2)}
-                  </option>
-                ))}
-            </select>
-            <button
-              type="button"
-              onClick={deleteSelectedCreditCard}
-              style={G.btn("#2b1111", "#fecaca", { width: "100%" })}
-            >
-              حذف البطاقة المختارة
-            </button>
-          </div>
-        )}
-      </div>
-    </div>
+  const structuralDisplayRows = structuralList.map((item) => ({
+    id: item.id,
+    name: item.name,
+    dueDay: item.dueDay,
+    amount: getStructuralAmount(item),
+  }));
+  const remainingSpendingCap = Math.max(
+    0,
+    Number(state.session?.spendingCap || 0) -
+      Number(state.session?.coveredSpent || 0)
   );
-  return (
-<div style={G.scr}>
-        <div style={{ ...G.card("#ef444422"), textAlign: "center" }}>
-        <div style={{ fontSize: 11, color: "#ef4444", marginBottom: 4 }}>
-          إجمالي الخصوم الجارية
-        </div>
-        <div style={{ fontSize: 30, fontWeight: 900, color: "#ef4444" }}>
-          {totalCurrent.toFixed(2)}{" "}
-          <span style={{ fontSize: 13, color: "var(--text-faint)" }}>د.أ</span>
-        </div>
-      </div>
-     <div style={{ ...G.card(), marginBottom: 12 }}>
-  <div
-    style={{
-      fontSize: 14,
-      fontWeight: 800,
-      color: "var(--text-body)",
-      marginBottom: 10,
-    }}
-  >
-    إدارة البطاقات الائتمانية
-  </div>
-
-  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
-    <button
-      onClick={() => setCardMode(cardMode === "add" ? "" : "add")}
-      style={G.btn("linear-gradient(135deg,var(--bg-secondary),var(--border-soft))", "var(--text-heading)", {
-        width: "100%",
-        fontWeight: 900,
-      })}
-    >
-      إضافة
-    </button>
-
-    <button
-      onClick={() => setCardMode(cardMode === "delete" ? "" : "delete")}
-      style={G.btn("linear-gradient(135deg,#7f1d1d,#450a0a)", "#450a0a", {
-        width: "100%",
-        fontWeight: 900,
-      })}
-    >
-      إلغاء
-    </button>
-
-    <button
-      onClick={() => setCardMode(cardMode === "edit" ? "" : "edit")}
-      style={G.btn("linear-gradient(135deg,var(--gold-light),var(--gold-border))", "var(--gold-light)", {
-        width: "100%",
-        fontWeight: 900,
-      })}
-    >
-      تعديل
-    </button>
-  </div>
-
-  {cardMode === "add" && (
-    <div style={{ marginTop: 12 }}>
-      <input
-        value={cardName}
-        onChange={(e) => setCardName(e.target.value)}
-        placeholder="اسم البطاقة"
-        style={{ ...G.inp(), marginBottom: 8 }}
-      />
-
-      <input
-        type="number"
-        value={cardBalance}
-        onChange={(e) => setCardBalance(e.target.value)}
-        placeholder="الرصيد الحالي"
-        style={{ ...G.inp(), marginBottom: 8 }}
-      />
-
-      <button
-        onClick={addCreditCard}
-        style={G.btn("linear-gradient(135deg,#22c55e,#16a34a)", "#052e16", {
-          width: "100%",
-          fontWeight: 900,
-        })}
-      >
-        حفظ البطاقة
-      </button>
-    </div>
-  )}
-
-  {cardMode === "delete" && (
-    <div style={{ marginTop: 12 }}>
-      <label style={{ display: "block", fontSize: 12, color: "var(--text-muted)", marginBottom: 6 }}>
-        اختر البطاقة
-      </label>
-
-      <select
-        value={selectedCardId}
-        onChange={(e) => setSelectedCardId(e.target.value)}
-        style={{ ...G.inp(), marginBottom: 8 }}
-      >
-        <option value="">اختر البطاقة</option>
-        {currentList
-          .filter((item) => item.type === "card")
-          .map((item) => (
-            <option key={item.id} value={item.id}>
-              {item.name} - الرصيد: {Number(item.balance || 0).toFixed(2)}
-            </option>
-          ))}
-      </select>
-
-      <button
-        onClick={deleteSelectedCreditCard}
-        style={{
-          padding: "10px 12px",
-          borderRadius: 10,
-          border: "1px solid #ef4444",
-          background: "transparent",
-          color: "#ef4444",
-          cursor: "pointer",
-          width: "100%",
-          fontWeight: 900,
-        }}
-      >
-        حذف البطاقة المختارة
-      </button>
-    </div>
-  )}
-
-  {cardMode === "edit" && (
-    <div style={{ marginTop: 12, fontSize: 12, color: "var(--text-muted)" }}>
-      سنضيف تعديل الاسم والسقف في الخطوة التالية بعد تثبيت الإضافة والإلغاء.
-    </div>
-  )}
-</div>
-
-      <div style={G.card()}>
-        <div
-  onClick={() => setShowStructuralDetails((v) => !v)}
-  style={{
-    textAlign: "right",
-    marginBottom: 10,
-    fontSize: 13,
-    fontWeight: 800,
-    color: "var(--text-muted)",
-    cursor: "pointer",
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-  }}
->
-  <span style={{ color: "#ef4444" }}>{structuralTotal.toFixed(2)} د.أ</span>
-  <span>🏗 الالتزامات الهيكلية {showStructuralDetails ? "▲" : "▼"}</span>
-</div>
-
-        {showStructuralDetails &&
-  structuralList.map((s, i) => (
-          <div
-            key={s.id}
-            style={i < structuralList.length - 1 ? G.row : G.lrow}
-          >
-            <div>
-              <div style={{ fontSize: 15, fontWeight: 800 }}>
-                {Number(s.monthly || 0).toFixed(2)} د.أ
-              </div>
-              <div style={{ fontSize: 10, color: "var(--text-faint)" }}>
-                يوم السداد: {s.dueDay}
-              </div>
-            </div>
-
-            <div style={{ textAlign: "right" }}>
-              <div style={{ fontSize: 13, color: "var(--text-body)" }}>{s.name}</div>
-              <div style={{ fontSize: 10, color: "var(--text-disabled)" }}>
-                قسط شهري طويل الأجل
-              </div>
-            </div>
-          </div>
-        ))}
-
-        <div
-          style={{
-            marginTop: 10,
-            paddingTop: 10,
-            borderTop: "1px solid var(--border-soft)",
-            display: "flex",
-            justifyContent: "space-between",
-          }}
-        >
-          <strong style={{ color: "#ef4444" }}>
-            {structuralTotal.toFixed(2)} د.أ
-          </strong>
-          <span style={{ fontSize: 11, color: "var(--text-faint)" }}>
-            إجمالي الأقساط الشهرية
-          </span>
-        </div>
-      </div>
-
-      <div style={G.card("#ef444422")}>
-        <div
-  onClick={() => setShowCurrentDetails((v) => !v)}
-  style={{
-    textAlign: "right",
-    marginBottom: 10,
-    fontSize: 13,
-    fontWeight: 800,
-    color: "var(--text-heading)",
-    cursor: "pointer",
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-  }}
->
-  <div>
-  <div style={{ fontSize: 13, fontWeight: 900 }}>
-    📋 إدارة الالتزامات الجارية {showCurrentDetails ? "▲" : "▼"}
-  </div>
-  <div style={{ fontSize: 10, color: "var(--text-muted)", marginTop: 4 }}>
-    رصيد الدين الكامل والمستحقات الشهرية
-  </div>
-</div>
-
-<div style={{ textAlign: "left" }}>
-  <div style={{ fontSize: 11, color: "var(--text-muted)" }}>
-    إجمالي رصيد الدين
-  </div>
-  <div style={{ color: "#ef4444", fontWeight: 900 }}>
-    {currentDebtTotal.toFixed(2)} د.أ
-  </div>
-  <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 6 }}>
-    المستحق هذا الشهر
-  </div>
-  <div style={{ color: "#f59e0b", fontWeight: 900 }}>
-    {dueThisMonthTotal.toFixed(2)} د.أ
-  </div>
-</div>
-</div>
-        {showCurrentDetails &&
-  sortedCurrent.map((l, i) => {
-          const amount = getLiabilityAmount(l);
-          const typeColor = getTypeColor(l);
-
-          return (
-            <div
-              key={l.id}
-              style={i < (state.currentLiabilities || []).length - 1 ? G.row : G.lrow}
-            >
-              <div>
-                <div
-                  style={{
-                    fontSize: 15,
-                    fontWeight: 800,
-                    color: l.status === "paid" ? "var(--text-faint)" : "#ef4444",
-                  }}
-                >
-                  {amount.toFixed(2)} د.أ
-                </div>
-
-                <div
-                  style={{
-                    display: "flex",
-                    gap: 6,
-                    marginTop: 4,
-                    flexWrap: "wrap",
-                  }}
-                >
-                  <Tag label={getStatusLabel(l.status)} col="#ef4444" />
-                  <Tag label={getTypeLabel(l)} col={typeColor} />
-                </div>
-              </div>
-              
-              <div style={{ textAlign: "right", maxWidth: "58%" }}>
-                <div style={{ fontSize: 13, color: "var(--text-body)" }}>{l.name}</div>
-                {isDueThisMonth(l) && l.status !== "paid" && (
-  <div style={{ fontSize: 10, color: "#f59e0b", fontWeight: 700, marginTop: 2 }}>
-    مستحق هذا الشهر
-  </div>
-)}
-
-                {l.dueDate ? (
-                  <div style={{ fontSize: 10, color: "#f59e0b", marginTop: 3 }}>
-                    تاريخ الاستحقاق: {formatDate(l.dueDate)}
-                  </div>
-                ) : (
-                  <div style={{ fontSize: 10, color: "var(--text-faint)", marginTop: 3 }}>
-                    يوم الاستحقاق: {l.dueDay || "-"}
-                  </div>
-                )}
-
-                {(l.type === "card" || l.type === "direct_liability") && (
-  <div style={{ fontSize: 10, color: "var(--text-faint)", marginTop: 3 }}>
-    برسم الدفع: {Number(l.payableBuffer || 0).toFixed(2)}
-    <br />
-    خارج السقف: {Number(l.uncoveredDebt || 0).toFixed(2)}
-    <br />
-   طريقة السداد:{" "}
-{l.paymentMethod === "salary"
-  ? "من الراتب"
-  : l.paymentMethod === "assets"
-  ? "من الأصول"
-  : l.paymentMethod === "postpone"
-  ? "تأجيل الاستحقاق"
-  : "لم تحدد بعد"}
-      <br />
-<select
-  value={l.paymentMethod || ""}
- onChange={(e) => {
-  const value = e.target.value;
-
-  setState((prev) => {
-    const currentItem = prev.currentLiabilities.find((item) => item.id === l.id);
-    const paidAmount = Number(currentItem?.salaryPaidAmount || 0);
-    const wasCreatedThisMonthPaid =
-  currentItem?.createdThisMonthPaidFromSalary === true;
-    const shouldReverseSalaryPayment =
-  currentItem?.paymentMethod === "salary" &&
-  value !== "salary" &&
-  (paidAmount > 0 || wasCreatedThisMonthPaid);
+  const currentLiabilityDisplayRows = sortedCurrent.map((item) => {
+    const amount = getLiabilityAmount(item);
+    const covered = getCoveredAmount(item);
+    const uncovered = getUncoveredAmount(item);
+    const isCard = item.type === "card";
+    const creditLimit = Number(item.creditLimit || 0);
+    const availableCredit = Math.max(
+      0,
+      creditLimit - Number(item.balance || 0)
+    );
 
     return {
-      ...prev,
-
-      session: {
-  ...prev.session,
-  coveredSpent: Math.max(
-    0,
-    Number(prev.session.coveredSpent || 0) -
-      (shouldReverseSalaryPayment ? paidAmount : 0)
-  ),
-},
-
-transactions: shouldReverseSalaryPayment
-  ? (prev.transactions || []).filter(
-      (t) =>
-        !(
-          t.type === "liability_paid_from_salary" &&
-          t.liabilityId === l.id
-        )
-    )
-  : prev.transactions,
-      currentLiabilities: prev.currentLiabilities.map((item) =>
-        item.id === l.id
-          ? {
-              ...item,
-              paymentMethod: value,
-              status: shouldReverseSalaryPayment ? "pending" : item.status,
-              balance: shouldReverseSalaryPayment
-                ? Number(item.balance || 0) + paidAmount
-                : item.balance,
-              salaryPaidAmount: shouldReverseSalaryPayment ? 0 : item.salaryPaidAmount,
-createdThisMonthPaidFromSalary: shouldReverseSalaryPayment
-  ? false
-  : item.createdThisMonthPaidFromSalary,
-            }
-          : item
-      ),
+      item,
+      amount,
+      covered,
+      uncovered,
+      coveragePct:
+        amount > 0 ? Math.min(100, (covered / amount) * 100) : 0,
+      isCard,
+      isOpen: openCurrentId === item.id,
+      icon: isCard ? "💳" : item.type === "over_budget" ? "⚠" : "🧾",
+      name: isCard
+        ? item.name || "بطاقة ائتمانية"
+        : item.name || "دائن",
+      subtitle: isCard
+        ? `السقف: ${creditLimit.toFixed(2)} · المستخدم: ${Number(
+            item.balance || 0
+          ).toFixed(2)} · المتاح: ${availableCredit.toFixed(2)}`
+        : "اسم الدائن",
+      typeLabel: getTypeLabel(item),
+      dueText: getDueText(item),
+      canPayFromCap:
+        amount > 0 &&
+        remainingSpendingCap + Math.min(covered, amount) >= amount,
+      postponeParts: getPostponeParts(item),
     };
   });
-}}
->
-  <option value="">لم تحدد بعد</option>
-  <option value="salary">من الراتب</option>
-  <option value="assets">من الأصول</option>
-  <option value="postpone">تأجيل الاستحقاق</option>
-</select>
-{l.paymentMethod === "postpone" && (
-  <input
-    type="date"
-    value={l.newDueDate || ""}
-    onChange={(e) => {
-      const value = e.target.value;
-      setState((prev) => ({
-        ...prev,
-        currentLiabilities: prev.currentLiabilities.map((item) =>
-          item.id === l.id ? { ...item, newDueDate: value } : item
-        ),
-      }));
-    }}
-  />
-)}
-{l.paymentMethod === "postpone" && l.newDueDate && (
-  <button
-    onClick={() => {
-      setState((prev) => ({
-        ...prev,
-        currentLiabilities: prev.currentLiabilities.map((item) =>
-          item.id === l.id
-            ? { ...item, dueDate: item.newDueDate, newDueDate: "" }
-            : item
-        ),
-      }));
-    }}
-    
-  >
-    تأكيد التأجيل
-  </button>
-)}
-{l.paymentMethod === "salary" && (
-  <button
-    onClick={() => {
-      const amount = Number(
-  l.payableBuffer || l.dueThisMonth || l.monthlyDue || l.amount || l.balance || 0
-);
-const created = l.createdAt ? new Date(l.createdAt) : null;
-const now = new Date();
 
-const createdThisMonth =
-  created &&
-  created.getFullYear() === now.getFullYear() &&
-  created.getMonth() === now.getMonth();
-
-const remainingCap = Math.max(
-  0,
-  Number(state.session?.spendingCap || 0) -
-    Number(state.session?.coveredSpent || 0)
-);
-
-if (!createdThisMonth && remainingCap < amount) {
-  alert("سقف الصرف لا يغطي هذا السداد. اختر السداد من الأصول أو تأجيل الاستحقاق.");
-  return;
-}
-  
-
-      setState((prev) => ({
-        ...prev,
-        session: {
-          ...prev.session,
-          coveredSpent:
-  Number(prev.session.coveredSpent || 0) +
-  (createdThisMonth ? 0 : amount),
-        },
-      transactions: createdThisMonth
-  ? prev.transactions
-  : [
-      ...(prev.transactions || []).filter(
-        (t) =>
-          !(
-            t.type === "liability_paid_from_salary" &&
-            t.liabilityId === l.id
-          )
-      ),
-      {
-        id: Date.now(),
-        type: "liability_paid_from_salary",
-        name: `سداد دين - ${l.name}`,
-        amount,
-        liabilityId: l.id,
-        date: new Date().toISOString(),
-      },
-    ],
-        currentLiabilities: prev.currentLiabilities.map((item) =>
-          item.id === l.id
-            ? {
-                ...item,
-                balance: Math.max(0, Number(item.balance || item.amount || 0) - amount),
-                status: "paid",
-salaryPaidAmount: createdThisMonth ? 0 : amount,
-createdThisMonthPaidFromSalary: createdThisMonth,
-paymentMethod: "salary",
-              }
-            : item
-        ),
-      }));
-    }}
-  >
-    سداد من الراتب
-  </button>
-)}
-  </div>
-)}
-                  
-                
-
-                {l.type === "over_budget" && (
-                  <div style={{ fontSize: 10, color: "#ef4444", marginTop: 3 }}>
-                    ناتج عن مصروف تجاوز سقف الصرف
-                  </div>
-                )}
-              </div>
-            </div>
-          );
-        })}
-
-        {!currentList.length && (
-          <div
-            style={{
-              textAlign: "center",
-              color: "var(--text-disabled)",
-              fontSize: 13,
-              padding: "20px 0",
-            }}
-          >
-            لا توجد التزامات جارية
-          </div>
-        )}
+  return (
+    <div
+      className="liabilities-screen"
+      style={{
+        ...G.scr,
+        minHeight: "calc(100vh - 118px)",
+        background: visualIdentity.gradients.appBackground,
+        "--ambient-beam-color": visualIdentity.lighting.ambientBeam,
+        "--ambient-light-duration": visualIdentity.motion.ambientLightDuration,
+        "--card-sheen-color": visualIdentity.lighting.cardSheen,
+        "--card-hover-border": visualIdentity.lighting.hoverBorder,
+        "--card-hover-glow": visualIdentity.lighting.hoverGlow,
+        "--card-sheen-duration": visualIdentity.motion.cardSheenDuration,
+        "--effect-hover-duration": visualIdentity.motion.hoverDuration,
+      }}
+    >
+      <header style={{ marginBottom: 14 }}>
+        <h1 style={{ margin: 0, color: visualIdentity.colors.white, fontSize: 27, fontWeight: 900 }}>{t("nav.liabilities")}</h1>
+        <div style={{ marginTop: 3, color: visualIdentity.colors.textSecondary, fontSize: 11 }}>إدارة الالتزامات ومتابعة التغطية والاستحقاقات</div>
+      </header>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 9, marginBottom: 13 }}>
+        <div className="asset-dashboard-card" style={{ padding: 11, borderRadius: 16, border: `1px solid ${visualIdentity.semantic.warning}66`, background: `linear-gradient(145deg, ${visualIdentity.semantic.warning}1F, rgba(29,76,132,0.92))`, textAlign: "center", color: visualIdentity.colors.white }}>
+          <div style={{ color: visualIdentity.colors.textSecondary, fontSize: 9 }}>{t("liabilities.fixed")}</div>
+          <b style={{ display: "block", marginTop: 4, color: visualIdentity.semantic.warning, fontSize: 17 }}>{structuralTotal.toFixed(2)} <small style={{ fontSize: 9 }}>{currencyLabel}</small></b>
+        </div>
+        <div className="asset-dashboard-card" style={{ padding: 11, borderRadius: 16, border: `1px solid ${visualIdentity.semantic.danger}66`, background: `linear-gradient(145deg, ${visualIdentity.semantic.danger}1F, rgba(29,76,132,0.92))`, textAlign: "center", color: visualIdentity.colors.white }}>
+          <div style={{ color: visualIdentity.colors.textSecondary, fontSize: 9 }}>{t("liabilities.cards")}</div>
+          <b style={{ display: "block", marginTop: 4, color: visualIdentity.semantic.danger, fontSize: 17 }}>{currentDebtTotal.toFixed(2)} <small style={{ fontSize: 9 }}>{currencyLabel}</small></b>
+        </div>
       </div>
+<StructuralLiabilitiesCard
+        total={structuralTotal}
+        rows={structuralDisplayRows}
+        open={showStructuralDetails}
+        onToggle={() => setShowStructuralDetails((value) => !value)}
+      />
+
+<CurrentLiabilitiesCard
+        total={currentDebtTotal}
+        coveredTotal={coveredCurrentTotal}
+        uncoveredTotal={uncoveredCurrentTotal}
+        rows={currentLiabilityDisplayRows}
+        open={showCurrentDetails}
+        assetKey={liabilityAssetKey}
+        assetSources={liabilityAssetSources}
+        onToggleDetails={() => setShowCurrentDetails((value) => !value)}
+        onAssetKeyChange={setLiabilityAssetKey}
+        onToggleItem={(itemId) =>
+          setOpenCurrentId(openCurrentId === itemId ? null : itemId)
+        }
+        onPayReserved={payCurrentFromReserved}
+        onPayFromCap={payCurrentFromCap}
+        onToggleAssets={(item) =>
+          updateCurrentPaymentMethod(
+            item,
+            item.paymentMethod === "assets" ? "" : "assets"
+          )
+        }
+        onTogglePostpone={(item) =>
+          updateCurrentPaymentMethod(
+            item,
+            item.paymentMethod === "postpone" ? "" : "postpone"
+          )
+        }
+        onPayFromAsset={payCurrentFromAsset}
+        onPostponePart={setPostponePart}
+        onConfirmPostpone={confirmPostponeDate}
+        inputStyle={G.inp()}
+        iconButtonStyle={G.iconBtn}
+        confirmAssetButtonStyle={G.btn(
+          "rgba(255,209,43,0.14)",
+          visualIdentity.semantic.warning,
+          { width: "100%", padding: "9px" }
+        )}
+      />
     </div>
   );
 }
 
-function SettingsScreen({ state, setState, onCloseMonth }) {
+function SettingsScreen({ state, setState, authSession, onResetAllData }) {
+  const { t } = useLocale();
+  const [settingsView, setSettingsView] = useState("menu");
+  const currencyLabel = getCurrencyLabel(state);
   const structuralTotal = calcStructuralTotal(state);
 const salary = Number(state.settings?.salary || 0);
 const maxSpendingCap = Math.max(0, salary - structuralTotal);
-const snapshotsCount = (state.monthlySnapshots || []).length;
-const rolloverUnpaidLiabilities = () => {
-  setState((prev) => ({
-    ...prev,
-    currentLiabilities: (prev.currentLiabilities || [])
-      .filter((l) => l.status !== "paid")
-      .map((l) => ({
-        ...l,
-        paymentMethod: "",
-        newDueDate: "",
-        salaryPaidAmount: 0,
-        createdThisMonthPaidFromSalary: false,
-      })),
-  }));
-};
 function clampSpendingCapAfterStructuralChange(nextState) {
   const nextStructuralTotal = calcStructuralTotal(nextState);
   const nextSalary = Number(nextState.settings?.salary || 0);
@@ -7730,17 +4300,18 @@ function clampSpendingCapAfterStructuralChange(nextState) {
   const updateSetting = (path, value) => {
     setState((prev) => {
       const copy = structuredClone(prev);
-      const maxSpendingCap = Math.max(0, salary - structuralTotal);
       const keys = path.split(".");
       let ref = copy;
-      for (let i = 0; i < keys.length - 1; i++) ref = ref[keys[i]];
+      for (let i = 0; i < keys.length - 1; i++) {
+        if (!ref[keys[i]] || typeof ref[keys[i]] !== "object") ref[keys[i]] = {};
+        ref = ref[keys[i]];
+      }
       ref[keys[keys.length - 1]] = value;
       return copy;
     });
   };
   const [structuralName, setStructuralName] = useState("");
 const [structuralMonthly, setStructuralMonthly] = useState("");
-const [structuralDueDay, setStructuralDueDay] = useState("");
 const [settingsCardName, setSettingsCardName] = useState("");
 const [settingsCardLimit, setSettingsCardLimit] = useState("");
 const [settingsCardBalance, setSettingsCardBalance] = useState("");
@@ -7790,90 +4361,6 @@ const openingAssetEffectiveTarget =
     ? openingAssetChoices[0] || "__new__"
     : "");
 const openingAssetIsNew = openingAssetCanCreateNew && openingAssetEffectiveTarget === "__new__";
-const sectionTitle = (icon, title, action = null) => (
-  <div
-    style={{
-      display: "flex",
-      justifyContent: "space-between",
-      alignItems: "center",
-      marginBottom: 10,
-    }}
-  >
-    <div
-      style={{
-        color: "var(--text-faint)",
-        fontWeight: 700,
-        fontSize: 10,
-        letterSpacing: "0.09em",
-        textTransform: "uppercase",
-      }}
-    >
-      {icon} {title}
-    </div>
-    {action}
-  </div>
-);
-const collapsibleSectionTitle = (key, icon, title, action = null) => {
-  const isOpen = settingsSectionsOpen[key];
-
-  return (
-    <div
-      style={{
-        display: "flex",
-        justifyContent: "space-between",
-        alignItems: "center",
-        marginBottom: 10,
-      }}
-    >
-      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-        {action}
-        {smallIconButton(isOpen ? "−" : "⋯", () =>
-          setSettingsSectionsOpen((prev) => ({ ...prev, [key]: !prev[key] }))
-        , "var(--text-body)")}
-      </div>
-      <button
-        type="button"
-        onClick={() =>
-          setSettingsSectionsOpen((prev) => ({ ...prev, [key]: !prev[key] }))
-        }
-        style={{
-          border: 0,
-          background: "transparent",
-          color: "var(--text-faint)",
-          fontWeight: 700,
-          fontSize: 10,
-          letterSpacing: "0.09em",
-          textTransform: "uppercase",
-          cursor: "pointer",
-          fontFamily: "inherit",
-        }}
-      >
-        {icon} {title}
-      </button>
-    </div>
-  );
-};
-const smallIconButton = (label, onClick, color = "var(--text-body)") => (
-  <button
-    type="button"
-    title={label}
-    onClick={onClick}
-    style={{
-      width: 32,
-      height: 32,
-      borderRadius: 10,
-      border: label === "+" ? "1px solid #0EA5E9" : `1px solid ${color}55`,
-      background: label === "+" ? "linear-gradient(135deg,#38BDF8,#0284C7)" : "var(--bg-secondary)",
-      color: label === "+" ? "#fff" : color,
-      cursor: "pointer",
-      fontWeight: 900,
-      fontSize: label === "+" ? 18 : 15,
-      boxShadow: label === "+" ? "0 6px 14px rgba(2,132,199,0.22)" : "none",
-    }}
-  >
-    {label}
-  </button>
-);
 const openNewSettingsCard = () => {
   setSettingsSelectedCardId("");
   setSettingsCardName("");
@@ -7882,41 +4369,6 @@ const openNewSettingsCard = () => {
   setSettingsCardDueDay("");
   setSettingsSectionsOpen((prev) => ({ ...prev, cards: true }));
   setSettingsCardMode(settingsCardMode === "add" ? "" : "add");
-};
-const openingBalanceRow = ({ keyPrefix, item, group, nameField, unitLabel, priceField = "wac", valueField = "name" }) => {
-  const units = Number(item.units || 0);
-  const price = Number(item[priceField] || 0);
-  const total = units * price;
-
-  return (
-    <div key={`${keyPrefix}-${item.id}`} style={{ display: "grid", gridTemplateColumns: "0.9fr 0.72fr 0.72fr 0.72fr 1fr", gap: 6, marginBottom: 8 }}>
-      <input readOnly value={total.toFixed(2)} placeholder="الإجمالي" style={{ ...G.inp(), padding: "9px 7px", fontSize: 11, color: "var(--text-body)" }} />
-      <input type="number" value={price} onChange={(e) => updateAssetItem(group, item.id, { [priceField]: Number(e.target.value || 0) })} placeholder="السعر" style={{ ...G.inp(), padding: "9px 7px", fontSize: 11 }} />
-      <select value={unitLabel} disabled style={{ ...G.inp(), padding: "9px 6px", fontSize: 11, opacity: 0.9 }}>
-        <option value="غم">غم</option>
-        <option value="سهم">سهم</option>
-        <option value="وحدة">وحدة</option>
-      </select>
-      <input type="number" value={units} onChange={(e) => updateAssetItem(group, item.id, { units: Number(e.target.value || 0) })} placeholder="العدد" style={{ ...G.inp(), padding: "9px 7px", fontSize: 11 }} />
-      <input value={item[nameField] || ""} onChange={(e) => updateAssetItem(group, item.id, { [nameField]: e.target.value })} placeholder={valueField} style={{ ...G.inp(), padding: "9px 7px", fontSize: 11 }} />
-    </div>
-  );
-};
-  const updateStockPrice = (stockId, price) => {
-  setState((p) => ({
-    ...p,
-    assets: {
-      ...p.assets,
-      stocks: p.assets.stocks.map((s) =>
-        s.id === stockId
-          ? {
-              ...s,
-              currentPrice: Number(price || 0),
-            }
-          : s
-      ),
-    },
-  }));
 };
 const updateAssetItem = (assetGroup, itemId, patch) => {
   setState((p) => ({
@@ -8127,7 +4579,6 @@ const addOpeningAsset = () => {
 
   setStructuralName("");
   setStructuralMonthly("");
-  setStructuralDueDay("");
   setShowStructuralForm(false);
 };
 const updateStructuralLiability = (id, field, value) => {
@@ -8280,819 +4731,394 @@ const saveSettingsCreditCardEdit = () => {
   setSettingsCardMode("");
 };
 
+const openingBalanceRows = [
+  ...(state.assets.banks || []).map((bank) => ({
+    key: `bank-${bank.id}`,
+    kind: "bank",
+    group: "banks",
+    id: bank.id,
+    total: Number(bank.balance || 0),
+    price: 1,
+    priceField: "balance",
+    unitLabel: currencyLabel,
+    units: Number(bank.balance || 0),
+    unitsField: "balance",
+    name: bank.name || "",
+    nameField: "name",
+    namePlaceholder: "اسم البنك",
+  })),
+  ...[
+    ...(state.assets.gold || []).map((item) => ({
+      item,
+      keyPrefix: "gold",
+      group: "gold",
+      nameField: "label",
+      unitLabel: "غم",
+      priceField: "wac",
+      namePlaceholder: "العيار",
+    })),
+    ...(state.assets.silver || []).map((item) => ({
+      item,
+      keyPrefix: "silver",
+      group: "silver",
+      nameField: "label",
+      unitLabel: "غم",
+      priceField: "wac",
+      namePlaceholder: "فضة",
+    })),
+    ...(state.assets.stocks || []).map((item) => ({
+      item,
+      keyPrefix: "stock",
+      group: "stocks",
+      nameField: "name",
+      unitLabel: "سهم",
+      priceField: "wac",
+      namePlaceholder: "السهم",
+    })),
+    ...(state.assets.custom || [])
+      .filter((item) => item.type === "unit")
+      .map((item) => ({
+        item,
+        keyPrefix: "custom",
+        group: "custom",
+        nameField: "name",
+        unitLabel: "وحدة",
+        priceField: "price",
+        namePlaceholder: "الأصل",
+      })),
+  ].map((row) => {
+    const units = Number(row.item.units || 0);
+    const price = Number(row.item[row.priceField] || 0);
+    return {
+      key: `${row.keyPrefix}-${row.item.id}`,
+      kind: "unit",
+      group: row.group,
+      id: row.item.id,
+      total: units * price,
+      price,
+      priceField: row.priceField,
+      unitLabel: row.unitLabel,
+      units,
+      unitsField: "units",
+      name: row.item[row.nameField] || "",
+      nameField: row.nameField,
+      namePlaceholder: row.namePlaceholder,
+    };
+  }),
+];
+
+  const currentLiabilitiesTotal = calcAssets(state).currentLiabilities;
+  const profileName = state.settings?.profile?.name || "مستخدم التطبيق";
+  const profileSubtitle =
+    state.settings?.profile?.email || "مدير الثروة الذكي · الأردن";
+  const netSalary = Math.max(0, salary - structuralTotal);
+  const settingsPageMeta = {
+    salary: [t("settings.incomeLimit"), ""],
+    cards: [t("liabilities.cards"), ""],
+    opening: [t("settings.openingBalances"), ""],
+    personal: [t("settings.profile"), ""],
+    account: [t("settings.account"), t("settings.security")],
+    notifications: [t("settings.notifications"), ""],
+    locale: [t("settings.locale"), ""],
+    export: [t("settings.export"), ""],
+    reset: [t("settings.reset"), ""],
+    share: [t("settings.share"), ""],
+    about: [t("settings.about"), ""],
+  };
+  const openSettingsView = (view) => {
+    if (view === "cards") {
+      setSettingsSectionsOpen((prev) => ({ ...prev, cards: true, structural: true }));
+    }
+    if (view === "opening") {
+      setSettingsSectionsOpen((prev) => ({ ...prev, opening: true }));
+    }
+    setSettingsView(view);
+  };
+  const exportSettingsData = () => {
+    const blob = new Blob([JSON.stringify(state, null, 2)], {
+      type: "application/json",
+    });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `wealth-tracker-${new Date().toISOString().slice(0, 10)}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+  const shareApplication = async () => {
+    const shareData = { title: "مدير الثروة الذكي", url: window.location.href };
+    if (navigator.share) {
+      await navigator.share(shareData);
+      return;
+    }
+    await navigator.clipboard.writeText(window.location.href);
+    alert("تم نسخ رابط التطبيق");
+  };
+  const changeAccountPassword = async ({ currentPassword, newPassword }) => {
+    const email = authSession?.user?.email;
+    if (!email || !authSession?.access_token) {
+      throw new Error("جلسة تسجيل الدخول غير متاحة");
+    }
+    try {
+      const verifiedSession = await signInWithPassword(email, currentPassword);
+      await updatePassword(
+        verifiedSession.access_token || authSession.access_token,
+        newPassword
+      );
+    } catch (passwordError) {
+      throw new Error(authErrorMessage(passwordError), { cause: passwordError });
+    }
+  };
+  const settingsPanelStyle = {
+    ...G.card(),
+    background: visualIdentity.gradients.outerCard,
+    border: visualIdentity.cards.outer.border,
+    boxShadow: visualIdentity.cards.outer.boxShadow,
+    color: visualIdentity.colors.white,
+  };
+
+  if (settingsView === "menu") {
+    return (
+      <div className="settings-screen" style={{ ...G.scr, minHeight: "calc(100vh - 118px)" }}>
+        <SettingsDashboard
+          profileName={profileName}
+          profileSubtitle={profileSubtitle}
+          salary={salary}
+          structuralTotal={structuralTotal}
+          netSalary={netSalary}
+          cardsTotal={currentLiabilitiesTotal}
+          snapshotsCount={(state.monthlySnapshots || []).length}
+          currencyLabel={currencyLabel}
+          onNavigate={openSettingsView}
+        />
+      </div>
+    );
+  }
+
   return (
-    <div style={G.scr}>
-      <div style={G.card()}>
-        {sectionTitle("💼", "الراتب والسقف")}
+    <div className="settings-screen" style={{ ...G.scr, minHeight: "calc(100vh - 118px)" }}>
+      <SettingsSubpageShell
+        title={settingsPageMeta[settingsView]?.[0] || t("nav.settings")}
+        subtitle={settingsPageMeta[settingsView]?.[1] || ""}
+        onBack={() => setSettingsView("menu")}
+      >
+      {["salary", "cards"].includes(settingsView) && <div className="asset-dashboard-card" style={settingsPanelStyle}>
+      {settingsView === "salary" && <>
+<SalaryCapSettingsSection
+          salary={state.settings.salary}
+          spendingCap={state.session.spendingCap}
+          maxSpendingCap={maxSpendingCap}
+          onSalaryChange={(value) => updateSetting("settings.salary", value)}
+          onSpendingCapChange={(value) => {
+            if (value > maxSpendingCap) {
+              alert("سقف الصرف لا يجوز أن يتجاوز صافي الراتب بعد الالتزامات الهيكلية");
+              return;
+            }
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
-          <div>
-            <label style={{ fontSize: 10, color: "var(--text-faint)" }}>الراتب</label>
-            <input
-              type="number"
-              value={state.settings.salary}
-              onChange={(e) =>
-                updateSetting("settings.salary", Number(e.target.value || 0))
-              }
-              style={G.inp()}
-            />
-          </div>
-          <div>
-            <label style={{ fontSize: 10, color: "var(--text-faint)" }}>السقف</label>
-            <input
-              type="number"
-              value={state.session.spendingCap}
-              onChange={(e) => {
-                const newCap = Number(e.target.value || 0);
+            setState({
+              ...state,
+              session: { ...state.session, spendingCap: value },
+            });
+          }}
+          inputStyle={G.inp()}
+        />
 
-                if (newCap > maxSpendingCap) {
-                  alert("سقف الصرف لا يجوز أن يتجاوز صافي الراتب بعد الالتزامات الهيكلية");
-                  return;
-                }
+      </>}
 
-                setState({
-                  ...state,
-                  session: {
-                    ...state.session,
-                    spendingCap: newCap,
-                  },
-                });
-              }}
-              style={G.inp()}
-            />
-          </div>
-        </div>
-
-        <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 12 }}>
-          الحد: {maxSpendingCap.toFixed(2)} د.أ
-        </div>
-
-        <div style={{ borderTop: "1px solid var(--border-soft)", paddingTop: 12, marginTop: 8 }}>
-          {collapsibleSectionTitle(
-            "cards",
-            "💳",
-            "البطاقات",
-            smallIconButton("+", openNewSettingsCard, "#86efac")
-          )}
-
-          {settingsSectionsOpen.cards && (
-          <>
-          <div style={{ display: "grid", gap: 8, marginBottom: settingsCardMode ? 10 : 0 }}>
-            {creditCards.map((card) => {
-              const used = Number(card.balance || 0);
-              const limit = Number(card.creditLimit || 0);
-              const available = Math.max(0, limit - used);
-
-              return (
-                <div
-                  key={card.id}
-                  style={{
-                    border: "1px solid var(--border-soft)",
-                    borderRadius: 12,
-                    padding: 10,
-                    background: "linear-gradient(135deg,var(--gold-light),var(--bg-card))",
-                  }}
-                >
-                  <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
-                    <div style={{ display: "flex", gap: 6 }}>
-                      {smallIconButton("✎", () => prepareSettingsCardEdit(card), "#93c5fd")}
-                      {smallIconButton("🗑", () => {
-                        setSettingsSelectedCardId(card.id);
-                        setSettingsCardMode("delete");
-                      }, "#fecaca")}
-                    </div>
-                    <div style={{ textAlign: "right" }}>
-                      <div style={{ fontWeight: 900, fontSize: 13 }}>{card.name}</div>
-                      <div style={{ color: "#93c5fd", fontSize: 10 }}>
-                        {used.toFixed(2)} / {limit.toFixed(2)} · متاح {available.toFixed(2)}
-                      </div>
-                      <div style={{ color: "var(--text-body)", fontSize: 10, marginTop: 2 }}>
-                        {card.dueDay ? `يوم الاستحقاق ${card.dueDay}` : "بلا يوم استحقاق"}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-            {!creditCards.length && (
-              <div style={{ color: "var(--text-faint)", fontSize: 12, textAlign: "center", padding: 8 }}>
-                لا توجد بطاقات
-              </div>
-            )}
-          </div>
-
-  {(settingsCardMode === "add" || settingsCardMode === "edit") && (
-    <div>
-      <div style={{ display: "flex", justifyContent: "flex-start", marginBottom: 8 }}>
-        {smallIconButton("×", () => {
-          setSettingsSelectedCardId("");
-          setSettingsCardName("");
-          setSettingsCardLimit("");
-          setSettingsCardBalance("");
-          setSettingsCardDueDay("");
-          setSettingsCardMode("");
-        }, "#fecaca")}
+      {settingsView === "cards" && <>
+<CreditCardsSettingsSection
+          open={settingsSectionsOpen.cards}
+          cards={creditCards}
+          mode={settingsCardMode}
+          selectedCardId={settingsSelectedCardId}
+          name={settingsCardName}
+          limit={settingsCardLimit}
+          balance={settingsCardBalance}
+          dueDay={settingsCardDueDay}
+          onToggle={() =>
+            setSettingsSectionsOpen((prev) => ({ ...prev, cards: !prev.cards }))
+          }
+          onAdd={openNewSettingsCard}
+          onEdit={prepareSettingsCardEdit}
+          onPrepareDelete={(cardId) => {
+            setSettingsSelectedCardId(cardId);
+            setSettingsCardMode("delete");
+          }}
+          onCancel={() => {
+            setSettingsSelectedCardId("");
+            setSettingsCardName("");
+            setSettingsCardLimit("");
+            setSettingsCardBalance("");
+            setSettingsCardDueDay("");
+            setSettingsCardMode("");
+          }}
+          onNameChange={setSettingsCardName}
+          onLimitChange={setSettingsCardLimit}
+          onBalanceChange={setSettingsCardBalance}
+          onDueDayChange={setSettingsCardDueDay}
+          onSelectedCardChange={setSettingsSelectedCardId}
+          onSave={
+            settingsCardMode === "edit"
+              ? saveSettingsCreditCardEdit
+              : addSettingsCreditCard
+          }
+          onDelete={deleteSettingsCreditCard}
+          inputStyle={G.inp()}
+        />
+<StructuralLiabilitiesSettingsSection
+          open={settingsSectionsOpen.structural}
+          items={structuralList}
+          showForm={showStructuralForm}
+          name={structuralName}
+          monthly={structuralMonthly}
+          onToggle={() =>
+            setSettingsSectionsOpen((prev) => ({
+              ...prev,
+              structural: !prev.structural,
+            }))
+          }
+          onToggleForm={() => {
+            setSettingsSectionsOpen((prev) => ({ ...prev, structural: true }));
+            setShowStructuralForm((value) => !value);
+          }}
+          onDelete={deleteStructuralLiability}
+          onUpdate={updateStructuralLiability}
+          onCloseForm={() => setShowStructuralForm(false)}
+          onNameChange={setStructuralName}
+          onMonthlyChange={setStructuralMonthly}
+          onSave={addStructuralLiability}
+          inputStyle={G.inp()}
+        />
+      </>}
       </div>
-      <label style={{ fontSize: 10, color: "var(--text-faint)" }}>اسم البطاقة</label>
-      <input value={settingsCardName} onChange={(e) => setSettingsCardName(e.target.value)} placeholder="مثال: فيزا البنك" style={{ ...G.inp(), marginBottom: 8 }} />
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-        <div>
-          <label style={{ fontSize: 10, color: "var(--text-faint)" }}>سقف البطاقة</label>
-          <input type="number" value={settingsCardLimit} onChange={(e) => setSettingsCardLimit(e.target.value)} placeholder="0.00" style={{ ...G.inp(), marginBottom: 8 }} />
-        </div>
-        <div>
-          <label style={{ fontSize: 10, color: "var(--text-faint)" }}>المستخدم الآن</label>
-          <input type="number" value={settingsCardBalance} onChange={(e) => setSettingsCardBalance(e.target.value)} placeholder="0.00" style={{ ...G.inp(), marginBottom: 8 }} />
-        </div>
-      </div>
-      <label style={{ fontSize: 10, color: "var(--text-faint)" }}>يوم الاستحقاق الشهري</label>
-      <input
-        type="number"
-        min="1"
-        max="31"
-        value={settingsCardDueDay}
-        onChange={(e) => setSettingsCardDueDay(e.target.value)}
-        placeholder="مثال: 20"
-        style={{ ...G.inp(), marginBottom: 8 }}
-      />
-      <button type="button" onClick={settingsCardMode === "edit" ? saveSettingsCreditCardEdit : addSettingsCreditCard} style={G.btn("#17341f", "#86efac", { width: "100%" })}>
-        {settingsCardMode === "edit" ? "حفظ التعديل" : "حفظ البطاقة"}
-      </button>
-    </div>
-  )}
-  {settingsCardMode === "delete" && (
-    <div>
-      <select value={settingsSelectedCardId} onChange={(e) => setSettingsSelectedCardId(e.target.value)} style={{ ...G.inp(), marginBottom: 8 }}>
-        <option value="">اختر البطاقة</option>
-        {(state.currentLiabilities || [])
-          .filter((item) => item.type === "card")
-          .map((item) => (
-            <option key={item.id} value={item.id}>
-              {item.name} - الرصيد: {Number(item.balance || 0).toFixed(2)}
-            </option>
-          ))}
-      </select>
-      <button type="button" onClick={deleteSettingsCreditCard} style={G.btn("#2b1111", "#fecaca", { width: "100%" })}>
-        حذف البطاقة المختارة
-      </button>
-    </div>
-  )}
-          </>
-          )}
-</div>
-<div
-  style={{
-    borderTop: "1px solid var(--border-soft)",
-    paddingTop: 12,
-    marginTop: 8,
-  }}
->
-  {collapsibleSectionTitle(
-    "structural",
-    "🏗",
-    "الالتزامات",
-    smallIconButton("+", () => {
-      setSettingsSectionsOpen((prev) => ({ ...prev, structural: true }));
-      setShowStructuralForm((v) => !v);
-    }, "#86efac")
-  )}
+      }
 
-  {settingsSectionsOpen.structural && (
-  <>
-  <div
-    style={{
-      display: "grid",
-      gridTemplateColumns: "34px 0.9fr 1.4fr",
-      gap: 6,
-      color: "var(--text-faint)",
-      fontSize: 10,
-      marginBottom: 5,
-      padding: "0 4px",
-    }}
-  >
-    <span />
-    <span>القسط</span>
-    <span>الاسم</span>
-  </div>
-
-  {structuralList.map((item) => (
-    <div
-      key={item.id}
-      style={{
-        background: "var(--bg-card)",
-        border: "1px solid var(--border-soft)",
-        borderRadius: 12,
-        padding: 8,
-        marginBottom: 8,
-        display: "grid",
-        gridTemplateColumns: "34px 0.9fr 1.4fr",
-        gap: 6,
-        alignItems: "center",
-      }}
-    >
-      {smallIconButton("🗑", () => deleteStructuralLiability(item.id), "#fecaca")}
-      <input
-        type="number"
-        value={item.monthly ?? item.monthlyAmount ?? item.amount ?? 0}
-        onChange={(e) =>
-          updateStructuralLiability(item.id, "monthly", e.target.value)
+      {settingsView === "opening" && <>
+<OpeningBalancesSettingsSection
+        open={settingsSectionsOpen.opening}
+        snapshotsCount={(state.monthlySnapshots || []).length}
+        onToggle={() =>
+          setSettingsSectionsOpen((prev) => ({
+            ...prev,
+            opening: !prev.opening,
+          }))
         }
-        placeholder="القسط"
-        style={{ ...G.inp(), padding: "9px 8px", fontSize: 12 }}
-      />
-      <input
-        value={item.name}
-        onChange={(e) =>
-          updateStructuralLiability(item.id, "name", e.target.value)
-        }
-        placeholder="الاسم"
-        style={{ ...G.inp(), padding: "9px 8px", fontSize: 12 }}
-      />
-    </div>
-  ))}
+        onToggleForm={() => {
+          setSettingsSectionsOpen((prev) => ({ ...prev, opening: true }));
+          setShowOpeningAssetForm((value) => !value);
+        }}
+        cardStyle={settingsPanelStyle}
+      >
+        <OpeningAssetForm
+          open={showOpeningAssetForm}
+          kind={openingAssetKind}
+          target={openingAssetEffectiveTarget}
+          name={openingAssetName}
+          units={openingAssetUnits}
+          price={openingAssetPrice}
+          choices={openingAssetChoices}
+          canCreateNew={openingAssetCanCreateNew}
+          isNew={openingAssetIsNew}
+          onClose={() => setShowOpeningAssetForm(false)}
+          onKindChange={(nextKind) => {
+            setOpeningAssetKind(nextKind);
+            setOpeningAssetTarget(
+              nextKind === "gold" ? "ذهب 21" : nextKind === "silver" ? "فضة" : ""
+            );
+            setOpeningAssetName(
+              nextKind === "gold" ? "ذهب 21" : nextKind === "silver" ? "فضة" : ""
+            );
+            setOpeningAssetUnits("");
+            setOpeningAssetPrice("");
+          }}
+          onTargetChange={(value) => {
+            setOpeningAssetTarget(value);
+            setOpeningAssetName(value === "__new__" ? "" : value);
+          }}
+          onNameChange={setOpeningAssetName}
+          onUnitsChange={setOpeningAssetUnits}
+          onPriceChange={setOpeningAssetPrice}
+          onSave={addOpeningAsset}
+          inputStyle={G.inp()}
+        />
 
-  {showStructuralForm && (
-  <div
-    style={{
-      background: "var(--bg-secondary)",
-      border: "1px dashed var(--border-soft)",
-      borderRadius: 12,
-      padding: 10,
-      marginTop: 12,
-    }}
-  >
-    <div style={{ display: "grid", gridTemplateColumns: "38px 0.9fr 1.4fr", gap: 6 }}>
-      {smallIconButton("×", () => setShowStructuralForm(false), "#fecaca")}
-      <input
-        type="number"
-        value={structuralMonthly}
-        onChange={(e) => setStructuralMonthly(e.target.value)}
-        placeholder="القسط"
-        style={{ ...G.inp(), padding: "9px 8px", fontSize: 12 }}
-      />
-      <input
-        value={structuralName}
-        onChange={(e) => setStructuralName(e.target.value)}
-        placeholder="الاسم"
-        style={{ ...G.inp(), padding: "9px 8px", fontSize: 12 }}
-      />
-    </div>
-    <button
-      type="button"
-      onClick={addStructuralLiability}
-      style={G.btn("linear-gradient(135deg,var(--gold-primary),var(--gold-border))", "var(--text-heading)", {
-        width: "100%",
-        padding: "9px 12px",
-        fontSize: 12,
-        marginTop: 8,
-      })}
-    >
-      حفظ الالتزام
-    </button>
-  </div>
-  )}
-  </>
-  )}
-</div>
-      </div>
+        <OpeningBalancesTable
+          cash={Number(state.assets.cash || 0)}
+          rows={openingBalanceRows}
+          onCashChange={(value) =>
+            setState((prev) => ({
+              ...prev,
+              assets: { ...prev.assets, cash: value },
+            }))
+          }
+          onUpdate={updateAssetItem}
+          inputStyle={G.inp()}
+        />
+      </OpeningBalancesSettingsSection>
+      </>}
 
-      <div style={G.card()}>
-        {collapsibleSectionTitle(
-          "opening",
-          "📦",
-          "الأرصدة الافتتاحية",
-          smallIconButton("+", () => {
-            setSettingsSectionsOpen((prev) => ({ ...prev, opening: true }));
-            setShowOpeningAssetForm((v) => !v);
-          }, "#86efac")
-        )}
-
-        {settingsSectionsOpen.opening && (
-        <div>
-          {showOpeningAssetForm && (
-          <div
-            style={{
-              background: "var(--bg-secondary)",
-              border: "1px dashed var(--border-soft)",
-              borderRadius: 12,
-              padding: 10,
-              marginBottom: 12,
-            }}
-          >
-            <div style={{ display: "grid", gridTemplateColumns: "38px 1fr 1fr", gap: 6, marginBottom: 8 }}>
-              {smallIconButton("×", () => setShowOpeningAssetForm(false), "#fecaca")}
-              <select
-                value={openingAssetKind}
-                onChange={(e) => {
-                  const nextKind = e.target.value;
-                  setOpeningAssetKind(nextKind);
-                  setOpeningAssetTarget(
-                    nextKind === "gold" ? "ذهب 21" : nextKind === "silver" ? "فضة" : ""
-                  );
-                  setOpeningAssetName(
-                    nextKind === "gold" ? "ذهب 21" : nextKind === "silver" ? "فضة" : ""
-                  );
-                  setOpeningAssetUnits("");
-                  setOpeningAssetPrice("");
-                }}
-                style={{ ...G.inp(), padding: "9px 8px", fontSize: 12 }}
-              >
-                <option value="cash">كاش ادخار</option>
-                <option value="bank">حساب بنكي</option>
-                <option value="gold">ذهب</option>
-                <option value="silver">فضة</option>
-                <option value="stock">أسهم</option>
-                <option value="goods">بضاعة</option>
-              </select>
-              {openingAssetKind === "cash" ? (
-                <input
-                  value="كاش ادخار"
-                  disabled
-                  style={{ ...G.inp(), padding: "9px 8px", fontSize: 12 }}
-                />
-              ) : (
-                <select
-                  value={openingAssetEffectiveTarget}
-                  onChange={(e) => {
-                    const value = e.target.value;
-                    setOpeningAssetTarget(value);
-                    setOpeningAssetName(value === "__new__" ? "" : value);
-                  }}
-                  style={{ ...G.inp(), padding: "9px 8px", fontSize: 12 }}
-                >
-                  {openingAssetChoices.map((name) => (
-                    <option key={name} value={name}>
-                      {name}
-                    </option>
-                  ))}
-                  {openingAssetCanCreateNew && <option value="__new__">أصل جديد</option>}
-                </select>
-              )}
-            </div>
-
-            {openingAssetIsNew && (
-              <input
-                value={openingAssetName}
-                onChange={(e) => setOpeningAssetName(e.target.value)}
-                placeholder={
-                  openingAssetKind === "bank"
-                    ? "اسم البنك الجديد"
-                    : openingAssetKind === "stock"
-                    ? "اسم السهم الجديد"
-                    : "اسم البضاعة الجديدة"
-                }
-                style={{ ...G.inp(), padding: "9px 8px", fontSize: 12, marginBottom: 8 }}
-              />
-            )}
-
-            <div style={{ display: "grid", gridTemplateColumns: openingAssetKind === "cash" || openingAssetKind === "bank" ? "1fr" : "1fr 1fr", gap: 6 }}>
-              <input
-                type="number"
-                value={openingAssetUnits}
-                onChange={(e) => setOpeningAssetUnits(e.target.value)}
-                placeholder={openingAssetKind === "cash" || openingAssetKind === "bank" ? "الرصيد" : "عدد الوحدات"}
-                style={{ ...G.inp(), padding: "9px 8px", fontSize: 12 }}
-              />
-              {!["cash", "bank"].includes(openingAssetKind) && (
-                <input
-                  type="number"
-                  value={openingAssetPrice}
-                  onChange={(e) => setOpeningAssetPrice(e.target.value)}
-                  placeholder="السعر"
-                  style={{ ...G.inp(), padding: "9px 8px", fontSize: 12 }}
-                />
-              )}
-            </div>
-            <button
-              type="button"
-              onClick={addOpeningAsset}
-              style={G.btn("linear-gradient(135deg,var(--gold-primary),var(--gold-border))", "var(--text-heading)", {
-                width: "100%",
-                padding: "9px 12px",
-                fontSize: 12,
-                marginTop: 8,
-              })}
-            >
-              حفظ الأصل
-            </button>
-          </div>
-          )}
-
-          <div style={{ display: "grid", gridTemplateColumns: "0.9fr 0.72fr 0.72fr 0.72fr 1fr", gap: 6, color: "var(--text-faint)", fontSize: 10, marginBottom: 5 }}>
-            <span>الإجمالي</span>
-            <span>السعر</span>
-            <span>الوحدة</span>
-            <span>العدد</span>
-            <span>الأصل</span>
-          </div>
-
-          <div style={{ display: "grid", gridTemplateColumns: "0.9fr 0.72fr 0.72fr 0.72fr 1fr", gap: 6, marginBottom: 8 }}>
-            <input readOnly value={Number(state.assets.cash || 0).toFixed(2)} placeholder="الإجمالي" style={{ ...G.inp(), padding: "9px 7px", fontSize: 11, color: "var(--text-body)" }} />
-            <input readOnly value="1" placeholder="السعر" style={{ ...G.inp(), padding: "9px 7px", fontSize: 11, color: "var(--text-muted)" }} />
-            <select value="د.أ" disabled style={{ ...G.inp(), padding: "9px 6px", fontSize: 11, opacity: 0.9 }}>
-              <option value="د.أ">د.أ</option>
-            </select>
-            <input
-              type="number"
-              value={Number(state.assets.cash || 0)}
-              onChange={(e) =>
-                setState((p) => ({
-                  ...p,
-                  assets: {
-                    ...p.assets,
-                    cash: Number(e.target.value || 0),
-                  },
-                }))
-              }
-              placeholder="الرصيد"
-              style={{ ...G.inp(), padding: "9px 7px", fontSize: 11 }}
-            />
-            <input readOnly value="كاش ادخار" placeholder="الأصل" style={{ ...G.inp(), padding: "9px 7px", fontSize: 11, color: "var(--text-body)" }} />
-          </div>
-
-          {(state.assets.banks || []).map((bank) => (
-            <div key={`bank-${bank.id}`} style={{ display: "grid", gridTemplateColumns: "0.9fr 0.72fr 0.72fr 0.72fr 1fr", gap: 6, marginBottom: 8 }}>
-              <input readOnly value={Number(bank.balance || 0).toFixed(2)} placeholder="الإجمالي" style={{ ...G.inp(), padding: "9px 7px", fontSize: 11, color: "var(--text-body)" }} />
-              <input readOnly value="1" placeholder="السعر" style={{ ...G.inp(), padding: "9px 7px", fontSize: 11, color: "var(--text-muted)" }} />
-              <select value="د.أ" disabled style={{ ...G.inp(), padding: "9px 6px", fontSize: 11, opacity: 0.9 }}>
-                <option value="د.أ">د.أ</option>
-              </select>
-              <input
-                type="number"
-                value={Number(bank.balance || 0)}
-                onChange={(e) => updateAssetItem("banks", bank.id, { balance: Number(e.target.value || 0) })}
-                placeholder="الرصيد"
-                style={{ ...G.inp(), padding: "9px 7px", fontSize: 11 }}
-              />
-              <input
-                value={bank.name || ""}
-                onChange={(e) => updateAssetItem("banks", bank.id, { name: e.target.value })}
-                placeholder="اسم البنك"
-                style={{ ...G.inp(), padding: "9px 7px", fontSize: 11 }}
-              />
-            </div>
-          ))}
-
-          {(state.assets.gold || []).map((item) =>
-            openingBalanceRow({
-              keyPrefix: "gold",
-              item,
-              group: "gold",
-              nameField: "label",
-              unitLabel: "غم",
-              priceField: "wac",
-              valueField: "العيار",
-            })
-          )}
-
-          {(state.assets.silver || []).map((item) =>
-            openingBalanceRow({
-              keyPrefix: "silver",
-              item,
-              group: "silver",
-              nameField: "label",
-              unitLabel: "غم",
-              priceField: "wac",
-              valueField: "فضة",
-            })
-          )}
-
-          {(state.assets.stocks || []).map((item) =>
-            openingBalanceRow({
-              keyPrefix: "stock",
-              item,
-              group: "stocks",
-              nameField: "name",
-              unitLabel: "سهم",
-              priceField: "wac",
-              valueField: "السهم",
-            })
-          )}
-
-          {(state.assets.custom || [])
-            .filter((item) => item.type === "unit")
-            .map((item) =>
-              openingBalanceRow({
-                keyPrefix: "custom",
-                item,
-                group: "custom",
-                nameField: "name",
-                unitLabel: "وحدة",
-                priceField: "price",
-                valueField: "الأصل",
-              })
-            )}
+      {settingsView === "personal" && (
+        <div className="asset-dashboard-card" style={settingsPanelStyle}>
+          <label style={{ display: "block", marginBottom: 6, fontSize: 11, color: visualIdentity.colors.textSecondary }}>الاسم الكامل</label>
+          <input value={state.settings?.profile?.name || ""} onChange={(event) => updateSetting("settings.profile.name", event.target.value)} placeholder="الاسم الكامل" style={G.inp()} />
+          <label style={{ display: "block", marginBottom: 6, fontSize: 11, color: visualIdentity.colors.textSecondary }}>البريد الإلكتروني</label>
+          <input type="email" value={state.settings?.profile?.email || ""} onChange={(event) => updateSetting("settings.profile.email", event.target.value)} placeholder="email@example.com" style={G.inp()} />
+          <label style={{ display: "block", marginBottom: 6, fontSize: 11, color: visualIdentity.colors.textSecondary }}>رقم الهاتف</label>
+          <input value={state.settings?.profile?.phone || ""} onChange={(event) => updateSetting("settings.profile.phone", event.target.value)} placeholder="رقم الهاتف" style={G.inp()} />
+          <button type="button" onClick={() => alert("تم حفظ التفاصيل الشخصية")} style={G.btn(visualIdentity.gradients.gold, visualIdentity.colors.navy, { width: "100%" })}>حفظ التغييرات</button>
         </div>
-        )}
-<div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 8 }}>
-  عدد اللقطات التاريخية المحفوظة: {(state.monthlySnapshots || []).length}
+      )}
 
-  
-      </div>
-    </div>
+      {settingsView === "locale" && (
+        <div className="asset-dashboard-card" style={settingsPanelStyle}>
+          <label style={{ display: "block", marginBottom: 6, fontSize: 11, color: visualIdentity.colors.textSecondary }}>اللغة</label>
+          <select value={state.settings?.locale?.language || "ar"} onChange={(event) => updateSetting("settings.locale.language", event.target.value)} style={G.inp()}>
+            <option value="ar">العربية</option><option value="en">English</option>
+          </select>
+          <label style={{ display: "block", marginBottom: 6, fontSize: 11, color: visualIdentity.colors.textSecondary }}>العملة</label>
+          <select value={state.settings?.locale?.currency || "JOD"} onChange={(event) => updateSetting("settings.locale.currency", event.target.value)} style={G.inp()}>
+            <option value="JOD">JOD</option><option value="USD">$</option><option value="SAR">SAR</option>
+          </select>
+        </div>
+      )}
+
+      {settingsView === "notifications" && (
+        <NotificationSettings
+          values={state.settings?.notifications}
+          onChange={(key, value) => updateSetting(`settings.notifications.${key}`, value)}
+        />
+      )}
+
+      {settingsView === "export" && (
+        <button type="button" onClick={exportSettingsData} style={G.btn(visualIdentity.gradients.gold, visualIdentity.colors.navy, { width: "100%", minHeight: 48 })}>تصدير JSON</button>
+      )}
+
+      {settingsView === "share" && (
+        <button type="button" onClick={() => shareApplication().catch(() => alert("تعذرت مشاركة الرابط"))} style={G.btn(visualIdentity.gradients.gold, visualIdentity.colors.navy, { width: "100%", minHeight: 48 })}>مشاركة التطبيق</button>
+      )}
+
+      {settingsView === "account" && (
+        <AccountSecuritySettings
+          email={authSession?.user?.email || profileSubtitle}
+          onChangePassword={changeAccountPassword}
+        />
+      )}
+
+      {settingsView === "reset" && (
+        <ResetDataSettings onReset={onResetAllData} />
+      )}
+
+      {settingsView === "about" && (
+        <div className="asset-dashboard-card" style={{ ...settingsPanelStyle, textAlign: "center", padding: 24 }}>
+          <b style={{ display: "block", color: visualIdentity.colors.gold }}>{t("settings.comingSoon")}</b>
+        </div>
+      )}
+      </SettingsSubpageShell>
   </div>
 );
 
 }
 
-function ExtraCashModal({ state, onSubmit, onClose, preset = null }) {
-  const [amount, setAmount] = useState(preset?.amount ? String(preset.amount) : "");
-  const [note, setNote] = useState(preset?.note || "");
-  const [allocation, setAllocation] = useState("spendingCap");
-  const [targetId, setTargetId] = useState("");
-  const [assetName, setAssetName] = useState("");
-  const [units, setUnits] = useState("");
-  const [price, setPrice] = useState("");
-
-  const needsAssetName = ["bank", "stock", "gold", "silver", "goods", "fixed"].includes(allocation);
-  const needsUnits = ["stock", "gold", "silver", "goods"].includes(allocation);
-
-  const targetOptions =
-    allocation === "bank"
-      ? state.assets.banks || []
-      : allocation === "stock"
-      ? state.assets.stocks || []
-      : allocation === "gold"
-      ? [
-          ...(state.assets.gold || []),
-          ...["ذهب 21", "ذهب 24"]
-            .filter(
-              (label) =>
-                !(state.assets.gold || []).some(
-                  (item) => String(item.label || "").trim() === label
-                )
-            )
-            .map((label) => ({ id: `new:${label}`, label, isPreset: true })),
-        ]
-      : allocation === "silver"
-      ? state.assets.silver || []
-      : allocation === "goods"
-      ? (state.assets.custom || []).filter((item) => item.type === "unit")
-      : [];
-
-  const targetLabel = (item) => item.name || item.label || "";
-
-  const resetTarget = (value) => {
-    setAllocation(value);
-    setTargetId("");
-    setAssetName("");
-    setUnits("");
-    setPrice("");
-  };
-
-  function submit() {
-    const n = Number(preset?.lockedAmount ? preset.amount : amount || 0);
-    const unitCount = Number(units || 0);
-    const unitPrice = Number(price || 0);
-
-    if (!n || n <= 0) {
-      alert("أدخل مبلغًا صحيحًا");
-      return;
-    }
-
-    if (needsAssetName && !targetId && !assetName.trim()) {
-      alert("اختر أصلًا موجودًا أو اكتب اسم أصل جديد");
-      return;
-    }
-
-    if (needsUnits) {
-      if (unitCount <= 0 || unitPrice <= 0) {
-        alert("أدخل العدد والسعر لحساب متوسط التكلفة");
-        return;
-      }
-
-      if (Math.abs(unitCount * unitPrice - n) > 0.01) {
-        alert("قيمة الدخل يجب أن تساوي العدد × السعر");
-        return;
-      }
-    }
-
-    onSubmit({
-      amount: n,
-      note,
-      allocation,
-      targetId,
-      assetName,
-      units: unitCount,
-      price: unitPrice,
-      source: preset?.source || "extra_income",
-    });
-  }
-
-  return (
-    <div
-      style={{
-        position: "fixed",
-        inset: 0,
-        background: "rgba(0,0,0,0.55)",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        zIndex: 9999,
-        padding: 16,
-      }}
-    >
-      <div
-        style={{
-          background: "var(--bg-card)",
-          color: "white",
-          border: "1px solid var(--border-soft)",
-          borderRadius: 16,
-          padding: 16,
-          width: "100%",
-          maxWidth: 420,
-          textAlign: "right",
-        }}
-      >
-        <h3 style={{ marginTop: 0 }}>{preset?.source === "salary_surplus" ? "توجيه فائض الراتب" : "دخل إضافي"}</h3>
-
-        <label style={{ display: "block", marginBottom: 6 }}>المبلغ الداخل</label>
-        <input
-          type="number"
-          value={amount}
-          onChange={(e) => setAmount(e.target.value)}
-          disabled={Boolean(preset?.lockedAmount)}
-          placeholder="مثال: 300"
-          style={{
-            width: "100%",
-            padding: 10,
-            marginBottom: 12,
-            borderRadius: 10,
-            border: "1px solid var(--border-soft)",
-            background: "var(--bg-card)",
-            color: "white",
-          }}
-        />
-
-        <label style={{ display: "block", marginBottom: 6 }}>المصدر</label>
-        <input
-          value={note}
-          onChange={(e) => setNote(e.target.value)}
-          disabled={Boolean(preset?.lockedNote)}
-          placeholder="مثال: بونص، هدية، زيادة"
-          style={{
-            width: "100%",
-            padding: 10,
-            marginBottom: 12,
-            borderRadius: 10,
-            border: "1px solid var(--border-soft)",
-            background: "var(--bg-card)",
-            color: "white",
-          }}
-        />
-
-        <label style={{ display: "block", marginBottom: 6 }}>تخصيص الدخل</label>
-        <select
-          value={allocation}
-          onChange={(e) => resetTarget(e.target.value)}
-          style={{
-            width: "100%",
-            padding: 10,
-            marginBottom: 16,
-            borderRadius: 10,
-            border: "1px solid var(--border-soft)",
-            background: "var(--bg-card)",
-            color: "white",
-          }}
-        >
-          <option value="spendingCap">زيادة سقف الصرف</option>
-          <option value="cash">ادخار كاش احتياطي</option>
-          <option value="bank">حساب بنكي</option>
-          <option value="stock">أسهم</option>
-          <option value="gold">ذهب</option>
-          <option value="silver">فضة</option>
-          <option value="goods">بضاعة / وحدات</option>
-          <option value="fixed">أصل ثابت</option>
-        </select>
-
-        {targetOptions.length > 0 && (
-          <select
-            value={targetId}
-            onChange={(e) => {
-              const value = e.target.value;
-              const preset = targetOptions.find((item) => String(item.id) === value && item.isPreset);
-              if (preset) {
-                setTargetId("");
-                setAssetName(preset.label);
-                return;
-              }
-              setTargetId(value);
-              setAssetName("");
-            }}
-            style={{
-              width: "100%",
-              padding: 10,
-              marginBottom: 10,
-              borderRadius: 10,
-              border: "1px solid var(--border-soft)",
-              background: "var(--bg-card)",
-              color: "white",
-            }}
-          >
-            <option value="">أصل جديد</option>
-            {targetOptions.map((item) => (
-              <option key={item.id} value={item.id}>
-                {targetLabel(item)}
-              </option>
-            ))}
-          </select>
-        )}
-
-        {needsAssetName && !targetId && (
-          <input
-            value={assetName}
-            onChange={(e) => setAssetName(e.target.value)}
-            placeholder={
-              allocation === "gold"
-                ? "مثال: ذهب 21"
-                : allocation === "silver"
-                ? "مثال: فضة"
-                : allocation === "stock"
-                ? "اسم السهم"
-                : allocation === "bank"
-                ? "اسم البنك"
-                : "اسم الأصل"
-            }
-            style={{
-              width: "100%",
-              padding: 10,
-              marginBottom: 10,
-              borderRadius: 10,
-              border: "1px solid var(--border-soft)",
-              background: "var(--bg-card)",
-              color: "white",
-            }}
-          />
-        )}
-
-        {needsUnits && (
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 12 }}>
-            <input
-              type="number"
-              value={units}
-              onChange={(e) => setUnits(e.target.value)}
-              placeholder={allocation === "stock" ? "عدد الأسهم" : "عدد الوحدات"}
-              style={{
-                width: "100%",
-                padding: 10,
-                borderRadius: 10,
-                border: "1px solid var(--border-soft)",
-                background: "var(--bg-card)",
-                color: "white",
-              }}
-            />
-            <input
-              type="number"
-              value={price}
-              onChange={(e) => setPrice(e.target.value)}
-              placeholder="سعر الشراء"
-              style={{
-                width: "100%",
-                padding: 10,
-                borderRadius: 10,
-                border: "1px solid var(--border-soft)",
-                background: "var(--bg-card)",
-                color: "white",
-              }}
-            />
-          </div>
-        )}
-
-        <div style={{ display: "flex", gap: 8 }}>
-          <button
-            onClick={submit}
-            style={{
-              flex: 1,
-              padding: "10px 12px",
-              border: 0,
-              borderRadius: 10,
-              background: "#22c55e",
-              color: "white",
-              cursor: "pointer",
-            }}
-          >
-            حفظ
-          </button>
-
-          <button
-            onClick={onClose}
-            style={{
-              flex: 1,
-              padding: "10px 12px",
-              border: "1px solid var(--border-soft)",
-              borderRadius: 10,
-              background: "transparent",
-              color: "white",
-              cursor: "pointer",
-            }}
-          >
-            إلغاء
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
 function getMonthKey(dateValue) {
   if (!dateValue) return "";
   return String(dateValue).slice(0, 7);
@@ -9280,6 +5306,11 @@ function hydrateAppState(storedState) {
         ...INITIAL_STATE.settings.market,
         ...(storedState.settings?.market || {}),
       },
+      notifications: {
+        ...INITIAL_STATE.settings.notifications,
+        ...(storedState.settings?.notifications || {}),
+        sent: storedState.settings?.notifications?.sent || {},
+      },
     },
     assets: {
       ...INITIAL_STATE.assets,
@@ -9329,6 +5360,15 @@ export default function App() {
   const [authError, setAuthError] = useState("");
   const [authNotice, setAuthNotice] = useState("");
   const [authLoading, setAuthLoading] = useState(false);
+  const appLanguage = state.settings?.locale?.language || "ar";
+  const appDirection = appLanguage === "ar" ? "rtl" : "ltr";
+
+  useEffect(() => {
+    document.documentElement.lang = appLanguage;
+    document.documentElement.dir = appDirection;
+    document.documentElement.dataset.currency =
+      state.settings?.locale?.currency || "JOD";
+  }, [appDirection, appLanguage, state.settings?.locale?.currency]);
   const [tab, setTab] = useState("overview");
   const [liabilitiesFocusDueOnly, setLiabilitiesFocusDueOnly] = useState(false);
     const [showExtraCash, setShowExtraCash] = useState(false);
@@ -9359,9 +5399,12 @@ export default function App() {
     let active = true;
 
     if (!authSession) {
-      setStorageReady(false);
-      setStorageError("");
-      setState(INITIAL_STATE);
+      queueMicrotask(() => {
+        if (!active) return;
+        setStorageReady(false);
+        setStorageError("");
+        setState(INITIAL_STATE);
+      });
       return () => {
         active = false;
       };
@@ -9385,20 +5428,70 @@ export default function App() {
       active = false;
     };
   }, [authSession]);
-    useEffect(() => {
+  useEffect(() => {
     if (!storageReady || !authSession) return;
     saveState(state, authSession).catch((err) => {
       console.error("Save Error:", err);
       setStorageError("تعذر حفظ البيانات في Supabase. لم يتم استخدام تخزين محلي.");
     });
   }, [state, storageReady, authSession]);
+  useEffect(() => {
+    registerNotificationServiceWorker().catch((error) => {
+      console.error("Notification service worker registration failed:", error);
+    });
+  }, []);
+  useEffect(() => {
+    if (!storageReady || notificationPermission() !== "granted") return;
+    let active = true;
+    const deliver = async () => {
+      const alerts = buildNotificationPlan(state);
+      const results = await Promise.all(
+        alerts.map(async (alert) => await showAppNotification(alert))
+      );
+      if (!active) return;
+      const deliveredKeys = alerts.flatMap((alert, index) =>
+        results[index] ? alert.markKeys : []
+      );
+      if (!deliveredKeys.length) return;
+      setState((prev) => {
+        const existing = prev.settings?.notifications?.sent || {};
+        const newKeys = deliveredKeys.filter((key) => !existing[key]);
+        if (!newKeys.length) return prev;
+        const sent = { ...existing };
+        newKeys.forEach((key) => {
+          sent[key] = new Date().toISOString();
+        });
+        return {
+          ...prev,
+          settings: {
+            ...prev.settings,
+            notifications: {
+              ...prev.settings?.notifications,
+              sent,
+            },
+          },
+        };
+      });
+    };
+    deliver();
+    const timer = window.setInterval(deliver, 60 * 60 * 1000);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
+  }, [state, storageReady]);
     useEffect(() => {
     if (!storageReady) return undefined;
-    setState((prev) => rollStateToCurrentMonth(prev));
+    const initialTimer = window.setTimeout(() => {
+      setState((prev) => rollStateToCurrentMonth(prev));
+    }, 0);
     const timer = window.setInterval(() => {
       setState((prev) => rollStateToCurrentMonth(prev));
     }, 60 * 1000);
-    return () => window.clearInterval(timer);
+    return () => {
+      window.clearTimeout(initialTimer);
+      window.clearInterval(timer);
+    };
   }, [storageReady]);
 function handleExtraCashSubmit(data) {
   const amount = Number(data.amount || 0);
@@ -9562,6 +5655,7 @@ function handleExtraCashSubmit(data) {
           },
         ],
       };
+      next = rebalanceExpenseCoverageAfterCapIncrease(next);
       next.assetHistory.push({
         id: `${Date.now()}-spendingCap`,
         date: now,
@@ -9730,10 +5824,6 @@ function handleExtraCashSubmit(data) {
   setExtraCashPreset(null);
 }
 
-function handleCloseMonth() {
-  setState((prev) => closeMonthState(prev));
-}
-
 async function handleClearState() {
   try {
     await clearState(authSession);
@@ -9741,6 +5831,7 @@ async function handleClearState() {
   } catch (err) {
     console.error("Clear Error:", err);
     setStorageError("تعذر حذف البيانات من Supabase. لم يتم استخدام تخزين محلي.");
+    throw err;
   }
 }
 
@@ -9816,151 +5907,49 @@ const isSnapshotView = Boolean(selectedViewSnapshot);
 const visibleTabs = isSnapshotView
   ? tabs.filter((item) => ["overview", "reports", "assets"].includes(item.id))
   : tabs;
-useEffect(() => {
-  if (isSnapshotView && !["overview", "reports", "assets"].includes(tab)) {
+const handleViewMonthChange = (month) => {
+  setSelectedViewMonth(month);
+  if (month !== "current" && !["overview", "reports", "assets"].includes(tab)) {
     setTab("overview");
   }
-}, [isSnapshotView, tab]);
+};
 
   if (!authSession) {
     return (
-      <div
-        style={{
-          ...G.app,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          padding: 18,
+      <AuthScreen
+        email={authEmail}
+        password={authPassword}
+        mode={authMode}
+        loading={authLoading}
+        error={authError}
+        notice={authNotice}
+        onEmailChange={setAuthEmail}
+        onPasswordChange={setAuthPassword}
+        onSubmit={handleAuthSubmit}
+        onToggleMode={() => {
+          setAuthMode(authMode === "signup" ? "signin" : "signup");
+          setAuthError("");
+          setAuthNotice("");
         }}
-      >
-        <form
-          onSubmit={handleAuthSubmit}
-          style={{
-            ...G.card(),
-            width: "100%",
-            textAlign: "right",
-          }}
-        >
-          <div style={{ fontSize: 15, fontWeight: 800, color: "var(--text-heading)", marginBottom: 12 }}>
-            تسجيل الدخول
-          </div>
-
-          <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 12, lineHeight: 1.7 }}>
-            يرجى تسجيل الدخول أو إنشاء حساب للبدء
-          </div>
-
-          <input
-            type="email"
-            value={authEmail}
-            onChange={(e) => setAuthEmail(e.target.value)}
-            placeholder="البريد الإلكتروني"
-            required
-            style={{ ...G.inp(), marginBottom: 10 }}
-          />
-
-          <input
-            type="password"
-            value={authPassword}
-            onChange={(e) => setAuthPassword(e.target.value)}
-            placeholder="كلمة المرور"
-            required
-            minLength={6}
-            style={{ ...G.inp(), marginBottom: 12 }}
-          />
-
-          {authError && (
-            <div style={{ color: "#D95555", fontSize: 12, marginBottom: 10 }}>
-              {authError}
-            </div>
-          )}
-
-          {authNotice && (
-            <div style={{ color: "#2A9E60", fontSize: 12, marginBottom: 10 }}>
-              {authNotice}
-            </div>
-          )}
-
-          <button
-            type="submit"
-            disabled={authLoading}
-            style={G.btn("linear-gradient(135deg,var(--gold-primary),var(--gold-border))", "var(--text-heading)", {
-              width: "100%",
-              opacity: authLoading ? 0.7 : 1,
-            })}
-          >
-            {authLoading ? "جاري الدخول" : authMode === "signup" ? "إنشاء حساب" : "دخول"}
-          </button>
-
-          <button
-            type="button"
-            onClick={() => {
-              setAuthMode(authMode === "signup" ? "signin" : "signup");
-              setAuthError("");
-              setAuthNotice("");
-            }}
-            style={{
-              marginTop: 10,
-              width: "100%",
-              border: "none",
-              background: "transparent",
-              color: "var(--gold-dark)",
-              fontFamily: "inherit",
-              fontWeight: 700,
-              cursor: "pointer",
-            }}
-          >
-            {authMode === "signup" ? "لدي حساب" : "إنشاء حساب جديد"}
-          </button>
-
-          <button
-            type="button"
-            onClick={handlePasswordReset}
-            disabled={authLoading}
-            style={{
-              marginTop: 8,
-              width: "100%",
-              border: "none",
-              background: "transparent",
-              color: "var(--text-muted)",
-              fontFamily: "inherit",
-              fontWeight: 700,
-              cursor: "pointer",
-            }}
-          >
-            استعادة كلمة المرور
-          </button>
-        </form>
-      </div>
+        onPasswordReset={handlePasswordReset}
+        appStyle={G.app}
+        cardStyle={G.card()}
+        inputStyle={G.inp()}
+        submitStyle={G.btn(
+          "linear-gradient(135deg,var(--gold-primary),var(--gold-border))",
+          "var(--text-heading)",
+          { width: "100%", opacity: authLoading ? 0.7 : 1 }
+        )}
+      />
     );
   }
-
   if (storageError) {
     return (
-      <div
-        style={{
-          ...G.app,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          padding: 18,
-        }}
-      >
-        <div
-          style={{
-            ...G.card(),
-            width: "100%",
-            textAlign: "right",
-            border: "1.5px solid var(--red-border)",
-            background: "var(--red-bg)",
-            color: "var(--text-body)",
-          }}
-        >
-          <div style={{ fontSize: 15, fontWeight: 800, color: "#D95555", marginBottom: 8 }}>
-            خطأ في الاتصال بقاعدة البيانات
-          </div>
-          <div style={{ fontSize: 13, lineHeight: 1.8 }}>{storageError}</div>
-        </div>
-      </div>
+      <StorageErrorScreen
+        message={storageError}
+        appStyle={G.app}
+        cardStyle={G.card()}
+      />
     );
   }
 
@@ -9999,273 +5988,25 @@ useEffect(() => {
   : state;
 
   return (
-    <div style={G.app}>
-      <div style={G.hdr}>
-        <div
-  style={{
-    position: "relative",
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 12,
-    minHeight: 44,
-    direction: "ltr",
-  }}
->
-  <div
-    style={{
-      display: "flex",
-      justifyContent: "flex-start",
-      alignItems: "center",
-      minWidth: 0,
-      direction: "rtl",
-    }}
-  >
-    <select
-      value={selectedViewMonth}
-      onChange={(e) => setSelectedViewMonth(e.target.value)}
-      style={{
-        fontSize: 12,
-        color: "#8A6820",
-        background: "var(--gold-light)",
-        padding: "6px 12px",
-        borderRadius: 20,
-        border: "1px solid var(--gold-border)",
-        fontWeight: 600,
-        outline: "none",
-      }}
+    <LocaleProvider
+      language={appLanguage}
+      currency={state.settings?.locale?.currency || "JOD"}
     >
-      <option value="current">
-        {currentMonthLabel}
-      </option>
-
-      {snapshots.map((snap) => (
-        <option key={snap.id} value={snap.id}>
-          {formatMonthKey(snap.month)}
-        </option>
-      ))}
-    </select>
-    {selectedViewSnapshot && (
-      <span
-        style={{
-          marginRight: 6,
-          color: "#8A6820",
-          background: "var(--gold-light)",
-          border: "1px solid var(--gold-border)",
-          borderRadius: 999,
-          padding: "3px 7px",
-          fontSize: 9,
-          fontWeight: 800,
+    <div style={{ ...G.app, direction: appDirection }}>
+<AppHeader
+        selectedMonth={selectedViewMonth}
+        currentMonthLabel={currentMonthLabel}
+        snapshots={snapshots}
+        snapshotView={Boolean(selectedViewSnapshot)}
+        onMonthChange={handleViewMonthChange}
+        onLogout={() => {
+          setAuthSession(null);
+          setStorageReady(false);
+          setStorageError("");
         }}
-      >
-        عرض فقط
-      </span>
-    )}
-    <button
-      type="button"
-      onClick={() => {
-        setAuthSession(null);
-        setStorageReady(false);
-        setStorageError("");
-      }}
-      style={{
-        marginRight: 6,
-        border: "1px solid var(--border-soft)",
-        background: "var(--bg-secondary)",
-        color: "var(--text-muted)",
-        borderRadius: 999,
-        padding: "5px 8px",
-        fontSize: 10,
-        fontWeight: 700,
-        cursor: "pointer",
-        fontFamily: "inherit",
-      }}
-    >
-      تسجيل خروج
-    </button>
-  </div>
-
-  <div
-    style={{
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "flex-end",
-      gap: 8,
-      direction: "rtl",
-    }}
-  >
-    <div style={{ textAlign: "right" }}>
-      <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text-heading)" }}>
-        مدير الثروة الذكي
-      </div>
-      <div style={{ fontSize: 10, color: "var(--text-faint)", fontWeight: 700, letterSpacing: "0.09em", textTransform: "uppercase" }}>
-        Smart Wealth Tracker
-      </div>
-    </div>
-
-    <div
-      style={{
-        width: 36,
-        height: 36,
-        background: "linear-gradient(135deg, var(--gold-primary), var(--gold-dark))",
-        borderRadius: 10,
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        fontSize: 16,
-        fontWeight: 800,
-        color: "#fff",
-      }}
-    >
-      💎
-    </div>
-  </div>
-</div>
-        {false && <style>
-  {`
-    @keyframes drawerIn {
-      from {
-        opacity: 0;
-        transform: translateX(100%);
-      }
-
-      to {
-        opacity: 1;
-        transform: translateX(0);
-      }
-    }
-  `}
-</style>}
-
-       {false && <>
-  
-  {menuOpen && (
-    <>
-      <div
-        onClick={() => setMenuOpen(false)}
-        style={{
-          position: "fixed",
-          top: 0,
-          right: "max(0px, calc((100vw - 480px) / 2))",
-          width: "min(100vw, 480px)",
-          height: "100dvh",
-          zIndex: 600,
-          background: "rgba(0,0,0,0.55)",
-        }}
+        headerStyle={G.hdr}
+        formatMonth={formatMonthKey}
       />
-
-      <div
-        style={{
-          position: "fixed",
-          top: 0,
-          right: "max(0px, calc((100vw - 480px) / 2))",
-          width: "min(78vw, 360px)",
-          height: "100dvh",
-          zIndex: 650,
-          background: "var(--bg-card)",
-animation: "drawerIn 0.28s ease-out",
-          borderLeft: "1px solid var(--gold-border)",
-          boxShadow: "-18px 0 42px rgba(0,0,0,0.45)",
-          padding: "22px 18px",
-          direction: "rtl",
-          display: "flex",
-          flexDirection: "column",
-          gap: 18,
-        }}
-      >
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-justifyContent: "flex-end",
-            marginBottom: 8,
-          }}
-        >
-          <button
-            onClick={() => setMenuOpen(false)}
-            style={{
-              width: 38,
-              height: 38,
-              borderRadius: 12,
-              border: "none",
-              background: "transparent",
-              color: "var(--text-body)",
-              fontSize: 30,
-              cursor: "pointer",
-            }}
-          >
-            ×
-          </button>
-
-          <div style={{ textAlign: "right" }}>
-            <div style={{ color: "var(--text-heading)", fontWeight: 900, fontSize: 18 }}>
-              مدير الثروة
-            </div>
-            <div style={{ color: "var(--text-muted)", fontSize: 11 }}>
-              Smart Wealth Tracker
-            </div>
-          </div>
-        </div>
-
-<div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
-            {visibleTabs.map((t) => {
-            const icon =
-              t.id === "overview"
-                ? "▦"
-                : t.id === "assets"
-                ? "◇"
-                : t.id === "liabilities"
-                ? "▣"
-                : "⚙";
-
-            return (
-              <button
-                key={t.id}
-                onClick={() => {
-                  setLiabilitiesFocusDueOnly(false);
-                  setTab(t.id);
-                  setMenuOpen(false);
-                }}
-                style={{
-                  width: "100%",
-                  minHeight: 40,
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  padding: "0 18px",
-                  borderRadius: 18,
-                  cursor: "pointer",
-                 background:
-  tab === t.id
-    ? "linear-gradient(135deg, rgba(201,168,64,0.24), rgba(232,201,106,0.14))"
-    : "transparent",
-border:
-  tab === t.id
-    ? "1px solid rgba(232,201,106,0.55)"
-    : "1px solid transparent",
-color: tab === t.id ? "var(--text-heading)" : "var(--text-body)",
-fontFamily: "inherit",
-fontSize: 16,
-fontWeight: tab === t.id ? 900 : 700,
-boxShadow:
-  tab === t.id
-    ? "0 10px 28px rgba(201,168,64,0.18)"
-    : "none",
-                }}
-              >
-                <span>{t.label}</span>
-                <span style={{ fontSize: 24, opacity: tab === t.id ? 1 : 0.75 }}>
-                  {icon}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-      </div>
-    </>
-  )}
-</>}
-</div>
 
       <main key={`${tab}-${selectedViewMonth}`} className="tab-page-motion">
         {tab === "overview" && (
@@ -10273,13 +6014,11 @@ boxShadow:
             state={viewState}
             setState={setState}
             readOnly={isSnapshotView}
-            onOpenReports={() => setTab("reports")}
             onOpenDueLiabilities={() => {
               if (isSnapshotView) return;
               setLiabilitiesFocusDueOnly(true);
               setTab("liabilities");
             }}
-            onClearState={handleClearState}
             onAllocateSurplus={(amount) => {
               setExtraCashPreset({
                 amount,
@@ -10315,12 +6054,13 @@ boxShadow:
           <SettingsScreen
             state={state}
             setState={setState}
-            onCloseMonth={handleCloseMonth}
+            authSession={authSession}
+            onResetAllData={handleClearState}
           />
         )}
       </main>
 
-      <FloatingBottomBar
+      <BottomNavigation
         tabs={visibleTabs}
         activeTab={tab}
         onSelect={(id) => {
@@ -10340,5 +6080,6 @@ boxShadow:
   />
 )}
     </div>
+    </LocaleProvider>
   );
   }

@@ -1,0 +1,73 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="760" viewBox="0 0 1000 760">
+  <defs>
+    <linearGradient id="appBg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0B4B89"/>
+      <stop offset="0.48" stop-color="#123F76"/>
+      <stop offset="1" stop-color="#082A55"/>
+    </linearGradient>
+    <linearGradient id="cardBg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#3478B8"/>
+      <stop offset="0.52" stop-color="#245B98"/>
+      <stop offset="1" stop-color="#17477F"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="12" stdDeviation="18" flood-color="#00152F" flood-opacity="0.35"/>
+    </filter>
+  </defs>
+
+  <rect width="1000" height="760" fill="#071F3D"/>
+  <text x="500" y="54" text-anchor="middle" fill="#FFFFFF" font-family="Tajawal, Arial, sans-serif" font-size="28" font-weight="800">RED ACCENT SCALE</text>
+  <text x="500" y="83" text-anchor="middle" fill="rgba(255,255,255,0.68)" font-family="Tajawal, Arial, sans-serif" font-size="15">Same colors on the app background and the lighter card</text>
+
+  <rect x="40" y="112" width="440" height="602" rx="24" fill="url(#appBg)" stroke="rgba(255,255,255,0.18)" filter="url(#shadow)"/>
+  <rect x="520" y="112" width="440" height="602" rx="24" fill="url(#cardBg)" stroke="rgba(255,255,255,0.24)" filter="url(#shadow)"/>
+  <text x="260" y="153" text-anchor="middle" fill="#FFFFFF" font-family="Tajawal, Arial, sans-serif" font-size="18" font-weight="700">DARK APP BACKGROUND</text>
+  <text x="740" y="153" text-anchor="middle" fill="#FFFFFF" font-family="Tajawal, Arial, sans-serif" font-size="18" font-weight="700">LIGHTER CARD</text>
+
+  <g font-family="Tajawal, Arial, sans-serif">
+    <g transform="translate(70 184)">
+      <rect width="380" height="68" rx="14" fill="rgba(255,255,255,0.07)" stroke="rgba(255,154,154,0.45)"/>
+      <rect width="6" height="68" rx="3" fill="#FF9A9A"/>
+      <circle cx="38" cy="34" r="12" fill="#FF9A9A"/><text x="38" y="40" text-anchor="middle" fill="#123A6B" font-size="16" font-weight="900">!</text>
+      <text x="65" y="29" fill="#FF9A9A" font-size="18" font-weight="900">A  #FF9A9A</text><text x="65" y="50" fill="#FF9A9A" font-size="13">Uncovered 120 JOD</text>
+    </g>
+    <g transform="translate(550 184)">
+      <rect width="380" height="68" rx="14" fill="rgba(255,255,255,0.07)" stroke="rgba(255,154,154,0.55)"/><rect width="6" height="68" rx="3" fill="#FF9A9A"/><circle cx="38" cy="34" r="12" fill="#FF9A9A"/><text x="38" y="40" text-anchor="middle" fill="#123A6B" font-size="16" font-weight="900">!</text><text x="65" y="29" fill="#FF9A9A" font-size="18" font-weight="900">A  #FF9A9A</text><text x="65" y="50" fill="#FF9A9A" font-size="13">Uncovered 120 JOD</text>
+    </g>
+
+    <g transform="translate(70 268)">
+      <rect width="380" height="68" rx="14" fill="rgba(255,255,255,0.07)" stroke="rgba(255,133,133,0.45)"/><rect width="6" height="68" rx="3" fill="#FF8585"/><circle cx="38" cy="34" r="12" fill="#FF8585"/><text x="38" y="40" text-anchor="middle" fill="#123A6B" font-size="16" font-weight="900">!</text><text x="65" y="29" fill="#FF8585" font-size="18" font-weight="900">B  #FF8585</text><text x="65" y="50" fill="#FF8585" font-size="13">Uncovered 120 JOD</text>
+    </g>
+    <g transform="translate(550 268)">
+      <rect width="380" height="68" rx="14" fill="rgba(255,255,255,0.07)" stroke="rgba(255,133,133,0.55)"/><rect width="6" height="68" rx="3" fill="#FF8585"/><circle cx="38" cy="34" r="12" fill="#FF8585"/><text x="38" y="40" text-anchor="middle" fill="#123A6B" font-size="16" font-weight="900">!</text><text x="65" y="29" fill="#FF8585" font-size="18" font-weight="900">B  #FF8585</text><text x="65" y="50" fill="#FF8585" font-size="13">Uncovered 120 JOD</text>
+    </g>
+
+    <g transform="translate(70 352)">
+      <rect width="380" height="68" rx="14" fill="rgba(255,255,255,0.07)" stroke="rgba(255,112,112,0.45)"/><rect width="6" height="68" rx="3" fill="#FF7070"/><circle cx="38" cy="34" r="12" fill="#FF7070"/><text x="38" y="40" text-anchor="middle" fill="#123A6B" font-size="16" font-weight="900">!</text><text x="65" y="29" fill="#FF7070" font-size="18" font-weight="900">C  #FF7070</text><text x="65" y="50" fill="#FF7070" font-size="13">Uncovered 120 JOD</text>
+    </g>
+    <g transform="translate(550 352)">
+      <rect width="380" height="68" rx="14" fill="rgba(255,255,255,0.07)" stroke="rgba(255,112,112,0.55)"/><rect width="6" height="68" rx="3" fill="#FF7070"/><circle cx="38" cy="34" r="12" fill="#FF7070"/><text x="38" y="40" text-anchor="middle" fill="#123A6B" font-size="16" font-weight="900">!</text><text x="65" y="29" fill="#FF7070" font-size="18" font-weight="900">C  #FF7070</text><text x="65" y="50" fill="#FF7070" font-size="13">Uncovered 120 JOD</text>
+    </g>
+
+    <g transform="translate(70 436)">
+      <rect width="380" height="68" rx="14" fill="rgba(255,255,255,0.07)" stroke="rgba(255,92,103,0.45)"/><rect width="6" height="68" rx="3" fill="#FF5C67"/><circle cx="38" cy="34" r="12" fill="#FF5C67"/><text x="38" y="40" text-anchor="middle" fill="#FFFFFF" font-size="16" font-weight="900">!</text><text x="65" y="29" fill="#FF5C67" font-size="18" font-weight="900">D  #FF5C67</text><text x="65" y="50" fill="#FF5C67" font-size="13">Uncovered 120 JOD</text>
+    </g>
+    <g transform="translate(550 436)">
+      <rect width="380" height="68" rx="14" fill="rgba(255,255,255,0.07)" stroke="rgba(255,92,103,0.55)"/><rect width="6" height="68" rx="3" fill="#FF5C67"/><circle cx="38" cy="34" r="12" fill="#FF5C67"/><text x="38" y="40" text-anchor="middle" fill="#FFFFFF" font-size="16" font-weight="900">!</text><text x="65" y="29" fill="#FF5C67" font-size="18" font-weight="900">D  #FF5C67</text><text x="65" y="50" fill="#FF5C67" font-size="13">Uncovered 120 JOD</text>
+    </g>
+
+    <g transform="translate(70 520)">
+      <rect width="380" height="68" rx="14" fill="rgba(255,255,255,0.07)" stroke="rgba(255,64,85,0.45)"/><rect width="6" height="68" rx="3" fill="#FF4055"/><circle cx="38" cy="34" r="12" fill="#FF4055"/><text x="38" y="40" text-anchor="middle" fill="#FFFFFF" font-size="16" font-weight="900">!</text><text x="65" y="29" fill="#FF4055" font-size="18" font-weight="900">E  #FF4055</text><text x="65" y="50" fill="#FF4055" font-size="13">Uncovered 120 JOD</text>
+    </g>
+    <g transform="translate(550 520)">
+      <rect width="380" height="68" rx="14" fill="rgba(255,255,255,0.07)" stroke="rgba(255,64,85,0.55)"/><rect width="6" height="68" rx="3" fill="#FF4055"/><circle cx="38" cy="34" r="12" fill="#FF4055"/><text x="38" y="40" text-anchor="middle" fill="#FFFFFF" font-size="16" font-weight="900">!</text><text x="65" y="29" fill="#FF4055" font-size="18" font-weight="900">E  #FF4055</text><text x="65" y="50" fill="#FF4055" font-size="13">Uncovered 120 JOD</text>
+    </g>
+
+    <g transform="translate(70 604)">
+      <rect width="380" height="68" rx="14" fill="rgba(255,255,255,0.07)" stroke="rgba(241,34,54,0.50)"/><rect width="6" height="68" rx="3" fill="#F12236"/><circle cx="38" cy="34" r="12" fill="#F12236"/><text x="38" y="40" text-anchor="middle" fill="#FFFFFF" font-size="16" font-weight="900">!</text><text x="65" y="29" fill="#F12236" font-size="18" font-weight="900">F  #F12236</text><text x="65" y="50" fill="#F12236" font-size="13">CURRENT</text>
+    </g>
+    <g transform="translate(550 604)">
+      <rect width="380" height="68" rx="14" fill="rgba(255,255,255,0.07)" stroke="rgba(241,34,54,0.55)"/><rect width="6" height="68" rx="3" fill="#F12236"/><circle cx="38" cy="34" r="12" fill="#F12236"/><text x="38" y="40" text-anchor="middle" fill="#FFFFFF" font-size="16" font-weight="900">!</text><text x="65" y="29" fill="#F12236" font-size="18" font-weight="900">F  #F12236</text><text x="65" y="50" fill="#F12236" font-size="13">CURRENT</text>
+    </g>
+  </g>
+</svg>

@@ -34,9 +34,93 @@ body,
 }
 
 body {
-  background: var(--bg-page);
+  background: #0B2B52;
   color: var(--text-body);
   font-family: 'Tajawal', sans-serif;
+}
+
+.wealth-app-header select,
+.overview-screen input,
+.overview-screen select,
+.overview-screen textarea,
+.assets-screen input,
+.assets-screen select,
+.assets-screen textarea,
+.asset-modal input,
+.asset-modal select,
+.asset-modal textarea {
+  background: rgba(255, 255, 255, 0.09) !important;
+  border: 1px solid rgba(255, 255, 255, 0.16) !important;
+  color: #fff !important;
+}
+
+.settings-screen input,
+.settings-screen select,
+.settings-screen textarea {
+  background: rgba(255, 255, 255, 0.09) !important;
+  border: 1px solid rgba(255, 255, 255, 0.16) !important;
+  color: #fff !important;
+}
+
+.settings-screen option {
+  background: #123A6B;
+  color: #fff;
+}
+
+.settings-screen input::placeholder,
+.settings-screen textarea::placeholder {
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.wealth-app-header option,
+.overview-screen option,
+.assets-screen option,
+.asset-modal option {
+  background: #123A6B;
+  color: #fff;
+}
+
+.overview-screen input::placeholder,
+.overview-screen textarea::placeholder,
+.assets-screen input::placeholder,
+.assets-screen textarea::placeholder,
+.asset-modal input::placeholder,
+.asset-modal textarea::placeholder {
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.home-expense-cta {
+  width: 100%;
+  min-height: 52px;
+  margin: 2px 0 14px;
+  border: none;
+  border-radius: 17px;
+  background: linear-gradient(135deg, #FFD348 0%, #FFB800 100%);
+  color: #0B2B52;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 900;
+  cursor: pointer;
+  box-shadow: 0 10px 22px rgba(255, 184, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.38);
+}
+
+.home-expense-panel input,
+.home-expense-panel select {
+  min-height: 44px;
+}
+
+.expense-amount-input::-webkit-inner-spin-button,
+.expense-amount-input::-webkit-outer-spin-button {
+  margin: 0;
+  appearance: none;
+}
+
+.expense-amount-input {
+  appearance: textfield;
 }
 
 ::-webkit-scrollbar {
@@ -85,6 +169,146 @@ button:hover {
   animation: tabPageIn 0.24s ease backwards;
 }
 
+.assets-screen {
+  position: relative;
+  background-size: 190% 100%, 100% 100% !important;
+  background-image:
+    linear-gradient(112deg, transparent 0%, transparent 31%, var(--ambient-beam-color, rgba(72, 196, 255, 0.12)) 46%, transparent 61%, transparent 100%),
+    linear-gradient(180deg, #083B76 0%, #064886 52%, #073264 100%) !important;
+  animation: assetsAmbientLight var(--ambient-light-duration, 14s) ease-in-out infinite alternate;
+}
+
+.liabilities-screen {
+  position: relative;
+  background-size: 190% 100%, 100% 100% !important;
+  background-image:
+    linear-gradient(112deg, transparent 0%, transparent 31%, var(--ambient-beam-color, rgba(72, 196, 255, 0.12)) 46%, transparent 61%, transparent 100%),
+    linear-gradient(180deg, #083B76 0%, #064886 52%, #073264 100%) !important;
+  animation: assetsAmbientLight var(--ambient-light-duration, 14s) ease-in-out infinite alternate;
+}
+
+.liabilities-screen input,
+.liabilities-screen select,
+.liabilities-screen textarea {
+  background: rgba(255, 255, 255, 0.09) !important;
+  border: 1px solid rgba(255, 255, 255, 0.16) !important;
+  color: #fff !important;
+}
+
+.liabilities-screen option {
+  background: #123A6B;
+  color: #fff;
+}
+
+.settings-screen {
+  --bg-page: #082A55;
+  --bg-card: rgba(33, 86, 145, 0.82);
+  --bg-secondary: rgba(255, 255, 255, 0.075);
+  --border-soft: rgba(255, 255, 255, 0.16);
+  --gold-primary: #FFC62D;
+  --gold-dark: #FFC62D;
+  --gold-light: rgba(255, 198, 45, 0.14);
+  --gold-border: rgba(255, 198, 45, 0.48);
+  --text-heading: #FFFFFF;
+  --text-body: #FFFFFF;
+  --text-muted: rgba(255, 255, 255, 0.72);
+  --text-faint: rgba(255, 255, 255, 0.52);
+  --green-bg: rgba(76, 229, 140, 0.12);
+  --green-border: rgba(76, 229, 140, 0.42);
+  --red-bg: rgba(255, 104, 104, 0.12);
+  --red-border: rgba(255, 104, 104, 0.42);
+  position: relative;
+  background-size: 180% 100%, 100% 100%;
+  background-image:
+    linear-gradient(112deg, transparent 0%, transparent 32%, rgba(85, 217, 255, 0.09) 47%, transparent 62%),
+    linear-gradient(180deg, #0B4B89 0%, #123F76 48%, #082A55 100%);
+  animation: assetsAmbientLight var(--ambient-light-duration, 14s) ease-in-out infinite alternate;
+}
+
+.settings-dashboard-live .asset-dashboard-card {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.13),
+    0 11px 25px rgba(0, 23, 54, 0.23);
+}
+
+.asset-dashboard-card {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  transition:
+    border-color var(--effect-hover-duration, 180ms) ease,
+    box-shadow var(--effect-hover-duration, 180ms) ease,
+    transform var(--effect-hover-duration, 180ms) ease;
+}
+
+.asset-dashboard-card::before {
+  content: "";
+  position: absolute;
+  z-index: 0;
+  top: -45%;
+  bottom: -45%;
+  left: -55%;
+  width: 34%;
+  pointer-events: none;
+  transform: skewX(-18deg);
+  background: linear-gradient(90deg, transparent, var(--card-sheen-color, rgba(255, 255, 255, 0.16)), transparent);
+  animation: assetCardSheen var(--card-sheen-duration, 8s) ease-in-out infinite;
+}
+
+.asset-dashboard-card > * {
+  position: relative;
+  z-index: 1;
+}
+
+.asset-dashboard-card:hover {
+  border-color: var(--card-hover-border, rgba(158, 225, 255, 0.62)) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    0 14px 30px rgba(0, 20, 52, 0.32),
+    0 0 22px var(--card-hover-glow, rgba(55, 183, 255, 0.12)) !important;
+}
+
+.asset-icon-shell {
+  animation: assetIconGlow var(--icon-glow-duration, 3.6s) ease-in-out infinite alternate;
+}
+
+@media (max-width: 390px) {
+  .asset-summary-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  }
+}
+
+.asset-summary-tile:nth-child(2)::before,
+.asset-list-card::before {
+  animation-delay: var(--effect-stagger-step, 1.2s);
+}
+
+.asset-summary-tile:nth-child(3)::before,
+.asset-detail-panel::before {
+  animation-delay: calc(var(--effect-stagger-step, 1.2s) * 2);
+}
+
+.asset-summary-tile:nth-child(4)::before,
+.asset-distribution-card::before {
+  animation-delay: calc(var(--effect-stagger-step, 1.2s) * 3);
+}
+
+@keyframes assetsAmbientLight {
+  from { background-position: 100% 0, 0 0; }
+  to { background-position: -35% 0, 0 0; }
+}
+
+@keyframes assetCardSheen {
+  0%, 38% { left: -55%; opacity: 0; }
+  48% { opacity: 0.7; }
+  62%, 100% { left: 125%; opacity: 0; }
+}
+
+@keyframes assetIconGlow {
+  from { filter: brightness(var(--icon-brightness-from, 0.96)) saturate(1); }
+  to { filter: brightness(var(--icon-brightness-to, 1.14)) saturate(var(--icon-saturation-to, 1.18)); }
+}
+
 @keyframes tabPageIn {
   from {
     opacity: 0;
@@ -99,6 +323,13 @@ button:hover {
 
 @media (prefers-reduced-motion: reduce) {
   .tab-page-motion {
+    animation: none;
+  }
+
+  .assets-screen,
+  .liabilities-screen,
+  .asset-dashboard-card::before,
+  .asset-icon-shell {
     animation: none;
   }
 }

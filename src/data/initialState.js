@@ -7,6 +7,13 @@ export const INITIAL_STATE = {
       goldGramPrice: 0,
       silverGramPrice: 0,
     },
+    notifications: {
+      budget: true,
+      liabilities: true,
+      expenses: false,
+      reports: false,
+      sent: {},
+    },
   },
 
   assets: {

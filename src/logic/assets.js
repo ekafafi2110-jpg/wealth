@@ -174,7 +174,7 @@ export function deductFromAsset(state, key, amount) {
     return {
       nextState: state,
       success: false,
-      message: `الرصيد غير كافٍ. المتاح فقط ${available.toFixed(2)} د.أ`,
+      message: `الرصيد غير كافٍ. المتاح فقط ${available.toFixed(2)}`,
     };
   }
 
@@ -279,5 +279,93 @@ export function transferBetweenAssets(state, fromKey, toKey, amount) {
   return {
     success: true,
     nextState: next,
+  };
+}
+
+export function liquidateAssetUnits(
+  state,
+  fromKey,
+  toKey,
+  units,
+  unitPrice
+) {
+  const soldUnits = Number(units || 0);
+  const salePrice = Number(unitPrice || 0);
+
+  if (soldUnits <= 0 || salePrice <= 0) {
+    return {
+      success: false,
+      nextState: state,
+      message: "أدخل عدد الوحدات وسعر البيع بشكل صحيح",
+    };
+  }
+
+  const next = structuredClone(state);
+  const [type, idRaw] = String(fromKey).split(":");
+  const id = Number(idRaw);
+  let source;
+
+  if (type === "gold") source = next.assets.gold.find((item) => item.id === id);
+  if (type === "silver") source = next.assets.silver.find((item) => item.id === id);
+  if (type === "stock") source = next.assets.stocks.find((item) => item.id === id);
+  if (type === "custom") {
+    source = next.assets.custom.find(
+      (item) => item.id === id && item.type === "unit"
+    );
+  }
+
+  if (!source) {
+    return {
+      success: false,
+      nextState: state,
+      message: "الأصل المختار لا يدعم البيع بالوحدات",
+    };
+  }
+
+  const availableUnits = Number(source.units || 0);
+  if (soldUnits > availableUnits) {
+    return {
+      success: false,
+      nextState: state,
+      message: `عدد الوحدات غير كافٍ. المتاح ${availableUnits.toFixed(4)}`,
+    };
+  }
+
+  source.units = Number((availableUnits - soldUnits).toFixed(4));
+  const saleAmount = Number((soldUnits * salePrice).toFixed(2));
+  const fundedState = addToAsset(next, toKey, saleAmount);
+
+  fundedState.assetHistory = [
+    ...(fundedState.assetHistory || []),
+    {
+      id: `${Date.now()}-sale`,
+      date: new Date().toISOString(),
+      type: "asset_units_liquidated",
+      source: "asset_transfer",
+      assetKey: fromKey,
+      destinationKey: toKey,
+      unitsSold: soldUnits,
+      unitPrice: salePrice,
+      amount: saleAmount,
+      unitsBefore: availableUnits,
+      unitsAfter: source.units,
+    },
+  ];
+
+  fundedState.transactions.push({
+    id: Date.now(),
+    type: "asset_units_liquidated",
+    from: fromKey,
+    to: toKey,
+    units: soldUnits,
+    unitPrice: salePrice,
+    amount: saleAmount,
+    date: new Date().toISOString(),
+  });
+
+  return {
+    success: true,
+    nextState: fundedState,
+    amount: saleAmount,
   };
 }

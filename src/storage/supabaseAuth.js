@@ -165,3 +165,15 @@ export async function resetPasswordForEmail(email) {
 
   return readAuthResponse(response);
 }
+
+export async function updatePassword(accessToken, password) {
+  assertConfigured();
+
+  const response = await fetch(authEndpoint("user"), {
+    method: "PUT",
+    headers: headers({ Authorization: `Bearer ${accessToken}` }),
+    body: JSON.stringify({ password }),
+  });
+
+  return readAuthResponse(response);
+}
