@@ -183,42 +183,90 @@ createdAt: new Date().toISOString(),
     );
 
     card.status = "pending";
+
+    if (budgetCovered > 0) {
+      const originMonth = next.currentMonth || today.slice(0, 7);
+      const [year, month] = String(originMonth).split("-").map(Number);
+      const lastDay = new Date(year, month, 0).getDate();
+      const dueDate = `${originMonth}-${String(lastDay).padStart(2, "0")}`;
+      next.reservedPayments = next.reservedPayments || [];
+      next.reservedPayments.push({
+        id: `${operationId}-reserved-card`,
+        amount: budgetCovered,
+        balance: budgetCovered,
+        status: "pending",
+        source: "card_payment",
+        category: expenseData.category || "غير مصنف",
+        note: expenseData.note || "",
+        creditorName: card.name || "بطاقة",
+        cardId: card.id,
+        dueDate,
+        dueDay: lastDay,
+        originMonth,
+        expenseId: expense.id,
+        date: today,
+        createdAt: now,
+      });
+    }
   }
 
   if (expenseData.paymentMethod === "liability") {
-  next.currentLiabilities.push({
-    id: operationId + 1,
-    type: "direct_liability",
-    name: expenseData.liabilityName || "دين مباشر من مصروف",
+    const originMonth = next.currentMonth || today.slice(0, 7);
+    const creditorName = expenseData.liabilityName || "دائن";
 
-    // إجمالي الدين
-    amount,
-    balance: amount,
+    if (budgetCovered > 0) {
+      next.reservedPayments = next.reservedPayments || [];
+      next.reservedPayments.push({
+        id: `${operationId}-reserved`,
+        amount: budgetCovered,
+        balance: budgetCovered,
+        status: "pending",
+        source: "expense_payment",
+        category: expenseData.category || "غير مصنف",
+        note: expenseData.note || "",
+        creditorName,
+        dueDate: expenseData.dueDate || "",
+        dueDay: expenseData.dueDate
+          ? new Date(expenseData.dueDate).getDate()
+          : 1,
+        originMonth,
+        expenseId: expense.id,
+        date: today,
+        createdAt: now,
+      });
+    }
 
-    // الجزء المغطى من سقف الصرف، وهو مبلغ برسم الدفع
-    payableBuffer: budgetCovered,
-
-    // الجزء غير المغطى بسبب تجاوز السقف
-    uncoveredDebt: overBudget,
-
-    dueDate: expenseData.dueDate || "",
-    dueDay: expenseData.dueDate
-      ? new Date(expenseData.dueDate).getDate()
-      : 1,
-
-    status: "pending",
-    source: "expense_payment",
-    date: today,
-createdAt: now,
-    expenseId: expense.id,
-  });
-}
+    if (overBudget > 0) {
+      next.currentLiabilities.push({
+        id: operationId + 1,
+        type: "direct_liability",
+        name: creditorName,
+        amount: overBudget,
+        balance: overBudget,
+        payableBuffer: 0,
+        uncoveredDebt: overBudget,
+        dueDate: expenseData.dueDate || "",
+        dueDay: expenseData.dueDate
+          ? new Date(expenseData.dueDate).getDate()
+          : 1,
+        status: "pending",
+        source: "expense_payment",
+        category: expenseData.category || "غير مصنف",
+        note: expenseData.note || "",
+        creditorName,
+        originMonth,
+        date: today,
+        createdAt: now,
+        expenseId: expense.id,
+      });
+    }
+  }
 
   if (isEmergency && emergencyLiabilityAmount > 0) {
   next.currentLiabilities.push({
     id: operationId + 1,
     type: "direct_liability",
-    name: emergencyFunding.liabilityName || "دين مصروف طارئ",
+    name: `مصروف ${expenseData.category || "غير مصنف"} طارئ`,
     amount: emergencyLiabilityAmount,
     balance: emergencyLiabilityAmount,
     payableBuffer: 0,
@@ -229,6 +277,9 @@ createdAt: now,
       : 1,
     status: "pending",
     source: "emergency_expense",
+    category: expenseData.category || "غير مصنف",
+    note: expenseData.note || "",
+    originExpenseId: expense.id,
     date: today,
 createdAt: now,
     expenseId: expense.id,

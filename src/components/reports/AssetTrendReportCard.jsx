@@ -1,4 +1,14 @@
+import {
+  Area,
+  AreaChart,
+  CartesianGrid,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 import visualIdentity from "../../theme/visualIdentity";
+import { useLocale } from "../../i18n/locale";
 
 export default function AssetTrendReportCard({
   change,
@@ -7,11 +17,17 @@ export default function AssetTrendReportCard({
   currentAssets,
   months,
   bars,
+  points = [],
   detailsOpen,
   onToggleDetails,
   onMonthsChange,
 }) {
+  const { currencyLabel } = useLocale();
   const positive = change >= 0;
+  const chartPoints = points.map((point) => ({
+    month: String(point.month || "").slice(5, 7) || "--",
+    value: Number(point.totalAssets || 0),
+  }));
 
   return (
     <section
@@ -194,6 +210,71 @@ export default function AssetTrendReportCard({
             لا توجد لقطات شهرية بعد
           </div>
         )}
+      </div>
+
+      <div
+        style={{
+          marginTop: 12,
+          padding: "11px 9px 5px",
+          borderRadius: 16,
+          border: "1px solid rgba(255,255,255,0.13)",
+          background:
+            "linear-gradient(145deg, rgba(88,158,218,0.20), rgba(16,57,109,0.16))",
+        }}
+      >
+        <div style={{ color: visualIdentity.colors.gold, fontSize: 13, fontWeight: 900 }}>
+          نمو الأصول
+        </div>
+        <div style={{ height: 168, marginTop: 7 }}>
+          {chartPoints.length ? (
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={chartPoints} margin={{ top: 10, right: 5, left: 5, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="assetReportGrowthFill" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor={visualIdentity.colors.green} stopOpacity={0.48} />
+                    <stop offset="100%" stopColor={visualIdentity.colors.green} stopOpacity={0.03} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid vertical={false} stroke="rgba(255,255,255,0.08)" strokeDasharray="3 4" />
+                <XAxis
+                  dataKey="month"
+                  axisLine={false}
+                  tickLine={false}
+                  tick={{ fill: visualIdentity.colors.textSecondary, fontSize: 9 }}
+                />
+                <YAxis hide domain={["dataMin", "dataMax"]} />
+                <Tooltip
+                  formatter={(value) => [`${Number(value || 0).toFixed(2)} ${currencyLabel}`, "الأصول"]}
+                  labelFormatter={(label) => `الشهر ${label}`}
+                  contentStyle={{
+                    borderRadius: 11,
+                    border: "1px solid rgba(85,217,255,0.35)",
+                    background: "rgba(9,42,82,0.96)",
+                    color: visualIdentity.colors.white,
+                    fontSize: 10,
+                  }}
+                  labelStyle={{ color: visualIdentity.colors.textSecondary }}
+                  itemStyle={{ color: visualIdentity.colors.green }}
+                />
+                <Area
+                  type="monotone"
+                  dataKey="value"
+                  stroke={visualIdentity.colors.green}
+                  strokeWidth={3}
+                  fill="url(#assetReportGrowthFill)"
+                  dot={{ r: 3, fill: visualIdentity.colors.green, stroke: visualIdentity.colors.white, strokeWidth: 1 }}
+                  activeDot={{ r: 5, fill: visualIdentity.semantic.warning, stroke: visualIdentity.colors.white, strokeWidth: 2 }}
+                  isAnimationActive
+                  animationDuration={900}
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          ) : (
+            <div style={{ height: "100%", display: "grid", placeItems: "center", color: visualIdentity.colors.textSecondary, fontSize: 11 }}>
+              لا توجد لقطات شهرية بعد
+            </div>
+          )}
+        </div>
       </div>
     </section>
   );

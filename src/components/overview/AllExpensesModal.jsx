@@ -8,7 +8,6 @@ export default function AllExpensesModal({
   onClose,
   onSelect,
   incomeAmount,
-  categoryColors,
 }) {
   if (!open) return null;
 
@@ -138,18 +137,18 @@ export default function AllExpensesModal({
                       whiteSpace: "nowrap",
                     }}
                   >
-                    {expense.note || expense.category}
+                    {expense.category || "غير مصنف"}
                   </strong>
                   <small
                     style={{
                       display: "block",
                       marginTop: 3,
-                      color: categoryColors[expense.category] || colors.textSecondary,
+                      color: colors.textSecondary,
                       fontSize: 9,
                       fontWeight: 700,
                     }}
                   >
-                    {expense.category} · {expense.paymentMethod}
+                    {expense.note || "بدون ملاحظة"} · {expense.paymentMethod}
                   </small>
                 </span>
                 <span style={{ color: colors.gold, fontSize: 18 }}>‹</span>

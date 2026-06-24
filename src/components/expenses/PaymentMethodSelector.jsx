@@ -1,7 +1,13 @@
 import visualIdentity from "../../theme/visualIdentity";
 import { useLocale } from "../../i18n/locale";
 
-export default function PaymentMethodSelector({ options, value, onChange, variant = "plain" }) {
+export default function PaymentMethodSelector({
+  options,
+  value,
+  activeValues,
+  onChange,
+  variant = "plain",
+}) {
   const glass = variant === "glass";
   const { t } = useLocale();
   const optionLabelKeys = {
@@ -48,7 +54,9 @@ export default function PaymentMethodSelector({ options, value, onChange, varian
         }}
       >
         {options.map((item) => {
-          const active = value === item.value;
+          const active = Array.isArray(activeValues)
+            ? activeValues.includes(item.value)
+            : value === item.value;
 
           return (
             <button
@@ -96,6 +104,18 @@ export default function PaymentMethodSelector({ options, value, onChange, varian
               >
                 {t(optionLabelKeys[item.value], item.label)}
               </span>
+              {item.amountLabel && (
+                <span
+                  style={{
+                    fontSize: 8,
+                    lineHeight: 1,
+                    fontWeight: 900,
+                    opacity: 0.86,
+                  }}
+                >
+                  {item.amountLabel}
+                </span>
+              )}
             </button>
           );
         })}

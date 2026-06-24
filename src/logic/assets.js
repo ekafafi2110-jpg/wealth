@@ -21,20 +21,22 @@ export function getAssetSources(state) {
   });
 
   state.assets.gold.forEach((g) => {
+    const unitPrice = goldPrice > 0 ? goldPrice : Number(g.wac || 0);
     list.push({
       key: `gold:${g.id}`,
       label: g.label,
       type: "gold",
-      available: Number(g.units || 0) * goldPrice,
+      available: Number(g.units || 0) * unitPrice,
     });
   });
 
   state.assets.silver.forEach((s) => {
+    const unitPrice = silverPrice > 0 ? silverPrice : Number(s.wac || 0);
     list.push({
       key: `silver:${s.id}`,
       label: s.label,
       type: "silver",
-      available: Number(s.units || 0) * silverPrice,
+      available: Number(s.units || 0) * unitPrice,
     });
   });
 
@@ -93,16 +95,17 @@ export function addToAsset(state, key, amount) {
 
   if (type === "gold") {
     const item = next.assets.gold.find((x) => x.id === id);
-    if (item && goldPrice > 0) {
-      const addedUnits = value / goldPrice;
+    const unitPrice = goldPrice > 0 ? goldPrice : Number(item?.wac || 0);
+    if (item && unitPrice > 0) {
+      const addedUnits = value / unitPrice;
       const oldUnits = Number(item.units || 0);
-      const oldWac = Number(item.wac || goldPrice);
+      const oldWac = Number(item.wac || unitPrice);
       const newUnits = oldUnits + addedUnits;
 
       item.wac =
         newUnits > 0
-          ? Number(((oldUnits * oldWac + addedUnits * goldPrice) / newUnits).toFixed(3))
-          : goldPrice;
+          ? Number(((oldUnits * oldWac + addedUnits * unitPrice) / newUnits).toFixed(3))
+          : unitPrice;
 
       item.units = Number(newUnits.toFixed(4));
     }
@@ -111,16 +114,17 @@ export function addToAsset(state, key, amount) {
 
   if (type === "silver") {
     const item = next.assets.silver.find((x) => x.id === id);
-    if (item && silverPrice > 0) {
-      const addedUnits = value / silverPrice;
+    const unitPrice = silverPrice > 0 ? silverPrice : Number(item?.wac || 0);
+    if (item && unitPrice > 0) {
+      const addedUnits = value / unitPrice;
       const oldUnits = Number(item.units || 0);
-      const oldWac = Number(item.wac || silverPrice);
+      const oldWac = Number(item.wac || unitPrice);
       const newUnits = oldUnits + addedUnits;
 
       item.wac =
         newUnits > 0
-          ? Number(((oldUnits * oldWac + addedUnits * silverPrice) / newUnits).toFixed(3))
-          : silverPrice;
+          ? Number(((oldUnits * oldWac + addedUnits * unitPrice) / newUnits).toFixed(3))
+          : unitPrice;
 
       item.units = Number(newUnits.toFixed(4));
     }
@@ -198,16 +202,18 @@ export function deductFromAsset(state, key, amount) {
 
   if (type === "gold") {
     const item = next.assets.gold.find((x) => x.id === id);
-    if (item && goldPrice > 0) {
-      item.units = Number((Number(item.units || 0) - value / goldPrice).toFixed(4));
+    const unitPrice = goldPrice > 0 ? goldPrice : Number(item?.wac || 0);
+    if (item && unitPrice > 0) {
+      item.units = Number((Number(item.units || 0) - value / unitPrice).toFixed(4));
     }
     return { nextState: next, success: true };
   }
 
   if (type === "silver") {
     const item = next.assets.silver.find((x) => x.id === id);
-    if (item && silverPrice > 0) {
-      item.units = Number((Number(item.units || 0) - value / silverPrice).toFixed(4));
+    const unitPrice = silverPrice > 0 ? silverPrice : Number(item?.wac || 0);
+    if (item && unitPrice > 0) {
+      item.units = Number((Number(item.units || 0) - value / unitPrice).toFixed(4));
     }
     return { nextState: next, success: true };
   }

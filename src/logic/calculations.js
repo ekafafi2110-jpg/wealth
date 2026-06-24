@@ -36,12 +36,18 @@ export function calcAssets(state) {
   );
 
   const gold = state.assets.gold.reduce(
-    (sum, g) => sum + Number(g.units || 0) * goldPrice,
+    (sum, g) =>
+      sum +
+      Number(g.units || 0) *
+        (goldPrice > 0 ? goldPrice : Number(g.wac || 0)),
     0
   );
 
   const silver = state.assets.silver.reduce(
-    (sum, s) => sum + Number(s.units || 0) * silverPrice,
+    (sum, s) =>
+      sum +
+      Number(s.units || 0) *
+        (silverPrice > 0 ? silverPrice : Number(s.wac || 0)),
     0
   );
 

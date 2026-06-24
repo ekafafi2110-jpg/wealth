@@ -1,10 +1,7 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Area,
   AreaChart,
-  Cell,
-  Pie,
-  PieChart,
   ResponsiveContainer,
 } from "recharts";
 import {
@@ -19,6 +16,7 @@ import stocksUpIcon from "../../assets/icons/stocks-up.svg";
 import silverBarsIcon from "../../assets/icons/silver-bars.svg";
 import propertyHouseIcon from "../../assets/icons/property-house.svg";
 import goodsBoxIcon from "../../assets/icons/goods-box.svg";
+import AssetDistributionCard from "./AssetDistributionCard";
 
 const ASSET_ICON_FILES = {
   cash: cashWalletIcon,
@@ -28,14 +26,6 @@ const ASSET_ICON_FILES = {
   silver: silverBarsIcon,
   fixed: propertyHouseIcon,
   goods: goodsBoxIcon,
-};
-
-const SUMMARY_LABEL_KEYS = {
-  cash: "expenses.cash",
-  banks: "assets.bankAccounts",
-  gold: "assets.gold",
-  stocks: "assets.stocks",
-  other: "assets.other",
 };
 
 const money = (value) =>
@@ -71,7 +61,6 @@ function AssetIcon({ name, size = 22 }) {
 
 export default function AssetsDashboard({
   totalAssets,
-  summaryItems,
   assetRows,
   distribution,
   trendPoints,
@@ -83,14 +72,7 @@ export default function AssetsDashboard({
   const { direction, t } = useLocale();
   const [selectedAssetKey, setSelectedAssetKey] = useState("");
   const [animatedNetWorth, setAnimatedNetWorth] = useState(0);
-  const detailRef = useRef(null);
   const selectedAsset = assetRows.find((row) => row.id === selectedAssetKey);
-
-  useEffect(() => {
-    if (selectedAssetKey) {
-      detailRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-    }
-  }, [selectedAssetKey]);
 
   useEffect(() => {
     const target = Number(totalAssets || 0);
@@ -270,62 +252,39 @@ export default function AssetsDashboard({
         </div>
       </section>
 
-      <div
-        className="asset-summary-grid"
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(5, minmax(0, 1fr))",
-          gap: 8,
-          marginBottom: 12,
-        }}
-      >
-        {summaryItems.map((item) => (
-          <div
-            key={item.key}
-            className="asset-dashboard-card asset-summary-tile"
-            style={{
-              ...card,
-              padding: "10px 6px",
-              minWidth: 0,
-              minHeight: 132,
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              textAlign: "center",
-              background: `linear-gradient(145deg, ${item.color}32 0%, rgba(49,108,171,0.94) 46%, rgba(23,70,128,0.96) 100%)`,
-              border: `1px solid ${item.color}66`,
-              boxShadow: `inset 0 1px 0 rgba(255,255,255,0.14), 0 10px 24px ${item.color}18`,
-            }}
-          >
-            <div style={{ minHeight: 68, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-start", gap: 5 }}>
-              <div className="asset-icon-shell" style={{ ...iconBox(item.color), width: 34, height: 34, flexBasis: 34, fontSize: 16 }}>
-                <AssetIcon name={item.icon} color={item.color} size={18} />
-              </div>
-              <span style={{ minHeight: 27, width: "100%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: ["banks", "other"].includes(item.key) ? 9 : 10.5, fontWeight: 900, lineHeight: 1.25, whiteSpace: "normal", overflowWrap: "anywhere" }}>
-                {t(SUMMARY_LABEL_KEYS[item.key], item.label)}
-              </span>
-            </div>
-            <div style={{ marginTop: "auto", width: "100%", fontSize: 12, fontWeight: 900, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-              {money(item.value)}
-            </div>
-            <div style={{ marginTop: 3, color: item.change >= 0 ? visualIdentity.colors.green : visualIdentity.colors.red, fontSize: 10, fontWeight: 900 }}>
-              {item.change >= 0 ? "▲" : "▼"} {Math.abs(item.change).toFixed(1)}%
-            </div>
-          </div>
-        ))}
-      </div>
-
       {selectedAsset && (
+        <div
+          role="presentation"
+          onClick={(event) => {
+            if (event.target === event.currentTarget) setSelectedAssetKey("");
+          }}
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 1400,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 14,
+            background: "rgba(2,18,40,0.76)",
+            backdropFilter: "blur(10px)",
+          }}
+        >
         <section
-          ref={detailRef}
           className="asset-dashboard-card asset-detail-panel"
+          role="dialog"
+          aria-modal="true"
+          aria-label={`${t("assets.activity")} — ${selectedAsset.name}`}
           style={{
             ...card,
+            width: "min(100%, 460px)",
+            maxHeight: "min(82vh, 680px)",
+            overflowY: "auto",
             padding: 14,
-            marginBottom: 12,
-            scrollMarginTop: 78,
+            margin: 0,
             border: `1px solid ${selectedAsset.color}88`,
-            background: `linear-gradient(145deg, ${selectedAsset.color}25, rgba(24,73,133,0.97) 48%)`,
+            background: `linear-gradient(145deg, ${selectedAsset.color}25, rgba(24,73,133,0.98) 48%)`,
+            boxShadow: `${visualIdentity.cards.outer.boxShadow}, 0 18px 55px rgba(0,0,0,0.38)`,
           }}
         >
           <div
@@ -395,7 +354,15 @@ export default function AssetsDashboard({
             </div>
           )}
         </section>
+        </div>
       )}
+
+      <AssetDistributionCard
+        distribution={distribution}
+        totalAssets={totalAssets}
+        currencyLabel={currencyLabel}
+        variant="compact"
+      />
 
       <section className="asset-dashboard-card asset-list-card" style={{ ...card, padding: "5px 14px", marginBottom: 12 }}>
         {assetRows.map((row, index) => (
@@ -441,32 +408,6 @@ export default function AssetsDashboard({
         ))}
       </section>
 
-      <section className="asset-dashboard-card asset-distribution-card" style={{ ...card, padding: 14, marginBottom: 8 }}>
-        <div style={{ fontSize: 16, fontWeight: 900, marginBottom: 8 }}>{t("assets.allocation")} ⓘ</div>
-        <div style={{ display: "grid", gridTemplateColumns: "150px minmax(0,1fr)", alignItems: "center", gap: 8 }}>
-          <div style={{ width: 150, height: 150, position: "relative" }}>
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie data={distribution} dataKey="value" innerRadius={43} outerRadius={66} paddingAngle={1} stroke="none" isAnimationActive={false}>
-                  {distribution.map((item) => <Cell key={item.key} fill={item.color} />)}
-                </Pie>
-              </PieChart>
-            </ResponsiveContainer>
-            <div style={{ position: "absolute", inset: 0, display: "grid", placeContent: "center", textAlign: "center", pointerEvents: "none" }}>
-              <b style={{ fontSize: 18 }}>{money(totalAssets)}</b>
-              <span style={{ color: visualIdentity.colors.textSecondary, fontSize: 9 }}>{currencyLabel}</span>
-            </div>
-          </div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px 12px" }}>
-            {distribution.map((item) => (
-              <div key={item.key} style={{ display: "flex", justifyContent: "space-between", gap: 6, fontSize: 10 }}>
-                <span><i style={{ display: "inline-block", width: 8, height: 8, borderRadius: "50%", background: item.color, marginLeft: 5 }} />{t({ cash: "expenses.cash", banks: "assets.bankAccounts", gold: "assets.gold", stocks: "assets.stocks", other: "assets.other" }[item.key], item.label)}</span>
-                <b>{item.percent.toFixed(1)}%</b>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
     </div>
   );
 }

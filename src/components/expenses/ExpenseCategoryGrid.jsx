@@ -16,9 +16,9 @@ export default function ExpenseCategoryGrid({
       style={{
         display: "grid",
         gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
-        gap: large ? 8 : 7,
-        marginBottom: large ? 12 : 10,
-        padding: large ? 9 : 8,
+        gap: large ? 8 : 4,
+        marginBottom: large ? 12 : 5,
+        padding: large ? 9 : 5,
         background: visualIdentity.gradients.innerCard,
         border: visualIdentity.cards.inner.border,
         borderRadius: visualIdentity.cards.inner.borderRadius,
@@ -42,8 +42,8 @@ export default function ExpenseCategoryGrid({
               onClick={() => onSelect(category)}
               style={{
                 position: "relative",
-                minHeight: large ? 72 : 64,
-                borderRadius: large ? 15 : 13,
+                minHeight: large ? 72 : 46,
+                borderRadius: large ? 15 : 11,
                 border: active
                   ? `1.5px solid ${visualIdentity.colors.gold}`
                   : pendingAmount > 0
@@ -59,8 +59,8 @@ export default function ExpenseCategoryGrid({
                 flexDirection: "column",
                 alignItems: "center",
                 justifyContent: "center",
-                gap: large ? 6 : 5,
-                padding: large ? "8px 5px" : "7px 4px",
+                gap: large ? 6 : 2,
+                padding: large ? "8px 5px" : "3px 2px",
                 cursor: "pointer",
                 fontFamily: "inherit",
                 fontWeight: 800,
@@ -75,17 +75,17 @@ export default function ExpenseCategoryGrid({
                 <span
                   style={{
                     position: "absolute",
-                    top: large ? -8 : -7,
-                    right: large ? -8 : -7,
-                    width: large ? 21 : 19,
-                    height: large ? 21 : 19,
+                    top: large ? -8 : -6,
+                    right: large ? -8 : -6,
+                    width: large ? 21 : 17,
+                    height: large ? 21 : 17,
                     borderRadius: "999px",
                     background: visualIdentity.colors.gold,
                     color: visualIdentity.colors.navy,
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "center",
-                    fontSize: large ? 11 : 10,
+                    fontSize: large ? 11 : 9,
                     fontWeight: 900,
                     boxShadow: large
                       ? "0 6px 14px rgba(255,198,45,0.24)"
@@ -122,15 +122,15 @@ export default function ExpenseCategoryGrid({
 
               <span
                 style={{
-                  width: large ? 34 : 30,
-                  height: large ? 34 : 30,
+                  width: large ? 34 : 23,
+                  height: large ? 34 : 23,
                   borderRadius: large ? 11 : 10,
                   background: `${accent}1F`,
                   color: accent,
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
-                  fontSize: large ? 19 : 17,
+                  fontSize: large ? 19 : 13,
                   lineHeight: 1,
                   flex: large ? "0 0 auto" : undefined,
                   boxShadow:
@@ -144,7 +144,7 @@ export default function ExpenseCategoryGrid({
 
               <span
                 style={{
-                  fontSize: large ? 10.5 : 9.5,
+                  fontSize: large ? 10.5 : 8.5,
                   ...visualIdentity.typography.onDarkBody,
                   textAlign: "center",
                   lineHeight: 1.2,

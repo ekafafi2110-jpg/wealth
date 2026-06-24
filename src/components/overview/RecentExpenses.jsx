@@ -7,7 +7,6 @@ export default function RecentExpenses({
   onSelect,
   incomeAmount,
   incomeMeta,
-  categoryColors,
 }) {
   return (
     <section style={{ marginTop: 16, marginBottom: 14 }}>
@@ -65,9 +64,14 @@ export default function RecentExpenses({
                   style={{
                     display: "block",
                     color: amountColor,
-                    fontSize: 14,
+                    padding: "5px 6px",
+                    borderRadius: 9,
+                    background: income ? `${colors.green}14` : `${colors.red}16`,
+                    border: `1px solid ${income ? colors.green : colors.red}3d`,
+                    fontSize: 16,
                     fontWeight: 900,
                     fontVariantNumeric: "tabular-nums",
+                    textShadow: `0 0 7px ${amountColor}66`,
                   }}
                 >
                   {income ? "+" : "-"}{incomeAmount(expense).toFixed(2)}
@@ -97,18 +101,21 @@ export default function RecentExpenses({
                     whiteSpace: "nowrap",
                   }}
                 >
-                  {expense.note || expense.category}
+                  {expense.category || "غير مصنف"}
                 </strong>
                 <span
                   style={{
                     display: "block",
                     marginTop: 4,
-                    color: categoryColors[expense.category] || colors.textSecondary,
+                    color: colors.textSecondary,
                     fontSize: 9,
                     fontWeight: 700,
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
                   }}
                 >
-                  {expense.category} · {expense.paymentMethod}
+                  {expense.note || "بدون ملاحظة"} · {expense.paymentMethod}
                 </span>
               </div>
 

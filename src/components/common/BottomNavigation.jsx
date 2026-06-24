@@ -73,7 +73,7 @@ export default function BottomNavigation({ tabs, activeTab, onSelect }) {
         width: "100%",
         maxWidth: 440,
         zIndex: 520,
-        direction,
+        direction: "ltr",
         background: "rgba(9,36,70,0.96)",
         borderTop: "1px solid rgba(255,255,255,0.12)",
         boxShadow: "0 -10px 28px rgba(3,20,40,0.26)",
@@ -136,6 +136,7 @@ export default function BottomNavigation({ tabs, activeTab, onSelect }) {
                 style={{
                   position: "relative",
                   zIndex: 1,
+                  direction,
                   color: active ? visualIdentity.colors.gold : visualIdentity.colors.textFaint,
                   filter: active ? "drop-shadow(0 0 4px rgba(255,198,45,0.36))" : "none",
                   lineHeight: 1,

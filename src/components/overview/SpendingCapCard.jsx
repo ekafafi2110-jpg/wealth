@@ -4,7 +4,7 @@ import { useLocale } from "../../i18n/locale";
 
 const { colors, gradients, cards, typography } = visualIdentity;
 
-function CompactRecentExpenses({ items, onSelect, onShowAll, incomeAmount, categoryColors }) {
+function CompactRecentExpenses({ items, onSelect, onShowAll, incomeAmount }) {
   const { currencyLabel } = useLocale();
   return (
     <div
@@ -66,7 +66,7 @@ function CompactRecentExpenses({ items, onSelect, onShowAll, incomeAmount, categ
               width: "100%",
               minHeight: 55,
               display: "grid",
-              gridTemplateColumns: "minmax(0, 1fr) 62px",
+              gridTemplateColumns: "minmax(0, 1fr) 74px",
               alignItems: "center",
               gap: 7,
               padding: "8px 10px",
@@ -91,32 +91,40 @@ function CompactRecentExpenses({ items, onSelect, onShowAll, incomeAmount, categ
                   whiteSpace: "nowrap",
                 }}
               >
-                {expense.note || expense.category}
+                {expense.category || "غير مصنف"}
               </strong>
               <small
                 style={{
                   display: "block",
                   marginTop: 3,
-                  color: categoryColors[expense.category] || colors.textSecondary,
+                  color: colors.textSecondary,
                   fontSize: 8.5,
                   fontWeight: 700,
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
                 }}
               >
-                {expense.category}
+                {expense.note || expense.paymentMethod || "بدون ملاحظة"}
               </small>
             </span>
             <strong
               style={{
                 color: income ? colors.green : colors.red,
-                fontSize: 11,
+                padding: "5px 6px",
+                borderRadius: 9,
+                background: income ? `${colors.green}14` : `${colors.red}16`,
+                border: `1px solid ${income ? colors.green : colors.red}3d`,
+                fontSize: 14,
                 fontWeight: 900,
                 textAlign: "left",
                 fontVariantNumeric: "tabular-nums",
                 whiteSpace: "nowrap",
+                textShadow: `0 0 7px ${income ? colors.green : colors.red}66`,
               }}
             >
               {income ? "+" : "-"}{amount.toFixed(0)}
-              <small style={{ marginInlineStart: 2, fontSize: 7 }}>{currencyLabel}</small>
+              <small style={{ marginInlineStart: 3, fontSize: 8 }}>{currencyLabel}</small>
             </strong>
           </button>
         );
@@ -154,7 +162,6 @@ export default function SpendingCapCard({
   onSelectExpense,
   onShowAllExpenses,
   incomeAmount,
-  categoryColors,
 }) {
   const { currencyLabel, t } = useLocale();
   const safeProgress = Math.min(100, Math.max(0, Number(spendingProgress || 0)));
@@ -177,7 +184,6 @@ export default function SpendingCapCard({
         onSelect={onSelectExpense}
         onShowAll={onShowAllExpenses}
         incomeAmount={incomeAmount}
-        categoryColors={categoryColors}
       />
 
       <div

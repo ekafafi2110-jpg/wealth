@@ -39,6 +39,7 @@ import AddAssetModal from "./components/assets/AddAssetModal";
 import AssetTransferModal from "./components/assets/AssetTransferModal";
 import AssetDetailsList from "./components/assets/AssetDetailsList";
 import AssetsDashboard from "./components/assets/AssetsDashboard";
+import AssetDistributionCard from "./components/assets/AssetDistributionCard";
 import ExtraCashModal from "./components/assets/ExtraCashModal";
 import ExpenseSummaryReportCard from "./components/reports/ExpenseSummaryReportCard";
 import ExpenseDonut from "./components/reports/ExpenseDonut";
@@ -47,7 +48,16 @@ import AssetTrendReportCard from "./components/reports/AssetTrendReportCard";
 import ExpenseReportModal from "./components/reports/ExpenseReportModal";
 import OverBudgetReportModal from "./components/reports/OverBudgetReportModal";
 import AssetTrendDetailsModal from "./components/reports/AssetTrendDetailsModal";
+import ReportsOverview from "./components/reports/ReportsOverview";
+import ReportViewHeader from "./components/reports/ReportViewHeader";
+import CategoryBudgetGauges from "./components/reports/CategoryBudgetGauges";
+import DailySpendingHeatmap from "./components/reports/DailySpendingHeatmap";
+import MonthlyHighlights from "./components/reports/MonthlyHighlights";
+import MonthlyExpenseTrendCard from "./components/reports/MonthlyExpenseTrendCard";
+import ExpenseReportTabs from "./components/reports/ExpenseReportTabs";
+import AssetReportTabs from "./components/reports/AssetReportTabs";
 import SalaryCapSettingsSection from "./components/settings/SalaryCapSettingsSection";
+import ExpenseCategoryCapsSettings from "./components/settings/ExpenseCategoryCapsSettings";
 import SettingsDashboard from "./components/settings/SettingsDashboard";
 import SettingsSubpageShell from "./components/settings/SettingsSubpageShell";
 import AccountSecuritySettings from "./components/settings/AccountSecuritySettings";
@@ -64,6 +74,7 @@ import AppHeader from "./components/common/AppHeader";
 import CalendarDatePicker from "./components/common/CalendarDatePicker";
 import StructuralLiabilitiesCard from "./components/liabilities/StructuralLiabilitiesCard";
 import CurrentLiabilitiesCard from "./components/liabilities/CurrentLiabilitiesCard";
+import ReservedPaymentsCard from "./components/liabilities/ReservedPaymentsCard";
 import visualIdentity from "./theme/visualIdentity";
 import { LocaleProvider, currencyLabels, useLocale } from "./i18n/locale";
 import {
@@ -248,6 +259,17 @@ const G = {
   }),
 };
 
+const DEFAULT_EXPENSE_CATEGORIES = [
+  { id: "food", label: "طعام", icon: "🍽️", color: "#f59e0b", pinned: true },
+  { id: "transport", label: "مواصلات", icon: "🚗", color: "#3b82f6", pinned: true },
+  { id: "shopping", label: "تسوق", icon: "🛒", color: "#a855f7", pinned: true },
+  { id: "health", label: "صحة", icon: "💚", color: "#22c55e", pinned: true },
+  { id: "entertainment", label: "ترفيه", icon: "🎮", color: "#ec4899", pinned: true },
+  { id: "bills", label: "فواتير", icon: "🧾", color: "#7BBFF5", pinned: true },
+  { id: "fuel", label: "بنزين", icon: "⛽", color: "#f97316", pinned: true },
+  { id: "other", label: "أخرى", icon: "•••", color: "#91A9BF", isOther: true, pinned: true },
+];
+
 const HOME_UI = {
   overlay: {
     position: "fixed",
@@ -357,7 +379,9 @@ function assetBreakdownFromAssets(assets = {}, market = {}) {
     rows.push({
       key: `gold:${item.id}`,
       label: item.label || "ذهب",
-      value: Number(item.units || 0) * goldPrice,
+      value:
+        Number(item.units || 0) *
+        (goldPrice > 0 ? goldPrice : Number(item.wac || 0)),
     })
   );
 
@@ -365,7 +389,9 @@ function assetBreakdownFromAssets(assets = {}, market = {}) {
     rows.push({
       key: `silver:${item.id}`,
       label: item.label || "فضة",
-      value: Number(item.units || 0) * silverPrice,
+      value:
+        Number(item.units || 0) *
+        (silverPrice > 0 ? silverPrice : Number(item.wac || 0)),
     })
   );
 
@@ -487,7 +513,7 @@ function rebalanceCurrentLiabilityCoverage(state) {
   };
 
   const ordered = [...currentLiabilities]
-    .filter((item) => item.status !== "paid")
+    .filter((item) => item.status !== "paid" && item.source !== "expense_payment")
     .sort((a, b) => dueValue(a) - dueValue(b));
 
   for (const item of ordered) {
@@ -558,6 +584,63 @@ function rebalanceExpenseCoverageAfterCapIncrease(state) {
       (item) => item.status !== "paid" && String(item.expenseId || "") === String(expense.id)
     );
 
+    if (expense.paymentMethod === "liability") {
+      const actualLiability = relatedLiabilities.find(
+        (item) => item.source === "expense_payment"
+      );
+      const transferable = Math.min(
+        moveAmount,
+        Math.max(0, Number(actualLiability?.balance ?? actualLiability?.amount ?? 0))
+      );
+
+      if (actualLiability && transferable > 0) {
+        const existingReserved = (next.reservedPayments || []).find(
+          (item) =>
+            item.status !== "paid" &&
+            String(item.expenseId) === String(expense.id)
+        );
+
+        next.reservedPayments = next.reservedPayments || [];
+        if (existingReserved) {
+          existingReserved.amount = Number(
+            (Number(existingReserved.amount || 0) + transferable).toFixed(2)
+          );
+          existingReserved.balance = Number(
+            (Number(existingReserved.balance || 0) + transferable).toFixed(2)
+          );
+        } else {
+          next.reservedPayments.push({
+            id: `${expense.id}-reserved-rebalanced`,
+            amount: transferable,
+            balance: transferable,
+            status: "pending",
+            source: "expense_payment",
+            category: actualLiability.category || expense.category || "غير مصنف",
+            note: actualLiability.note || expense.note || "",
+            creditorName: actualLiability.creditorName || actualLiability.name || "دائن",
+            dueDate: actualLiability.dueDate || "",
+            dueDay: actualLiability.dueDay || 1,
+            originMonth:
+              actualLiability.originMonth ||
+              next.currentMonth ||
+              String(expense.date || "").slice(0, 7),
+            expenseId: expense.id,
+            date: expense.date || new Date().toISOString().slice(0, 10),
+            createdAt: new Date().toISOString(),
+          });
+        }
+
+        const nextBalance = Number(
+          Math.max(0, Number(actualLiability.balance ?? actualLiability.amount ?? 0) - transferable).toFixed(2)
+        );
+        actualLiability.amount = nextBalance;
+        actualLiability.balance = nextBalance;
+        actualLiability.payableBuffer = 0;
+        actualLiability.uncoveredDebt = nextBalance;
+        actualLiability.status = nextBalance <= 0 ? "paid" : "pending";
+      }
+    }
+
     if (expense.paymentMethod === "card" && expense.cardId) {
       const card = (next.currentLiabilities || []).find(
         (item) => item.type === "card" && String(item.id) === String(expense.cardId)
@@ -579,7 +662,51 @@ function rebalanceExpenseCoverageAfterCapIncrease(state) {
       );
     }
 
-    relatedLiabilities.forEach((item) => {
+    const coveredCard = relatedLiabilities.find((item) => item.type === "card");
+    if (coveredCard) {
+      const existingReserved = (next.reservedPayments || []).find(
+        (item) =>
+          item.status !== "paid" &&
+          String(item.expenseId || "") === String(expense.id) &&
+          String(item.cardId || "") === String(coveredCard.id)
+      );
+      const originMonth =
+        next.currentMonth || String(expense.date || "").slice(0, 7);
+      const [year, month] = String(originMonth).split("-").map(Number);
+      const lastDay = new Date(year, month, 0).getDate();
+
+      next.reservedPayments = next.reservedPayments || [];
+      if (existingReserved) {
+        existingReserved.amount = Number(
+          (Number(existingReserved.amount || 0) + moveAmount).toFixed(2)
+        );
+        existingReserved.balance = Number(
+          (Number(existingReserved.balance || 0) + moveAmount).toFixed(2)
+        );
+      } else {
+        next.reservedPayments.push({
+          id: `${expense.id}-reserved-card-rebalanced`,
+          amount: moveAmount,
+          balance: moveAmount,
+          status: "pending",
+          source: "card_payment",
+          category: expense.category || "غير مصنف",
+          note: expense.note || "",
+          creditorName: coveredCard.name || "بطاقة",
+          cardId: coveredCard.id,
+          dueDate: `${originMonth}-${String(lastDay).padStart(2, "0")}`,
+          dueDay: lastDay,
+          originMonth,
+          expenseId: expense.id,
+          date: expense.date || new Date().toISOString().slice(0, 10),
+          createdAt: new Date().toISOString(),
+        });
+      }
+    }
+
+    relatedLiabilities
+      .filter((item) => item.source !== "expense_payment")
+      .forEach((item) => {
       item.payableBuffer = Number(
         (Number(item.payableBuffer || 0) + moveAmount).toFixed(2)
       );
@@ -605,9 +732,12 @@ function Overview({
   const [showCategoryManager, setShowCategoryManager] = useState(false);
   const [showAllExpenses, setShowAllExpenses] = useState(false);
   const deficitLiabilityNameRef = useRef(null);
+  const amountInputRef = useRef(null);
   const [amount, setAmount] = useState("");
   const [category, setCategory] = useState("طعام");
   const [paymentMethod, setPaymentMethod] = useState("cash");
+  const [splitWithCash, setSplitWithCash] = useState(false);
+  const [cashSelectionExplicit, setCashSelectionExplicit] = useState(false);
   const [cardId, setCardId] = useState("");
   const [note, setNote] = useState("");
   const [pendingExpenses, setPendingExpenses] = useState([]);
@@ -615,7 +745,7 @@ function Overview({
   const [dueDate, setDueDate] = useState("");
 
 const [deficitTransfer, setDeficitTransfer] = useState(null);
-const [, setOverBudgetSource] = useState("");
+const [overBudgetSource, setOverBudgetSource] = useState("");
 const [overBudgetAssetKey, setOverBudgetAssetKey] = useState("cash");
 const [deficitFundingType, setDeficitFundingType] = useState("");
 const [overBudgetLiabilityName, setOverBudgetLiabilityName] = useState("تجاوز سقف الصرف");
@@ -624,21 +754,26 @@ const [unusualFundingMode, setUnusualFundingMode] = useState("asset");
 const [unusualCapAmount, setUnusualCapAmount] = useState("");
 const [unusualRemainderSource, setUnusualRemainderSource] = useState("asset");
 const [unusualAssetKey, setUnusualAssetKey] = useState("");
-const [unusualLiabilityName, setUnusualLiabilityName] = useState("مصروف غير اعتيادي");
 const [unusualDueDate, setUnusualDueDate] = useState("");
+  const selectExpenseCategory = (nextCategory) => {
+    setCategory(nextCategory);
+    window.requestAnimationFrame(() => {
+      amountInputRef.current?.focus();
+      });
+  };
   const cards = state.currentLiabilities.filter((x) => x.type === "card");
+  const availableCards = cards.filter(
+    (card) =>
+      Number(card.creditLimit || 0) - Number(card.balance || 0) > 0.001
+  );
   const recent = [...state.expenses].slice(-3).reverse();
   const allExpenses = [...state.expenses].reverse();
   const dueCurrentLiabilities = (state.currentLiabilities || []).filter((l) => {
   if (!l.dueDate || l.status === "paid") return false;
 
-  const due = new Date(l.dueDate);
-  const now = new Date();
-
-  return (
-    due.getFullYear() === now.getFullYear() &&
-    due.getMonth() === now.getMonth()
-  );
+  const dueMonth = String(l.dueDate).slice(0, 7);
+  const currentMonth = state.currentMonth || new Date().toISOString().slice(0, 7);
+  return dueMonth <= currentMonth;
 });
   const assetSources = getAssetSources(state);
   const isGoodsSource = (source) => {
@@ -648,17 +783,7 @@ const [unusualDueDate, setUnusualDueDate] = useState("");
       (item) => item.id === id && item.type === "unit"
     );
   };
-  const bankAssetSources = assetSources.filter((source) => source.type === "bank");
-  const defaultExpenseCategories = [
-  { id: "food", label: "طعام", icon: "🍽️", color: "#f59e0b", pinned: true },
-  { id: "transport", label: "مواصلات", icon: "🚗", color: "#3b82f6", pinned: true },
-  { id: "shopping", label: "تسوق", icon: "🛒", color: "#a855f7", pinned: true },
-  { id: "health", label: "صحة", icon: "💚", color: "#22c55e", pinned: true },
-  { id: "entertainment", label: "ترفيه", icon: "🎮", color: "#ec4899", pinned: true },
-  { id: "bills", label: "فواتير", icon: "🧾", color: "var(--text-faint)", pinned: true },
-  { id: "fuel", label: "بنزين", icon: "⛽", color: "#f97316", pinned: true },
-  { id: "other", label: "أخرى", icon: "•••", color: "var(--text-muted)", isOther: true, pinned: true },
-];
+  const defaultExpenseCategories = DEFAULT_EXPENSE_CATEGORIES;
 
 const savedExpenseCategories =
   state.expenseCategories?.items ||
@@ -689,6 +814,9 @@ const mainExpenseCategories = pinnedExpenseCategories;
     0
   );
   const pendingCount = pendingExpenses.length;
+  const selectedPaymentCard = availableCards.find(
+    (card) => String(card.id) === String(cardId)
+  );
   const pendingByCategory = pendingExpenses.reduce((acc, item) => {
     acc[item.category] = Number((Number(acc[item.category] || 0) + Number(item.amount || 0)).toFixed(2));
     return acc;
@@ -718,7 +846,17 @@ const mainExpenseCategories = pinnedExpenseCategories;
   const selectedExpenseAsset = Number(
     selectedExpense?.emergencyFunding?.assetAmount || 0
   );
+  const selectedExpenseFunding = selectedExpense?.overBudgetFunding || null;
+  const selectedExpenseFundingLabel = selectedExpenseFunding
+    ? selectedExpenseFunding.type === "card"
+      ? `بطاقة — ${selectedExpenseFunding.label || "بطاقة"}`
+      : selectedExpenseFunding.type === "liability"
+        ? `التزام — ${selectedExpenseFunding.label || "دائن"}`
+        : `أصل — ${selectedExpenseFunding.label || "أصل"}`
+    : "";
 const hasSpendingCap = Number(budget.remainingCap || 0) > 0;
+const isSpendingCapExhausted =
+  Number(budget.spendingCap || 0) > 0 && Number(budget.remainingCap || 0) <= 0;
 const uncoveredAmount = Math.max(
   0,
   enteredAmount - Number(budget.remainingCap || 0)
@@ -735,7 +873,13 @@ const deficitSourceNeedsSale = Boolean(
   selectedDeficitSource &&
     !["cash", "bank"].includes(selectedDeficitSource.type)
 );
-const showLegacyDeficitPanel = false;
+const isMixedPayment =
+  splitWithCash &&
+  hasSpendingCap &&
+  amountExceedsCap &&
+  !["", "cash", "emergency"].includes(paymentMethod);
+const showLegacyDeficitPanel =
+  amountExceedsCap && (paymentMethod === "cash" || isMixedPayment);
 
 useEffect(() => {
   const timer = window.setTimeout(() => {
@@ -745,20 +889,47 @@ useEffect(() => {
 
     if (!hasSpendingCap && paymentMethod === "cash") {
       setPaymentMethod("");
+      setSplitWithCash(false);
+      setCashSelectionExplicit(false);
+      setDeficitFundingType("");
+      setOverBudgetSource("");
     }
 
-    if (hasSpendingCap && !amountExceedsCap && ["", "asset"].includes(paymentMethod)) {
+    if (
+      hasSpendingCap &&
+      amountExceedsCap &&
+      paymentMethod === "cash" &&
+      !cashSelectionExplicit
+    ) {
+      setPaymentMethod("");
+      setSplitWithCash(false);
+    }
+
+    if (hasSpendingCap && !amountExceedsCap && paymentMethod === "") {
       setPaymentMethod("cash");
+    }
+
+    if (!amountExceedsCap && splitWithCash) {
+      setSplitWithCash(false);
     }
   }, 0);
 
   return () => window.clearTimeout(timer);
-}, [amountExceedsCap, hasSpendingCap, paymentMethod, unusualFundingMode]);
+}, [
+  amountExceedsCap,
+  cashSelectionExplicit,
+  hasSpendingCap,
+  paymentMethod,
+  splitWithCash,
+  unusualFundingMode,
+]);
 
   const resetExpenseDraft = () => {
     setAmount("");
     setCategory("طعام");
     setPaymentMethod("cash");
+    setSplitWithCash(false);
+    setCashSelectionExplicit(false);
     setCardId("");
     setNote("");
     setPendingExpenses([]);
@@ -774,7 +945,6 @@ useEffect(() => {
     setUnusualCapAmount("");
     setUnusualRemainderSource("asset");
     setUnusualAssetKey("");
-    setUnusualLiabilityName("مصروف طارئ");
     setUnusualDueDate("");
   };
 
@@ -801,6 +971,10 @@ useEffect(() => {
     }
     if (!paymentMethod) {
       alert("اختر أسلوب الدفع قبل إضافة البند");
+      return;
+    }
+    if (isMixedPayment) {
+      alert("التسجيل المتعدد غير متاح مع تقسيم الدفع. سجل هذا المصروف منفرداً.");
       return;
     }
     if (paymentMethod === "emergency") {
@@ -848,36 +1022,119 @@ useEffect(() => {
       return;
     }
 
+    const canSplit = hasSpendingCap && amountExceedsCap;
+    const configureMixedMethod = (method) => {
+      setPaymentMethod(method);
+      setSplitWithCash(true);
+      setCashSelectionExplicit(true);
+      setDeficitFundingType(method);
+      setOverBudgetSource(method === "asset" ? "" : method);
+
+      if (method === "liability") {
+        setOverBudgetLiabilityName(liabilityName || "تجاوز سقف الصرف");
+        setOverBudgetDueDate(dueDate || "");
+        window.setTimeout(() => {
+          deficitLiabilityNameRef.current?.focus();
+        }, 0);
+      }
+    };
+
     if (value === "emergency") {
       setPaymentMethod(value);
+      setSplitWithCash(false);
+      setCashSelectionExplicit(false);
+      setDeficitFundingType("");
+      setOverBudgetSource("");
       setUnusualFundingMode("asset");
       setUnusualAssetKey("");
       return;
     }
 
-    if (value === "asset") {
-      setPaymentMethod(value);
-      openDeficitTransfer("all");
+    if (value === "cash") {
+      if (canSplit && !["", "cash", "emergency"].includes(paymentMethod)) {
+        if (isMixedPayment) {
+          setSplitWithCash(false);
+          setCashSelectionExplicit(false);
+          setDeficitFundingType("");
+          setOverBudgetSource("");
+          if (paymentMethod === "liability") {
+            setLiabilityName(overBudgetLiabilityName || liabilityName);
+            setDueDate(overBudgetDueDate || dueDate);
+          }
+        } else {
+          configureMixedMethod(paymentMethod);
+        }
+        return;
+      }
+
+      setPaymentMethod("cash");
+      setSplitWithCash(false);
+      setCashSelectionExplicit(true);
+      setDeficitFundingType("");
+      setOverBudgetSource("");
+      return;
+    }
+
+    if (canSplit && (paymentMethod === "cash" || isMixedPayment)) {
+      if (isMixedPayment && paymentMethod === value) {
+        setPaymentMethod("cash");
+        setSplitWithCash(false);
+        setCashSelectionExplicit(true);
+        setDeficitFundingType("");
+        setOverBudgetSource("");
+        return;
+      }
+
+      configureMixedMethod(value);
+      if (value === "asset") {
+        if (enteredAmount <= 0) return alert("أدخل مبلغ المصروف أولاً");
+        openDeficitTransfer("all", "overBudget", uncoveredAmount);
+      }
       return;
     }
 
     setPaymentMethod(value);
+    setSplitWithCash(false);
+    setCashSelectionExplicit(false);
+    setDeficitFundingType("");
+    setOverBudgetSource("");
     setUnusualFundingMode("");
+
+    if (value === "asset") {
+      if (enteredAmount <= 0) return alert("أدخل مبلغ المصروف أولاً");
+      openDeficitTransfer("all", "fullAsset", enteredAmount);
+    }
   };
 
   const paymentOptions = [
     ...(hasSpendingCap ? [{ value: "cash", label: "كاش", icon: "💵" }] : []),
-    ...(amountExceedsCap ? [{ value: "asset", label: "أصل", icon: "🏦" }] : []),
+    ...(amountExceedsCap || isSpendingCapExhausted
+      ? [{ value: "asset", label: "أصل", icon: "🏦" }]
+      : []),
     { value: "card", label: "بطاقة", icon: "💳" },
     { value: "liability", label: "التزام جديد", icon: "🧾" },
     { value: "emergency", label: "مصروف طارئ", icon: "⚡" },
   ];
+  const activePaymentMethods = [
+    paymentMethod,
+    ...(isMixedPayment ? ["cash"] : []),
+  ].filter(Boolean);
+  const paymentOptionsWithAmounts = paymentOptions.map((option) => {
+    if (!activePaymentMethods.includes(option.value) || enteredAmount <= 0) return option;
+    if (isMixedPayment && option.value === "cash") {
+      return { ...option, amountLabel: Number(budget.remainingCap || 0).toFixed(2) };
+    }
+    if (isMixedPayment && option.value === paymentMethod) {
+      return { ...option, amountLabel: uncoveredAmount.toFixed(2) };
+    }
+    return { ...option, amountLabel: enteredAmount.toFixed(2) };
+  });
 
   const submitExpenseWithState = (baseState, fundingOverride = null) => {
     const effectivePaymentMethod =
-      fundingOverride?.paymentMethod ?? paymentMethod;
-    const effectiveOverBudgetSource = fundingOverride?.source ?? "";
-    const effectiveOverBudgetAssetKey = fundingOverride?.assetKey ?? "";
+      fundingOverride?.paymentMethod ?? (isMixedPayment ? "cash" : paymentMethod);
+    const effectiveOverBudgetSource = fundingOverride?.source ?? overBudgetSource;
+    const effectiveOverBudgetAssetKey = fundingOverride?.assetKey ?? overBudgetAssetKey;
     const effectiveEmergencyAssetKey =
       fundingOverride?.assetKey ?? unusualAssetKey;
     const effectiveOverBudget = ["emergency", "asset"].includes(
@@ -921,6 +1178,28 @@ useEffect(() => {
 
       if (creditLimit > 0 && nextCardBalance > creditLimit) {
         alert("المبلغ يتجاوز سقف البطاقة");
+        return;
+      }
+    }
+    if (effectivePaymentMethod === "cash" && effectiveOverBudgetSource === "card") {
+      const selectedCard = baseCards.find(
+        (card) => String(card.id) === String(cardId)
+      );
+      if (!selectedCard) {
+        alert("اختر البطاقة التي ستموّل الفرق");
+        return;
+      }
+
+      const availableCredit = Math.max(
+        0,
+        Number(selectedCard.creditLimit || 0) - Number(selectedCard.balance || 0)
+      );
+      if (effectiveOverBudget > availableCredit) {
+        alert(
+          `المتاح في البطاقة لا يغطي الفرق. المتاح ${availableCredit.toFixed(
+            2
+          )} ${localeCurrencyLabel}`
+        );
         return;
       }
     }
@@ -969,7 +1248,7 @@ useEffect(() => {
     }
     if (effectiveOverBudget > 0) {
   if (effectivePaymentMethod === "cash" && !effectiveOverBudgetSource) {
-    alert("رصيد الكاش لا يغطي المصروف. اختر طريقة تمويل العجز.");
+    alert("سقف الصرف لا يغطي كامل المصروف. اختر أسلوب تمويل الفرق.");
     return;
   }
 
@@ -985,7 +1264,7 @@ useEffect(() => {
   if (
     effectivePaymentMethod === "cash" &&
     effectiveOverBudgetSource === "liability" &&
-    !dueDate
+    !overBudgetDueDate
   ) {
     alert("أدخل تاريخ استحقاق الالتزام الناتج عن العجز");
     return;
@@ -1017,7 +1296,6 @@ useEffect(() => {
                 unusualFundingMode === "mix" ? Number(unusualCapAmount || 0) : 0,
               remainderSource: unusualRemainderSource,
               assetKey: effectiveEmergencyAssetKey,
-              liabilityName: unusualLiabilityName,
               dueDate: unusualDueDate,
             }
           : null,
@@ -1059,7 +1337,77 @@ if (lastExpense?.overBudget > 0 && effectivePaymentMethod !== "emergency") {
       lastExpense.overBudgetFunding = {
         type: "asset",
         assetKey: effectiveOverBudgetAssetKey,
+        label:
+          getAssetSources(nextState).find(
+            (source) => source.key === effectiveOverBudgetAssetKey
+          )?.label || "أصل",
         amount: Number(lastExpense.overBudget || 0),
+      };
+    }
+
+    if (effectiveOverBudgetSource === "liability") {
+      const liabilityAmount = Number(lastExpense.overBudget || 0);
+      const creditorName =
+        String(overBudgetLiabilityName || "").trim() || "تجاوز سقف الصرف";
+      const liabilityId = operationId + 4;
+
+      nextState.currentLiabilities.push({
+        id: liabilityId,
+        type: "direct_liability",
+        name: creditorName,
+        amount: liabilityAmount,
+        balance: liabilityAmount,
+        payableBuffer: 0,
+        uncoveredDebt: liabilityAmount,
+        dueDate: overBudgetDueDate,
+        dueDay: Number(String(overBudgetDueDate).split("-")[2] || 1),
+        status: "pending",
+        source: "expense_payment",
+        category: lastExpense.category || "غير مصنف",
+        note: lastExpense.note || "",
+        creditorName,
+        originMonth:
+          nextState.currentMonth || new Date().toISOString().slice(0, 7),
+        date: lastExpense.date,
+        createdAt: new Date().toISOString(),
+        expenseId: lastExpense.id,
+      });
+      lastExpense.overBudgetFunding = {
+        type: "liability",
+        amount: liabilityAmount,
+        liabilityId,
+        label: creditorName,
+      };
+    }
+
+    if (effectiveOverBudgetSource === "card") {
+      const fundingCard = nextState.currentLiabilities.find(
+        (item) => item.type === "card" && String(item.id) === String(cardId)
+      );
+      const fundedAmount = Number(lastExpense.overBudget || 0);
+
+      if (!fundingCard) {
+        alert("تعذر العثور على البطاقة المختارة");
+        return;
+      }
+
+      fundingCard.balance = Number(
+        (Number(fundingCard.balance || 0) + fundedAmount).toFixed(2)
+      );
+      fundingCard.amount = fundingCard.balance;
+      fundingCard.uncoveredDebt = Number(
+        Math.max(
+          0,
+          Number(fundingCard.balance || 0) - Number(fundingCard.payableBuffer || 0)
+        ).toFixed(2)
+      );
+      fundingCard.status = "pending";
+      lastExpense.overBudgetFunding = {
+        type: "card",
+        cardId: fundingCard.id,
+        label: fundingCard.name || "بطاقة",
+        amount: fundedAmount,
+        capCovered: 0,
       };
     }
 
@@ -1256,7 +1604,11 @@ setState(nextState);
         source: "asset",
         assetKey: destinationKey,
         paymentMethod:
-          deficitTransfer.context === "emergency" ? "emergency" : "cash",
+          deficitTransfer.context === "emergency"
+            ? "emergency"
+            : deficitTransfer.context === "fullAsset"
+              ? "asset"
+              : "cash",
       });
     };
 
@@ -1332,6 +1684,13 @@ setState(nextState);
     const amount = Number(expense.amount || 0);
     const budgetCovered = Number(expense.budgetCovered || 0);
     const overBudget = Number(expense.overBudget || 0);
+    const isLiabilityPayment =
+      expense.paymentMethod === "cap_liability" && expense.liabilityId != null;
+    const liabilityPaymentTx = (next.transactions || []).find(
+      (tx) =>
+        tx.type === "liability_paid_from_cap" &&
+        String(tx.expenseId) === String(expense.id)
+    );
 
     next.expenses = (next.expenses || []).filter((e) => e.id !== expenseId);
 
@@ -1406,10 +1765,80 @@ setState(nextState);
       }
     }
 
+    if (isLiabilityPayment) {
+      const restoredLiability = (next.currentLiabilities || []).find(
+        (item) => String(item.id) === String(expense.liabilityId)
+      );
+      const savedBefore =
+        expense.liabilityPayment?.before ||
+        liabilityPaymentTx?.liabilityBeforePayment;
+
+      if (restoredLiability) {
+        if (savedBefore) {
+          restoredLiability.amount = Number(savedBefore.amount || 0);
+          restoredLiability.balance = Number(savedBefore.balance || 0);
+          restoredLiability.payableBuffer = Number(savedBefore.payableBuffer || 0);
+          restoredLiability.uncoveredDebt = Number(savedBefore.uncoveredDebt || 0);
+          restoredLiability.status = savedBefore.status || "pending";
+          restoredLiability.paymentMethod = savedBefore.paymentMethod || "";
+          if (savedBefore.paidAt) restoredLiability.paidAt = savedBefore.paidAt;
+          else delete restoredLiability.paidAt;
+        } else {
+          const paidAmount = Number(liabilityPaymentTx?.amount || amount);
+          const capCharge = Number(
+            liabilityPaymentTx?.capCharge ?? budgetCovered ?? paidAmount
+          );
+          const restoredCovered = Math.max(0, paidAmount - capCharge);
+
+          restoredLiability.balance = paidAmount;
+          if (restoredLiability.type !== "card") {
+            restoredLiability.amount = paidAmount;
+          }
+          restoredLiability.payableBuffer = restoredCovered;
+          restoredLiability.uncoveredDebt = Math.max(
+            0,
+            paidAmount - restoredCovered
+          );
+          restoredLiability.status =
+            restoredLiability.type === "card" ? "active" : "pending";
+          restoredLiability.paymentMethod = "";
+          delete restoredLiability.paidAt;
+        }
+
+        const originExpenseId =
+          restoredLiability.originExpenseId ?? restoredLiability.expenseId;
+        const originExpense = (next.expenses || []).find(
+          (item) => String(item.id) === String(originExpenseId)
+        );
+
+        if (originExpense) {
+          restoredLiability.category =
+            originExpense.category || restoredLiability.category || "غير مصنف";
+          restoredLiability.note =
+            originExpense.note || restoredLiability.note || "";
+          if (restoredLiability.source === "emergency_expense") {
+            restoredLiability.name = `مصروف ${restoredLiability.category} طارئ`;
+          }
+        }
+      }
+
+      const overBudgetRelief = Number(
+        expense.liabilityPayment?.overBudgetRelief ??
+          liabilityPaymentTx?.overBudgetRelief ??
+          0
+      );
+      next.session.overBudgetSpent = Number(
+        (Number(next.session?.overBudgetSpent || 0) + overBudgetRelief).toFixed(2)
+      );
+    }
+
     next.currentLiabilities = (next.currentLiabilities || []).filter(
       (l) =>
-        l.expenseId !== expenseId ||
+        String(l.expenseId) !== String(expenseId) ||
         (l.type !== "direct_liability" && l.type !== "over_budget")
+    );
+    next.reservedPayments = (next.reservedPayments || []).filter(
+      (item) => String(item.expenseId) !== String(expenseId)
     );
 
     const assetCoverageTx = (next.transactions || []).find(
@@ -1432,13 +1861,16 @@ setState(nextState);
       (tx) => tx.expenseId !== expenseId
     );
 
-    next = rebalanceCurrentLiabilityCoverage(next);
+    if (!isLiabilityPayment) {
+      next = rebalanceCurrentLiabilityCoverage(next);
+    }
 
     next.transactions.push({
       id: Date.now(),
       type: "expense_cancelled",
       amount,
       expenseId,
+      liabilityId: expense.liabilityId || null,
       date: new Date().toISOString(),
     });
 
@@ -1578,7 +2010,6 @@ function toggleExpenseCategoryPinned(catId) {
         onSelectExpense={setSelectedExpense}
         onShowAllExpenses={() => setShowAllExpenses(true)}
         incomeAmount={incomeEntryAmount}
-        categoryColors={CC}
       />
 
             {!readOnly && state.session.isOpen && (
@@ -1590,7 +2021,7 @@ function toggleExpenseCategoryPinned(catId) {
             borderRadius: visualIdentity.cards.outer.borderRadius,
             boxShadow: visualIdentity.cards.outer.boxShadow,
             margin: "12px 0 14px",
-            padding: 10,
+            padding: 6,
           }}
         >
           <div
@@ -1598,8 +2029,8 @@ function toggleExpenseCategoryPinned(catId) {
               display: "flex",
               alignItems: "center",
               justifyContent: "space-between",
-              gap: 10,
-              marginBottom: 8,
+              gap: 7,
+              marginBottom: 3,
             }}
           >
             <button
@@ -1608,9 +2039,9 @@ function toggleExpenseCategoryPinned(catId) {
               title="المزيد"
               aria-label="المزيد"
               style={{
-                width: 34,
-                height: 34,
-                borderRadius: 11,
+                width: 26,
+                height: 26,
+                borderRadius: 9,
                 border: "1px solid rgba(255,255,255,0.16)",
                 background: "rgba(255,255,255,0.08)",
                 color: visualIdentity.colors.white,
@@ -1618,7 +2049,7 @@ function toggleExpenseCategoryPinned(catId) {
                 alignItems: "center",
                 justifyContent: "center",
                 cursor: "pointer",
-                fontSize: 17,
+                fontSize: 13,
                 fontWeight: 900,
                 fontFamily: "inherit",
                 flex: "0 0 auto",
@@ -1629,7 +2060,7 @@ function toggleExpenseCategoryPinned(catId) {
 
             <div
               style={{
-                fontSize: 14,
+                fontSize: 12,
                 fontWeight: 900,
                 color: visualIdentity.colors.white,
                 textAlign: "right",
@@ -1643,7 +2074,7 @@ function toggleExpenseCategoryPinned(catId) {
 <ExpenseCategoryGrid
             categories={mainExpenseCategories}
             selectedCategory={category}
-            onSelect={setCategory}
+            onSelect={selectExpenseCategory}
             getTileStyle={getCategoryTileStyle}
             icons={CAT_ICONS}
             pendingByCategory={pendingByCategory}
@@ -1652,20 +2083,20 @@ function toggleExpenseCategoryPinned(catId) {
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: "42px minmax(0, 1fr)",
+              gridTemplateColumns: "70px 84px minmax(0, 1fr)",
               alignItems: "stretch",
               gap: 7,
-              marginBottom: 9,
+              marginBottom: 7,
               direction: "ltr",
             }}
           >
             <button
               type="button"
-              onClick={submitExpense}
-              title="تسجيل المصروف"
-              aria-label="تسجيل المصروف"
+              onClick={addPendingExpense}
+              title="إضافة المصروف إلى قائمة المراجعة"
+              aria-label="إضافة المصروف"
               style={{
-                width: 42,
+                width: 72,
                 minHeight: 42,
                 borderRadius: 12,
                 border: `1px solid ${visualIdentity.colors.gold}`,
@@ -1674,15 +2105,45 @@ function toggleExpenseCategoryPinned(catId) {
                 display: "inline-flex",
                 alignItems: "center",
                 justifyContent: "center",
+                gap: 4,
                 cursor: "pointer",
+                fontFamily: "inherit",
+                fontSize: 10,
+                fontWeight: 900,
                 boxShadow: "0 6px 14px rgba(255,184,0,0.18)",
               }}
             >
-              <span aria-hidden="true" style={{ fontSize: 21, lineHeight: 1 }}>
-                💸
-              </span>
+              <span aria-hidden="true" style={{ fontSize: 16, lineHeight: 1 }}>+</span>
+              <span>إضافة</span>
+            </button>
+            <button
+              type="button"
+              onClick={submitExpense}
+              title="تسجيل المصروف مباشرة"
+              aria-label="تسجيل مصروف"
+              style={{
+                width: 84,
+                minHeight: 42,
+                borderRadius: 12,
+                border: `1px solid ${visualIdentity.colors.green}88`,
+                background: visualIdentity.gradients.positive,
+                color: "#A4FFC8",
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 3,
+                cursor: "pointer",
+                fontFamily: "inherit",
+                fontSize: 9,
+                fontWeight: 900,
+                boxShadow: "0 6px 14px rgba(4,201,92,0.12)",
+              }}
+            >
+              <span aria-hidden="true" style={{ fontSize: 13, lineHeight: 1 }}>✓</span>
+              <span>{pendingCount > 0 ? "تسجيل القائمة" : "تسجيل مصروف"}</span>
             </button>
             <input
+              ref={amountInputRef}
               className="expense-amount-input"
               type="number"
               value={amount}
@@ -1693,12 +2154,14 @@ function toggleExpenseCategoryPinned(catId) {
           </div>
 
           <PaymentMethodSelector
-            options={paymentOptions}
+            options={paymentOptionsWithAmounts}
             value={paymentMethod}
+            activeValues={activePaymentMethods}
             onChange={changePaymentMethod}
             variant="glass"
           />
                     {(paymentMethod === "card" ||
+            (paymentMethod === "cash" && deficitFundingType === "card") ||
             paymentMethod === "liability" ||
             paymentMethod === "emergency") && (
             <div
@@ -1711,22 +2174,43 @@ function toggleExpenseCategoryPinned(catId) {
                 boxShadow: visualIdentity.cards.inner.boxShadow,
               }}
             >
-              {paymentMethod === "card" && (
-                <select
-                  value={cardId}
-                  onChange={(e) => setCardId(e.target.value)}
-                  style={{ ...G.inp(), marginBottom: 0 }}
+              {(paymentMethod === "card" ||
+                (paymentMethod === "cash" && deficitFundingType === "card")) && (
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "1fr",
+                    alignItems: "stretch",
+                    gap: 7,
+                    direction: "ltr",
+                  }}
                 >
-                  <option value="">اختر البطاقة</option>
-                  {cards.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name} — الرصيد {Number(c.balance || 0).toFixed(2)}
+                  <select
+                    value={selectedPaymentCard ? cardId : ""}
+                    onChange={(e) => setCardId(e.target.value)}
+                    style={{ ...G.inp(), marginBottom: 0, minWidth: 0 }}
+                  >
+                    <option value="">
+                      {availableCards.length
+                        ? "اختر البطاقة"
+                        : "لا توجد بطاقة بسقف متاح"}
                     </option>
-                  ))}
-                </select>
+                    {availableCards.map((c) => {
+                      const available = Math.max(
+                        0,
+                        Number(c.creditLimit || 0) - Number(c.balance || 0)
+                      );
+                      return (
+                        <option key={c.id} value={c.id}>
+                          {c.name} — متاح {available.toFixed(2)}
+                        </option>
+                      );
+                    })}
+                  </select>
+                </div>
               )}
 
-              {paymentMethod === "liability" && (
+              {paymentMethod === "liability" && !isMixedPayment && (
                 <div
                   style={{
                     display: "grid",
@@ -1846,9 +2330,9 @@ function toggleExpenseCategoryPinned(catId) {
                         label="اختيار تاريخ استحقاق الالتزام الطارئ"
                       />
                       <input
-                        value={unusualLiabilityName}
-                        onChange={(e) => setUnusualLiabilityName(e.target.value)}
-                        placeholder="اسم الدين"
+                        value={`مصروف ${category || "غير مصنف"} طارئ`}
+                        readOnly
+                        aria-label="اسم الالتزام الطارئ"
                         style={{ ...G.inp(), marginBottom: 0, direction: "rtl" }}
                       />
                     </div>
@@ -1878,99 +2362,10 @@ function toggleExpenseCategoryPinned(catId) {
                   textAlign: "right",
                 }}
               >
-                السقف يغطي {Number(budget.remainingCap || 0).toFixed(2)} {localeCurrencyLabel}، اختر تغطية الجزء غير المغطى ({uncoveredAmount.toFixed(2)} {localeCurrencyLabel})
+                سقف الصرف لا يغطي كامل المصروف. يغطي {Number(
+                  budget.remainingCap || 0
+                ).toFixed(2)} {localeCurrencyLabel}، اختر أسلوب تمويل الفرق ({uncoveredAmount.toFixed(2)} {localeCurrencyLabel})
               </div>
-
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
-                  gap: 6,
-                  marginBottom: deficitFundingType ? 8 : 0,
-                }}
-              >
-                {[
-                  ["cash", "كاش ادخاري", "💵"],
-                  ["bank", "حساب بنكي", "🏦"],
-                  ["sell_gold", "بيع ذهب", "🥇"],
-                  ["sell_stock", "بيع أسهم", "📊"],
-                  ["sell_goods", "بيع بضاعة", "📦"],
-                  ["liability", "التزام جديد", "🧾"],
-                ].map(([value, label, icon]) => {
-                  const active = deficitFundingType === value;
-                  return (
-                    <button
-                      key={value}
-                      type="button"
-                      onClick={() => {
-                        if (value === "cash") {
-                          setDeficitFundingType(value);
-                          setOverBudgetSource("asset");
-                          setOverBudgetAssetKey("cash");
-                          return;
-                        }
-                        if (value === "bank") {
-                          if (!bankAssetSources.length) {
-                            alert("لا يوجد حساب بنكي متاح");
-                            return;
-                          }
-                          setDeficitFundingType(value);
-                          setOverBudgetSource("asset");
-                          setOverBudgetAssetKey(bankAssetSources[0].key);
-                          return;
-                        }
-                        if (value === "liability") {
-                          setDeficitFundingType(value);
-                          setOverBudgetSource("liability");
-                          window.setTimeout(() => {
-                            deficitLiabilityNameRef.current?.focus();
-                            deficitLiabilityNameRef.current?.scrollIntoView({
-                              behavior: "smooth",
-                              block: "center",
-                            });
-                          }, 0);
-                          return;
-                        }
-                        openDeficitTransfer(value.replace("sell_", ""));
-                      }}
-                      style={{
-                        minHeight: 42,
-                        borderRadius: 11,
-                        border: active
-                          ? `1.5px solid ${visualIdentity.colors.gold}`
-                          : "1px solid rgba(255,255,255,0.14)",
-                        background: active
-                          ? visualIdentity.gradients.gold
-                          : "rgba(255,255,255,0.07)",
-                        color: active
-                          ? visualIdentity.colors.navy
-                          : visualIdentity.colors.white,
-                        fontFamily: "inherit",
-                        fontSize: 10,
-                        fontWeight: 900,
-                        cursor: "pointer",
-                      }}
-                    >
-                      <span style={{ marginInlineEnd: 4 }}>{icon}</span>
-                      {label}
-                    </button>
-                  );
-                })}
-              </div>
-
-              {deficitFundingType === "bank" && (
-                <select
-                  value={overBudgetAssetKey}
-                  onChange={(event) => setOverBudgetAssetKey(event.target.value)}
-                  style={{ ...G.inp(), marginBottom: 0 }}
-                >
-                  {bankAssetSources.map((source) => (
-                    <option key={source.key} value={source.key}>
-                      {source.label} — متاح {Number(source.available || 0).toFixed(2)} {localeCurrencyLabel}
-                    </option>
-                  ))}
-                </select>
-              )}
 
               {deficitFundingType === "liability" && (
                 <div
@@ -2178,7 +2573,6 @@ function toggleExpenseCategoryPinned(catId) {
         onClose={() => setShowAllExpenses(false)}
         onSelect={setSelectedExpense}
         incomeAmount={incomeEntryAmount}
-        categoryColors={CC}
       />
 
       {!readOnly && selectedExpense && (
@@ -2273,7 +2667,11 @@ function toggleExpenseCategoryPinned(catId) {
 
         <div style={HOME_UI.row}>
           <span style={{ color: HOME_UI.muted }}>اسلوب الدفع</span>
-          <b>{selectedExpense.paymentMethod}</b>
+          <b>
+            {selectedExpenseFundingLabel
+              ? `كاش + ${selectedExpenseFundingLabel}`
+              : selectedExpense.paymentMethod}
+          </b>
         </div>
 
         <div style={HOME_UI.row}>
@@ -2287,6 +2685,16 @@ function toggleExpenseCategoryPinned(catId) {
             {Number(selectedExpense.overBudget || 0).toFixed(2)} {localeCurrencyLabel}
           </b>
         </div>
+        {selectedExpenseFundingLabel && (
+          <div style={HOME_UI.lastRow}>
+            <span style={{ color: HOME_UI.muted }}>تغطية مبلغ التجاوز</span>
+            <b style={{ color: visualIdentity.colors.cyan }}>
+              {selectedExpenseFundingLabel} · {Number(
+                selectedExpenseFunding.amount || selectedExpense.overBudget || 0
+              ).toFixed(2)} {localeCurrencyLabel}
+            </b>
+          </div>
+        )}
         <button
   onClick={() => {
     cancelExpense(selectedExpense.id);
@@ -2420,7 +2828,7 @@ flexDirection: "column",
     <button
       type="button"
       onClick={() => {
-        setCategory(catItem.label);
+        selectExpenseCategory(catItem.label);
         setShowCategoryManager(false);
       }}
       style={G.btn("rgba(255,255,255,0.08)", visualIdentity.colors.gold, {
@@ -2455,6 +2863,9 @@ flexDirection: "column",
 }
 
 function ReportsScreen({ state }) {
+  const [reportView, setReportView] = useState("overview");
+  const [expenseReportView, setExpenseReportView] = useState("distribution");
+  const [assetReportView, setAssetReportView] = useState("distribution");
   const [showAssetTrendDetails, setShowAssetTrendDetails] = useState(false);
   const [showExpenseReport, setShowExpenseReport] = useState(false);
   const [showOverBudgetReport, setShowOverBudgetReport] = useState(false);
@@ -2464,6 +2875,8 @@ function ReportsScreen({ state }) {
   const [selectedExpense, setSelectedExpense] = useState(null);
   const expenses = [...(state.expenses || [])].reverse();
   const total = expenses.reduce((sum, item) => sum + Number(item.amount || 0), 0);
+  const reportBudget = calcBudget(state);
+  const remainingSpendingCap = Math.max(0, Number(reportBudget.remainingCap || 0));
   const selectedExpenseTotal = Number(
     selectedExpense?.originalAmount ?? selectedExpense?.amount ?? 0
   );
@@ -2591,7 +3004,7 @@ function ReportsScreen({ state }) {
     isIncome: expense.isIncomeEntry,
     amount: incomeEntryAmount(expense),
     meta: incomeEntryMeta(expense),
-    title: expense.note || expense.category,
+    title: expense.category || "غير مصنف",
     category: expense.category,
     paymentMethod: expense.paymentMethod,
     categoryColor: expense.isIncomeEntry
@@ -2608,37 +3021,253 @@ function ReportsScreen({ state }) {
     color: asset.change >= 0 ? "#22c55e" : "#ef4444",
   }));
 
+  const currentExpensesByCategory = buildExpensesByCategory(state.expenses || []);
+  const previousSnapshots = (state.monthlySnapshots || [])
+    .filter((snapshot) => String(snapshot.month || "") < String(state.currentMonth || ""))
+    .sort((a, b) => String(a.month).localeCompare(String(b.month)));
+  const previousSnapshot = previousSnapshots[previousSnapshots.length - 1] || null;
+  const reportCategoryMap = new Map();
+  DEFAULT_EXPENSE_CATEGORIES.forEach((category) =>
+    reportCategoryMap.set(category.label, category)
+  );
+  (state.expenseCategories?.items || []).forEach((category) =>
+    reportCategoryMap.set(category.label, {
+      ...reportCategoryMap.get(category.label),
+      ...category,
+      color: category.color || CC[category.label] || visualIdentity.colors.cyan,
+    })
+  );
+  Object.keys({
+    ...currentExpensesByCategory,
+    ...(state.settings?.expenseCategoryCaps || {}),
+  }).forEach((label) => {
+    if (!reportCategoryMap.has(label)) {
+      reportCategoryMap.set(label, {
+        id: `report-${label}`,
+        label,
+        icon: CAT_ICONS[label] || "•",
+        color: CC[label] || visualIdentity.colors.cyan,
+      });
+    }
+  });
+  const reportCategories = Array.from(reportCategoryMap.values());
+  const expenseTrendMap = new Map();
+  (state.monthlySnapshots || []).forEach((snapshot) => {
+    const value = (snapshot.expenses || []).reduce(
+      (sum, expense) => sum + Number(expense.amount || 0),
+      0
+    );
+    expenseTrendMap.set(snapshot.month, { month: snapshot.month, value });
+  });
+  expenseTrendMap.set(state.currentMonth, { month: state.currentMonth, value: total });
+  const expenseTrendPoints = Array.from(expenseTrendMap.values())
+    .sort((a, b) => String(a.month).localeCompare(String(b.month)))
+    .slice(-6);
+  const reportAssetGroups = {
+    cash: 0,
+    banks: 0,
+    gold: 0,
+    stocks: 0,
+    other: 0,
+  };
+  assetBreakdownFromAssets(state.assets || {}, state.settings?.market || {}).forEach(
+    (item) => {
+      const key = String(item.key || "");
+      const group =
+        key === "cash"
+          ? "cash"
+          : key.startsWith("bank:")
+          ? "banks"
+          : key.startsWith("gold:")
+          ? "gold"
+          : key.startsWith("stock:")
+          ? "stocks"
+          : "other";
+      reportAssetGroups[group] += Number(item.value || 0);
+    }
+  );
+  const reportAssetDistributionTotal = Object.values(reportAssetGroups).reduce(
+    (sum, value) => sum + Number(value || 0),
+    0
+  );
+  const reportAssetDistribution = [
+    { key: "cash", label: "كاش", value: reportAssetGroups.cash, color: visualIdentity.colors.green },
+    { key: "banks", label: "بنوك", value: reportAssetGroups.banks, color: visualIdentity.colors.sky },
+    { key: "gold", label: "ذهب", value: reportAssetGroups.gold, color: visualIdentity.semantic.warning },
+    { key: "stocks", label: "أسهم", value: reportAssetGroups.stocks, color: visualIdentity.colors.purple },
+    { key: "other", label: "أخرى", value: reportAssetGroups.other, color: visualIdentity.colors.coral },
+  ]
+    .filter((item) => item.value > 0)
+    .map((item) => ({
+      ...item,
+      percent:
+        reportAssetDistributionTotal > 0
+          ? (item.value / reportAssetDistributionTotal) * 100
+          : 0,
+    }));
+  const reportGoldCost = (state.assets?.gold || []).reduce(
+    (sum, item) => sum + Number(item.units || 0) * Number(item.wac || 0),
+    0
+  );
+  const reportStockCost = (state.assets?.stocks || []).reduce(
+    (sum, item) => sum + Number(item.units || 0) * Number(item.wac || 0),
+    0
+  );
+  const reportChange = (value, cost) =>
+    Number(cost || 0) > 0
+      ? ((Number(value || 0) - Number(cost || 0)) / Number(cost || 0)) * 100
+      : 0;
+  const reportAssetSummaryItems = [
+    { key: "cash", label: "كاش", value: reportAssetGroups.cash, change: 0, color: visualIdentity.colors.green },
+    { key: "banks", label: "بنوك", value: reportAssetGroups.banks, change: 0, color: visualIdentity.colors.sky },
+    { key: "gold", label: "ذهب", value: reportAssetGroups.gold, change: reportChange(reportAssetGroups.gold, reportGoldCost), color: visualIdentity.semantic.warning },
+    { key: "stocks", label: "أسهم", value: reportAssetGroups.stocks, change: reportChange(reportAssetGroups.stocks, reportStockCost), color: visualIdentity.colors.purple },
+    { key: "other", label: "أخرى", value: reportAssetGroups.other, change: 0, color: visualIdentity.colors.coral },
+  ];
+
   return (
     <div style={G.scr}>
-<ExpenseSummaryReportCard
-        total={total}
-        overBudgetTotal={overBudgetTotal}
-        chartMode={expenseChartMode}
-        onChartModeChange={setExpenseChartMode}
-        onOpenOverBudget={() => setShowOverBudgetReport(true)}
-      >
-        <ExpenseDonut
-          expenses={state.expenses}
-          mode={expenseChartMode}
-          categoryColors={CC}
+      {reportView === "overview" && (
+        <ReportsOverview
+          spendingCap={Number(reportBudget.spendingCap || 0)}
+          totalExpenses={total}
+          overBudget={overBudgetTotal}
+          currencyLabel={getCurrencyLabel(state)}
+          onOpen={(nextView) => {
+            if (nextView === "assets") setAssetReportView("distribution");
+            setReportView(nextView);
+          }}
         />
-      </ExpenseSummaryReportCard>
+      )}
 
-<AssetTrendReportCard
-        change={assetChange}
-        changePct={assetChangePct}
-        changeColor={assetChangeColor}
-        currentAssets={Number(lastAssetPoint?.totalAssets || 0)}
-        months={assetTrendMonths}
-        bars={assetTrendBars}
-        detailsOpen={showAssetTrendDetails}
-        onToggleDetails={() => setShowAssetTrendDetails((value) => !value)}
-        onMonthsChange={setAssetTrendMonths}
-      />
+      {reportView === "expenses" && (
+        <>
+          <ReportViewHeader
+            title="تقارير المصروفات"
+            subtitle="تحليل المصروفات ومراقبة سقوف البنود"
+            onBack={() => setReportView("overview")}
+          />
+          <ExpenseReportTabs
+            active={expenseReportView}
+            onChange={setExpenseReportView}
+          />
 
-<ExpenseReportLauncher onOpen={() => setShowExpenseReport(true)} />
+          {expenseReportView === "distribution" && (
+            <>
+              <ExpenseSummaryReportCard
+                total={total}
+                overBudgetTotal={overBudgetTotal}
+                chartMode={expenseChartMode}
+                onChartModeChange={setExpenseChartMode}
+                onOpenOverBudget={() => setShowOverBudgetReport(true)}
+              >
+                <ExpenseDonut
+                  expenses={state.expenses}
+                  mode={expenseChartMode}
+                  categoryColors={CC}
+                  centerValue={remainingSpendingCap}
+                  centerLabel="المتبقي من السقف"
+                  centerColor={
+                    remainingSpendingCap > 0
+                      ? visualIdentity.colors.green
+                      : visualIdentity.colors.red
+                  }
+                />
+              </ExpenseSummaryReportCard>
+              <ExpenseReportLauncher onOpen={() => setShowExpenseReport(true)} />
+            </>
+          )}
 
-<ExpenseReportModal
+          {expenseReportView === "trend" && (
+            <MonthlyExpenseTrendCard points={expenseTrendPoints} />
+          )}
+
+          {expenseReportView === "caps" && (
+            <CategoryBudgetGauges
+              categories={reportCategories}
+              expensesByCategory={currentExpensesByCategory}
+              caps={state.settings?.expenseCategoryCaps || {}}
+            />
+          )}
+
+          {expenseReportView === "heatmap" && (
+            <DailySpendingHeatmap
+              expenses={state.expenses || []}
+              monthKey={state.currentMonth}
+            />
+          )}
+
+          {expenseReportView === "highlights" && (
+            <MonthlyHighlights
+              currentByCategory={currentExpensesByCategory}
+              previousByCategory={
+                previousSnapshot?.expensesByCategory ||
+                buildExpensesByCategory(previousSnapshot?.expenses || [])
+              }
+              previousMonth={previousSnapshot?.month || "—"}
+            />
+          )}
+
+          {expenseReportView === "statement" && (
+            <section
+              className="asset-dashboard-card"
+              style={{
+                padding: 14,
+                borderRadius: 20,
+                border: visualIdentity.cards.outer.border,
+                background: visualIdentity.gradients.outerCard,
+                boxShadow: visualIdentity.cards.outer.boxShadow,
+              }}
+            >
+              <div style={{ color: visualIdentity.colors.gold, fontSize: 15, fontWeight: 900 }}>
+                كشف المصروفات
+              </div>
+              <div style={{ margin: "4px 0 12px", color: visualIdentity.colors.textSecondary, fontSize: 9 }}>
+                عرض تفاصيل المصروفات وطرق الدفع ومصادر التغطية
+              </div>
+              <ExpenseReportLauncher onOpen={() => setShowExpenseReport(true)} />
+            </section>
+          )}
+        </>
+      )}
+
+      {reportView === "assets" && (
+        <>
+          <ReportViewHeader
+            title="تقارير الأصول"
+            subtitle="نمو الأصول وتوزيعها وأبرز التغيرات الشهرية"
+            onBack={() => setReportView("overview")}
+          />
+          <AssetReportTabs active={assetReportView} onChange={setAssetReportView} />
+
+          {assetReportView === "growth" && (
+            <AssetTrendReportCard
+              change={assetChange}
+              changePct={assetChangePct}
+              changeColor={assetChangeColor}
+              currentAssets={Number(lastAssetPoint?.totalAssets || 0)}
+              months={assetTrendMonths}
+              bars={assetTrendBars}
+              points={assetTrendPoints}
+              detailsOpen={showAssetTrendDetails}
+              onToggleDetails={() => setShowAssetTrendDetails((value) => !value)}
+              onMonthsChange={setAssetTrendMonths}
+            />
+          )}
+
+          {assetReportView === "distribution" && (
+            <AssetDistributionCard
+              distribution={reportAssetDistribution}
+              totalAssets={reportAssetDistributionTotal}
+              currencyLabel={getCurrencyLabel(state)}
+              summaryItems={reportAssetSummaryItems}
+              variant="detailed"
+            />
+          )}
+        </>
+      )}
+
+      <ExpenseReportModal
         open={showExpenseReport}
         rows={expenseReportRows}
         selectedExpense={selectedExpense}
@@ -2654,14 +3283,14 @@ function ReportsScreen({ state }) {
         onCloseSelected={() => setSelectedExpense(null)}
       />
 
-<OverBudgetReportModal
+      <OverBudgetReportModal
         open={showOverBudgetReport}
         total={overBudgetTotal}
         items={overBudgetItems}
         onClose={() => setShowOverBudgetReport(false)}
       />
 
-<AssetTrendDetailsModal
+      <AssetTrendDetailsModal
         open={showAssetTrendDetails}
         months={assetTrendMonths}
         rows={assetDetailDisplayRows}
@@ -2713,12 +3342,16 @@ function AssetsScreen({ state, setState, onAddExtraCash, readOnly = false }) {
   );
   const goldPrice = Number(state.settings.market.goldGramPrice || 0);
   const silverPrice = Number(state.settings.market.silverGramPrice || 0);
+  const getGoldUnitPrice = (item) =>
+    goldPrice > 0 ? goldPrice : Number(item?.wac || 0);
+  const getSilverUnitPrice = (item) =>
+    silverPrice > 0 ? silverPrice : Number(item?.wac || 0);
   const goldTotal = (state.assets.gold || []).reduce(
-    (sum, g) => sum + Number(g.units || 0) * goldPrice,
+    (sum, g) => sum + Number(g.units || 0) * getGoldUnitPrice(g),
     0
   );
   const silverTotal = (state.assets.silver || []).reduce(
-    (sum, s) => sum + Number(s.units || 0) * silverPrice,
+    (sum, s) => sum + Number(s.units || 0) * getSilverUnitPrice(s),
     0
   );
   const stockTotal = (state.assets.stocks || []).reduce(
@@ -3367,7 +4000,7 @@ function AssetsScreen({ state, setState, onAddExtraCash, readOnly = false }) {
   const goldAssetRows = (state.assets.gold || []).map((gold) => ({
     id: gold.id,
     name: gold.label,
-    value: Number(gold.units || 0) * goldPrice,
+    value: Number(gold.units || 0) * getGoldUnitPrice(gold),
     meta: `${Number(gold.units || 0).toFixed(4)} غ · متوسط ${Number(
       gold.wac || 0
     ).toFixed(4)}`,
@@ -3377,8 +4010,8 @@ function AssetsScreen({ state, setState, onAddExtraCash, readOnly = false }) {
   const silverAssetRows = (state.assets.silver || []).map((silver) => ({
     id: silver.id,
     name: silver.label,
-    value: Number(silver.units || 0) * silverPrice,
-    meta: `${Number(silver.units || 0).toFixed(4)} غ · سعر ${silverPrice.toFixed(
+    value: Number(silver.units || 0) * getSilverUnitPrice(silver),
+    meta: `${Number(silver.units || 0).toFixed(4)} غ · سعر ${getSilverUnitPrice(silver).toFixed(
       4
     )} · متوسط ${Number(silver.wac || 0).toFixed(4)}`,
   }));
@@ -3401,20 +4034,11 @@ function AssetsScreen({ state, setState, onAddExtraCash, readOnly = false }) {
     Number(cost || 0) > 0
       ? ((Number(value || 0) - Number(cost || 0)) / Number(cost || 0)) * 100
       : 0;
-  const goldCost = (state.assets.gold || []).reduce(
-    (sum, item) => sum + Number(item.units || 0) * Number(item.wac || 0),
-    0
-  );
-  const summaryItems = [
-    { key: "cash", label: "كاش", icon: "cash", value: Number(state.assets.cash || 0), change: 0, color: visualIdentity.colors.green },
-    { key: "banks", label: "بنوك", icon: "bank", value: bankTotal, change: 0, color: visualIdentity.colors.sky },
-    { key: "gold", label: "ذهب", icon: "gold", value: goldTotal, change: percentChange(goldTotal, goldCost), color: "#FFC62D" },
-    { key: "stocks", label: "أسهم", icon: "stock", value: stockTotal, change: percentChange(stockTotal, stockCostTotal), color: visualIdentity.colors.purple },
-    { key: "other", label: "بضائع/أخرى", icon: "goods", value: customTotal, change: 0, color: visualIdentity.colors.coral },
-  ];
   const dashboardRows = [
     {
       id: "cash",
+      assetKey: "cash",
+      assetKind: "cash",
       name: "الكاش الادخاري",
       value: Number(state.assets.cash || 0),
       change: 0,
@@ -3440,11 +4064,11 @@ function AssetsScreen({ state, setState, onAddExtraCash, readOnly = false }) {
       assetKind: "gold",
       assetId: item.id,
       name: item.label,
-      value: Number(item.units || 0) * goldPrice,
-      change: percentChange(goldPrice, item.wac),
+      value: Number(item.units || 0) * getGoldUnitPrice(item),
+      change: percentChange(getGoldUnitPrice(item), item.wac),
       icon: "gold",
       color: "#FFC62D",
-      meta: `${Number(item.units || 0).toFixed(4)} غرام · سعر ${goldPrice.toFixed(2)}`,
+      meta: `${Number(item.units || 0).toFixed(4)} غرام · سعر ${getGoldUnitPrice(item).toFixed(2)}`,
     })),
     ...(state.assets.stocks || []).map((item) => ({
       id: `stock-${item.id}`,
@@ -3464,11 +4088,11 @@ function AssetsScreen({ state, setState, onAddExtraCash, readOnly = false }) {
       assetKind: "silver",
       assetId: item.id,
       name: item.label,
-      value: Number(item.units || 0) * silverPrice,
-      change: percentChange(silverPrice, item.wac),
+      value: Number(item.units || 0) * getSilverUnitPrice(item),
+      change: percentChange(getSilverUnitPrice(item), item.wac),
       icon: "silver",
       color: "#B7D3EA",
-      meta: `${Number(item.units || 0).toFixed(4)} غرام · سعر ${silverPrice.toFixed(2)}`,
+      meta: `${Number(item.units || 0).toFixed(4)} غرام · سعر ${getSilverUnitPrice(item).toFixed(2)}`,
     })),
     ...(state.assets.custom || []).map((item) => ({
       id: `custom-${item.id}`,
@@ -3500,12 +4124,14 @@ function AssetsScreen({ state, setState, onAddExtraCash, readOnly = false }) {
   const movementRows = (row) =>
     (state.assetHistory || [])
       .filter((movement) => {
-        const directKeyMatch = [
-          movement.assetKey,
-          movement.destinationKey,
-          movement.from,
-          movement.to,
-        ].includes(row.assetKey);
+        const directKeyMatch =
+          Boolean(row.assetKey) &&
+          [
+            movement.assetKey,
+            movement.destinationKey,
+            movement.from,
+            movement.to,
+          ].includes(row.assetKey);
         const idMatch =
           row.assetId != null &&
           String(movement.assetId ?? "") === String(row.assetId) &&
@@ -3547,7 +4173,7 @@ function AssetsScreen({ state, setState, onAddExtraCash, readOnly = false }) {
   const distributionBase = [
     { key: "cash", label: "كاش", value: Number(state.assets.cash || 0), color: "#55E892" },
     { key: "banks", label: "بنوك", value: bankTotal, color: "#35AEEF" },
-    { key: "gold", label: "ذهب", value: goldTotal, color: "#FFC62D" },
+    { key: "gold", label: "ذهب", value: goldTotal, color: visualIdentity.semantic.warning },
     { key: "stocks", label: "أسهم", value: stockTotal, color: "#9A72F5" },
     { key: "other", label: "أخرى", value: otherTotal, color: "#3B91A9" },
   ].filter((item) => item.value > 0);
@@ -3578,7 +4204,6 @@ function AssetsScreen({ state, setState, onAddExtraCash, readOnly = false }) {
     >
       <AssetsDashboard
         totalAssets={assets.totalAssets}
-        summaryItems={summaryItems}
         assetRows={dashboardRowsWithMovements}
         distribution={distribution}
         trendPoints={trendPoints}
@@ -3816,25 +4441,26 @@ function AssetsScreen({ state, setState, onAddExtraCash, readOnly = false }) {
   );
 }
 
-function LiabilitiesScreen({ state, setState, focusDueOnly = false }) {
+function LiabilitiesScreen({
+  state,
+  setState,
+  focusDueOnly = false,
+  onCloseDueFocus,
+}) {
   const { currencyLabel, t } = useLocale();
   const [showStructuralDetails, setShowStructuralDetails] = useState(false);
 const [showCurrentDetails, setShowCurrentDetails] = useState(focusDueOnly);
 
 const structuralList = state.structural || state.structuralLiabilities || [];
 const currentList = state.currentLiabilities || [];
+const reservedPaymentList = state.reservedPayments || [];
 
 
 const isDueThisMonth = (item) => {
   if (!item.dueDate) return false;
-
-  const due = new Date(item.dueDate);
-  const now = new Date();
-
-  return (
-    due.getFullYear() === now.getFullYear() &&
-    due.getMonth() === now.getMonth()
-  );
+  const dueMonth = String(item.dueDate).slice(0, 7);
+  const currentMonth = state.currentMonth || new Date().toISOString().slice(0, 7);
+  return dueMonth <= currentMonth;
 };
 
 const getDueValue = (item) => {
@@ -3865,6 +4491,90 @@ const currentDebtTotal = pendingCurrent.reduce(
 );
 const [openCurrentId, setOpenCurrentId] = useState(null);
 const [liabilityAssetKey, setLiabilityAssetKey] = useState("cash");
+
+  const payReservedPayment = (payment) => {
+    const amount = Number(payment.balance ?? payment.amount ?? 0);
+    if (amount <= 0 || !isDueThisMonth(payment)) return;
+
+    setState((prev) => ({
+      ...prev,
+      reservedPayments: (prev.reservedPayments || []).map((item) =>
+        String(item.id) === String(payment.id)
+          ? {
+              ...item,
+              balance: 0,
+              status: "paid",
+              paidAt: new Date().toISOString(),
+            }
+          : item
+      ),
+      currentLiabilities: payment.cardId
+        ? (prev.currentLiabilities || []).map((item) => {
+            if (String(item.id) !== String(payment.cardId)) return item;
+            const nextBalance = Math.max(
+              0,
+              Number((Number(item.balance || 0) - amount).toFixed(2))
+            );
+            const nextBuffer = Math.max(
+              0,
+              Number((Number(item.payableBuffer || 0) - amount).toFixed(2))
+            );
+            return {
+              ...item,
+              balance: nextBalance,
+              amount: nextBalance,
+              payableBuffer: nextBuffer,
+              uncoveredDebt: Math.max(0, nextBalance - nextBuffer),
+              status: nextBalance <= 0 ? "paid" : "pending",
+            };
+          })
+        : prev.currentLiabilities,
+      transactions: [
+        ...(prev.transactions || []),
+        {
+          id: Date.now(),
+          type: "reserved_payment_paid",
+          amount,
+          reservedPaymentId: payment.id,
+          expenseId: payment.expenseId,
+          date: new Date().toISOString(),
+        },
+      ],
+    }));
+  };
+
+  const postponeReservedPayment = (payment, nextDueDate) => {
+    if (!nextDueDate || String(nextDueDate) <= String(payment.dueDate || "")) {
+      alert("اختر تاريخاً جديداً بعد تاريخ الاستحقاق الحالي");
+      return;
+    }
+
+    setState((prev) => ({
+      ...prev,
+      reservedPayments: (prev.reservedPayments || []).map((item) =>
+        String(item.id) === String(payment.id)
+          ? {
+              ...item,
+              dueDate: nextDueDate,
+              dueDay: Number(String(nextDueDate).split("-")[2] || 1),
+              postponedAt: new Date().toISOString(),
+            }
+          : item
+      ),
+      transactions: [
+        ...(prev.transactions || []),
+        {
+          id: Date.now(),
+          type: "reserved_payment_postponed",
+          amount: Number(payment.balance ?? payment.amount ?? 0),
+          reservedPaymentId: payment.id,
+          expenseId: payment.expenseId,
+          dueDate: nextDueDate,
+          date: new Date().toISOString(),
+        },
+      ],
+    }));
+  };
 
   const getPostponeParts = (item) => {
     const source =
@@ -4007,6 +4717,19 @@ const [liabilityAssetKey, setLiabilityAssetKey] = useState("cash");
         current.type === "card"
           ? Number(current.balance || 0)
           : Number(current.balance ?? current.amount ?? 0);
+      const currentMonth = prev.currentMonth || new Date().toISOString().slice(0, 7);
+      const originMonth =
+        current.originMonth || String(current.createdAt || current.date || "").slice(0, 7);
+      const dueMonth = String(current.dueDate || "").slice(0, 7);
+      const isExpenseLiability = current.source === "expense_payment";
+
+      if (
+        isExpenseLiability &&
+        (!originMonth || originMonth >= currentMonth || !dueMonth || dueMonth > currentMonth)
+      ) {
+        alert("يتاح السداد من سقف الصرف لهذا الالتزام عند استحقاقه في شهر لاحق");
+        return prev;
+      }
       const covered = Math.min(amount, Math.max(0, Number(current.payableBuffer || 0)));
       const remainingCap = Math.max(
         0,
@@ -4026,6 +4749,18 @@ const [liabilityAssetKey, setLiabilityAssetKey] = useState("cash");
       const now = new Date().toISOString();
       const expenseId = Date.now();
       const creditorName = current.name || "دائن";
+      const settlementCategory = isExpenseLiability
+        ? `سداد التزام — ${current.category || "غير مصنف"} — ${formatMonthKey(originMonth)}`
+        : "سداد دين";
+      const liabilityBeforePayment = {
+        amount: Number(current.amount || 0),
+        balance: Number(current.balance ?? current.amount ?? 0),
+        payableBuffer: Number(current.payableBuffer || 0),
+        uncoveredDebt: Number(current.uncoveredDebt || 0),
+        status: current.status || "pending",
+        paymentMethod: current.paymentMethod || "",
+        paidAt: current.paidAt || null,
+      };
       const overBudgetRelief = Math.min(
         Number(prev.session?.overBudgetSpent || 0),
         Math.max(0, Number(current.uncoveredDebt || 0)),
@@ -4056,8 +4791,17 @@ const [liabilityAssetKey, setLiabilityAssetKey] = useState("cash");
             overBudget: 0,
             isOverBudget: false,
             liabilityId: current.id,
-            category: "سداد دين",
-            note: creditorName,
+            liabilityPayment: {
+              liabilityId: current.id,
+              before: liabilityBeforePayment,
+              capCharge,
+              overBudgetRelief,
+            },
+            category: settlementCategory,
+            note: [creditorName, current.note].filter(Boolean).join(" — "),
+            isLiabilitySettlement: isExpenseLiability,
+            originExpenseId: current.expenseId || null,
+            originMonth: originMonth || null,
           },
         ],
         currentLiabilities: (prev.currentLiabilities || []).map((item) =>
@@ -4081,6 +4825,8 @@ const [liabilityAssetKey, setLiabilityAssetKey] = useState("cash");
             type: "liability_paid_from_cap",
             amount,
             capCharge,
+            overBudgetRelief,
+            liabilityBeforePayment,
             liabilityId: current.id,
             expenseId,
             date: now,
@@ -4153,6 +4899,18 @@ const [liabilityAssetKey, setLiabilityAssetKey] = useState("cash");
     Number(state.session?.spendingCap || 0) -
       Number(state.session?.coveredSpent || 0)
   );
+  const pendingReservedPayments = reservedPaymentList.filter(
+    (item) => item.status !== "paid" && Number(item.balance ?? item.amount ?? 0) > 0
+  );
+  const reservedPaymentDisplayRows = pendingReservedPayments.map((item) => ({
+    item,
+    amount: Number(item.balance ?? item.amount ?? 0),
+    category: item.category || "غير مصنف",
+    note: item.note || "",
+    creditorName: item.creditorName || "",
+    dueText: item.dueDate ? formatDate(item.dueDate) : "غير محدد",
+    canAct: isDueThisMonth(item),
+  }));
   const currentLiabilityDisplayRows = sortedCurrent.map((item) => {
     const amount = getLiabilityAmount(item);
     const covered = getCoveredAmount(item);
@@ -4163,6 +4921,14 @@ const [liabilityAssetKey, setLiabilityAssetKey] = useState("cash");
       0,
       creditLimit - Number(item.balance || 0)
     );
+    const originExpenseId = item.originExpenseId ?? item.expenseId;
+    const originExpense = (state.expenses || []).find(
+      (expense) => String(expense.id) === String(originExpenseId)
+    );
+    const linkedCategory =
+      item.category || originExpense?.category || "غير مصنف";
+    const linkedNote = item.note || originExpense?.note || "";
+    const isEmergencyLiability = item.source === "emergency_expense";
 
     return {
       item,
@@ -4176,20 +4942,38 @@ const [liabilityAssetKey, setLiabilityAssetKey] = useState("cash");
       icon: isCard ? "💳" : item.type === "over_budget" ? "⚠" : "🧾",
       name: isCard
         ? item.name || "بطاقة ائتمانية"
-        : item.name || "دائن",
+        : isEmergencyLiability
+          ? `مصروف ${linkedCategory} طارئ`
+          : item.name || "دائن",
       subtitle: isCard
         ? `السقف: ${creditLimit.toFixed(2)} · المستخدم: ${Number(
             item.balance || 0
           ).toFixed(2)} · المتاح: ${availableCredit.toFixed(2)}`
-        : "اسم الدائن",
+        : isEmergencyLiability
+          ? linkedNote || "مصروف طارئ"
+          : linkedNote || "اسم الدائن",
       typeLabel: getTypeLabel(item),
       dueText: getDueText(item),
       canPayFromCap:
         amount > 0 &&
-        remainingSpendingCap + Math.min(covered, amount) >= amount,
+        remainingSpendingCap + Math.min(covered, amount) >= amount &&
+        (item.source !== "expense_payment" ||
+          ((item.originMonth || String(item.createdAt || item.date || "").slice(0, 7)) <
+            (state.currentMonth || new Date().toISOString().slice(0, 7)) &&
+            String(item.dueDate || "").slice(0, 7) <=
+              (state.currentMonth || new Date().toISOString().slice(0, 7)))),
       postponeParts: getPostponeParts(item),
     };
   });
+  const displayedCurrentTotal = focusDueOnly
+    ? currentLiabilityDisplayRows.reduce((sum, row) => sum + Number(row.amount || 0), 0)
+    : currentDebtTotal;
+  const displayedCoveredTotal = focusDueOnly
+    ? currentLiabilityDisplayRows.reduce((sum, row) => sum + Number(row.covered || 0), 0)
+    : coveredCurrentTotal;
+  const displayedUncoveredTotal = focusDueOnly
+    ? currentLiabilityDisplayRows.reduce((sum, row) => sum + Number(row.uncovered || 0), 0)
+    : uncoveredCurrentTotal;
 
   return (
     <div
@@ -4208,30 +4992,75 @@ const [liabilityAssetKey, setLiabilityAssetKey] = useState("cash");
       }}
     >
       <header style={{ marginBottom: 14 }}>
-        <h1 style={{ margin: 0, color: visualIdentity.colors.white, fontSize: 27, fontWeight: 900 }}>{t("nav.liabilities")}</h1>
-        <div style={{ marginTop: 3, color: visualIdentity.colors.textSecondary, fontSize: 11 }}>إدارة الالتزامات ومتابعة التغطية والاستحقاقات</div>
-      </header>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 9, marginBottom: 13 }}>
-        <div className="asset-dashboard-card" style={{ padding: 11, borderRadius: 16, border: `1px solid ${visualIdentity.semantic.warning}66`, background: `linear-gradient(145deg, ${visualIdentity.semantic.warning}1F, rgba(29,76,132,0.92))`, textAlign: "center", color: visualIdentity.colors.white }}>
-          <div style={{ color: visualIdentity.colors.textSecondary, fontSize: 9 }}>{t("liabilities.fixed")}</div>
-          <b style={{ display: "block", marginTop: 4, color: visualIdentity.semantic.warning, fontSize: 17 }}>{structuralTotal.toFixed(2)} <small style={{ fontSize: 9 }}>{currencyLabel}</small></b>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+          <div>
+            <h1 style={{ margin: 0, color: visualIdentity.colors.white, fontSize: 27, fontWeight: 900 }}>{t("nav.liabilities")}</h1>
+            <div style={{ marginTop: 3, color: visualIdentity.colors.textSecondary, fontSize: 11 }}>
+              {focusDueOnly
+                ? "الالتزامات الجارية المستحقة خلال الشهر الحالي"
+                : "إدارة الالتزامات ومتابعة التغطية والاستحقاقات"}
+            </div>
+          </div>
+          {focusDueOnly && (
+            <button
+              type="button"
+              onClick={onCloseDueFocus}
+              title="العودة إلى الرئيسية"
+              aria-label="العودة إلى الرئيسية"
+              style={{
+                width: 38,
+                height: 38,
+                flex: "0 0 38px",
+                borderRadius: 11,
+                border: "1px solid rgba(255,255,255,0.16)",
+                background: "rgba(255,255,255,0.08)",
+                color: visualIdentity.colors.white,
+                display: "grid",
+                placeItems: "center",
+                fontSize: 22,
+                cursor: "pointer",
+              }}
+            >
+              ×
+            </button>
+          )}
         </div>
+      </header>
+      <div style={{ display: "grid", gridTemplateColumns: focusDueOnly ? "1fr" : "1fr 1fr", gap: 9, marginBottom: 13 }}>
+        {!focusDueOnly && (
+          <div className="asset-dashboard-card" style={{ padding: 11, borderRadius: 16, border: `1px solid ${visualIdentity.semantic.warning}66`, background: `linear-gradient(145deg, ${visualIdentity.semantic.warning}1F, rgba(29,76,132,0.92))`, textAlign: "center", color: visualIdentity.colors.white }}>
+            <div style={{ color: visualIdentity.colors.textSecondary, fontSize: 9 }}>{t("liabilities.fixed")}</div>
+            <b style={{ display: "block", marginTop: 4, color: visualIdentity.semantic.warning, fontSize: 17 }}>{structuralTotal.toFixed(2)} <small style={{ fontSize: 9 }}>{currencyLabel}</small></b>
+          </div>
+        )}
         <div className="asset-dashboard-card" style={{ padding: 11, borderRadius: 16, border: `1px solid ${visualIdentity.semantic.danger}66`, background: `linear-gradient(145deg, ${visualIdentity.semantic.danger}1F, rgba(29,76,132,0.92))`, textAlign: "center", color: visualIdentity.colors.white }}>
-          <div style={{ color: visualIdentity.colors.textSecondary, fontSize: 9 }}>{t("liabilities.cards")}</div>
-          <b style={{ display: "block", marginTop: 4, color: visualIdentity.semantic.danger, fontSize: 17 }}>{currentDebtTotal.toFixed(2)} <small style={{ fontSize: 9 }}>{currencyLabel}</small></b>
+          <div style={{ color: visualIdentity.colors.textSecondary, fontSize: 9 }}>
+            {focusDueOnly ? "إجمالي المستحق هذا الشهر" : t("liabilities.cards")}
+          </div>
+          <b style={{ display: "block", marginTop: 4, color: visualIdentity.semantic.danger, fontSize: 17 }}>{displayedCurrentTotal.toFixed(2)} <small style={{ fontSize: 9 }}>{currencyLabel}</small></b>
         </div>
       </div>
-<StructuralLiabilitiesCard
-        total={structuralTotal}
-        rows={structuralDisplayRows}
-        open={showStructuralDetails}
-        onToggle={() => setShowStructuralDetails((value) => !value)}
-      />
+      {!focusDueOnly && (
+        <StructuralLiabilitiesCard
+          total={structuralTotal}
+          rows={structuralDisplayRows}
+          open={showStructuralDetails}
+          onToggle={() => setShowStructuralDetails((value) => !value)}
+        />
+      )}
+
+      {!focusDueOnly && (
+        <ReservedPaymentsCard
+          rows={reservedPaymentDisplayRows}
+          onPay={payReservedPayment}
+          onPostpone={postponeReservedPayment}
+        />
+      )}
 
 <CurrentLiabilitiesCard
-        total={currentDebtTotal}
-        coveredTotal={coveredCurrentTotal}
-        uncoveredTotal={uncoveredCurrentTotal}
+        total={displayedCurrentTotal}
+        coveredTotal={displayedCoveredTotal}
+        uncoveredTotal={displayedUncoveredTotal}
         rows={currentLiabilityDisplayRows}
         open={showCurrentDetails}
         assetKey={liabilityAssetKey}
@@ -4332,6 +5161,68 @@ const [settingsSectionsOpen, setSettingsSectionsOpen] = useState({
 });
 const structuralList = state.structuralLiabilities || state.structural || [];
 const creditCards = (state.currentLiabilities || []).filter((item) => item.type === "card");
+const savedSettingsCategories = state.expenseCategories?.items || [];
+const expenseCapCategories = [
+  ...DEFAULT_EXPENSE_CATEGORIES.map((base) => {
+    const saved = savedSettingsCategories.find((item) => item.id === base.id);
+    return saved ? { ...base, ...saved } : base;
+  }),
+  ...savedSettingsCategories.filter(
+    (saved) => !DEFAULT_EXPENSE_CATEGORIES.some((base) => base.id === saved.id)
+  ),
+];
+const sumExpenseCategoryCaps = (caps = {}) =>
+  Object.values(caps).reduce((sum, value) => sum + Math.max(0, Number(value || 0)), 0);
+const changeExpenseCategoryCap = (label, value) => {
+  const currentCaps = state.settings?.expenseCategoryCaps || {};
+  const nextCaps = { ...currentCaps, [label]: value };
+  const currentTotal = sumExpenseCategoryCaps(currentCaps);
+  const nextTotal = sumExpenseCategoryCaps(nextCaps);
+  const mainCap = Number(state.session?.spendingCap || 0);
+  const reducesExistingOverage = nextTotal < currentTotal;
+
+  if (nextTotal > mainCap && !reducesExistingOverage) {
+    alert(
+      `مجموع سقوف البنود لا يجوز أن يتجاوز سقف الصرف. المتاح للإضافة ${Math.max(
+        0,
+        mainCap - (currentTotal - Number(currentCaps[label] || 0))
+      ).toFixed(2)} ${currencyLabel}`
+    );
+    return;
+  }
+
+  updateSetting("settings.expenseCategoryCaps", nextCaps);
+};
+const addExpenseCategoryFromSettings = () => {
+  const label = window.prompt("اكتب اسم بند المصروف الجديد");
+  const cleanLabel = String(label || "").trim();
+  if (!cleanLabel) return;
+
+  const exists = expenseCapCategories.some(
+    (item) => String(item.label || "").trim().toLowerCase() === cleanLabel.toLowerCase()
+  );
+  if (exists) {
+    alert("هذا البند موجود مسبقًا");
+    return;
+  }
+
+  setState((prev) => ({
+    ...prev,
+    expenseCategories: {
+      ...prev.expenseCategories,
+      items: [
+        ...(prev.expenseCategories?.items || []),
+        {
+          id: `extra-${Date.now()}`,
+          label: cleanLabel,
+          icon: "📌",
+          color: visualIdentity.colors.cyan,
+          pinned: false,
+        },
+      ],
+    },
+  }));
+};
 const openingAssetChoices = (() => {
   if (openingAssetKind === "cash") return [];
   if (openingAssetKind === "gold") return ["ذهب 21", "ذهب 24"];
@@ -4914,6 +5805,17 @@ const openingBalanceRows = [
               alert("سقف الصرف لا يجوز أن يتجاوز صافي الراتب بعد الالتزامات الهيكلية");
               return;
             }
+            const plannedCapsTotal = sumExpenseCategoryCaps(
+              state.settings?.expenseCategoryCaps || {}
+            );
+            if (value < plannedCapsTotal) {
+              alert(
+                `سقف الصرف لا يجوز أن يقل عن مجموع سقوف البنود (${plannedCapsTotal.toFixed(
+                  2
+                )} ${currencyLabel})`
+              );
+              return;
+            }
 
             setState({
               ...state,
@@ -4921,6 +5823,14 @@ const openingBalanceRows = [
             });
           }}
           inputStyle={G.inp()}
+        />
+        <ExpenseCategoryCapsSettings
+          categories={expenseCapCategories}
+          caps={state.settings?.expenseCategoryCaps || {}}
+          spendingCap={Number(state.session?.spendingCap || 0)}
+          inputStyle={G.inp()}
+          onChange={changeExpenseCategoryCap}
+          onAddCategory={addExpenseCategoryFromSettings}
         />
 
       </>}
@@ -5201,8 +6111,10 @@ function buildMonthlySnapshot(state) {
 
     salary: Number(state.settings?.salary || 0),
     spendingCap: Number(state.session?.spendingCap || state.settings?.spendingCap || 0),
+    expenseCategoryCaps: structuredClone(state.settings?.expenseCategoryCaps || {}),
 
     expenses: structuredClone(state.expenses || []),
+    reservedPayments: structuredClone(state.reservedPayments || []),
     expensesByCategory: buildExpensesByCategory(state.expenses || []),
     extraCash: structuredClone(state.extraCash || []),
     transactions: structuredClone(state.transactions || []),
@@ -5225,13 +6137,9 @@ function buildMonthlySnapshot(state) {
       currentUpcomingByMonth: currentPlan.upcomingByMonth,
       currentTotal: currentPlan.total,
     },
+    structuralLiabilities: structuredClone(state.structuralLiabilities || []),
+    currentLiabilities: structuredClone(state.currentLiabilities || []),
   };
-}
-
-function getDueDateForMonth(item, monthKey) {
-  const day = Number(item.dueDay || (item.dueDate ? String(item.dueDate).split("-")[2] : 1) || 1);
-  const safeDay = Math.min(28, Math.max(1, day));
-  return `${monthKey}-${String(safeDay).padStart(2, "0")}`;
 }
 
 function closeMonthState(prev, targetMonth = new Date().toISOString().slice(0, 7)) {
@@ -5246,7 +6154,6 @@ function closeMonthState(prev, targetMonth = new Date().toISOString().slice(0, 7
     .filter((l) => l.status !== "paid")
     .map((l) => ({
       ...l,
-      dueDate: getDueDateForMonth(l, nextMonth),
       dueDay: Number(l.dueDay || (l.dueDate ? String(l.dueDate).split("-")[2] : 1) || 1),
       status: "pending",
       paymentMethod: "",
@@ -5272,6 +6179,9 @@ function closeMonthState(prev, targetMonth = new Date().toISOString().slice(0, 7
     },
     structuralLiabilities: prev.structuralLiabilities || [],
     currentLiabilities: rolledCurrentLiabilities,
+    reservedPayments: (prev.reservedPayments || [])
+      .filter((item) => item.status !== "paid")
+      .map((item) => ({ ...item, paymentMethod: "", newDueDate: "" })),
   };
 }
 
@@ -5295,6 +6205,160 @@ function hydrateAppState(storedState) {
   if (!storedState || typeof storedState !== "object" || Array.isArray(storedState)) {
     return INITIAL_STATE;
   }
+
+  const storedExpenses = Array.isArray(storedState.expenses) ? storedState.expenses : [];
+  let hydratedCurrentLiabilities = Array.isArray(storedState.currentLiabilities)
+    ? storedState.currentLiabilities
+    : [];
+  let hydratedReservedPayments = Array.isArray(storedState.reservedPayments)
+    ? storedState.reservedPayments
+    : null;
+
+  if (hydratedReservedPayments === null) {
+    hydratedReservedPayments = [];
+    const migratedLiabilities = [];
+
+    hydratedCurrentLiabilities.forEach((liability) => {
+      const balance = Number(liability.balance ?? liability.amount ?? 0);
+      const covered = Math.min(balance, Math.max(0, Number(liability.payableBuffer || 0)));
+
+      if (
+        liability.source !== "expense_payment" ||
+        liability.status === "paid" ||
+        covered <= 0
+      ) {
+        migratedLiabilities.push(liability);
+        return;
+      }
+
+      const originExpense = storedExpenses.find(
+        (expense) => String(expense.id) === String(liability.expenseId)
+      );
+      const originMonth =
+        liability.originMonth ||
+        String(originExpense?.date || originExpense?.createdAt || liability.date || liability.createdAt || "").slice(0, 7) ||
+        storedState.currentMonth ||
+        INITIAL_STATE.currentMonth;
+
+      hydratedReservedPayments.push({
+        id: `${liability.id}-reserved`,
+        amount: covered,
+        balance: covered,
+        status: "pending",
+        source: "expense_payment",
+        category: liability.category || originExpense?.category || "غير مصنف",
+        note: liability.note || originExpense?.note || "",
+        creditorName: liability.creditorName || liability.name || "دائن",
+        dueDate: liability.dueDate || "",
+        dueDay: liability.dueDay || 1,
+        originMonth,
+        expenseId: liability.expenseId,
+        date: liability.date || originExpense?.date || "",
+        createdAt: liability.createdAt || originExpense?.createdAt || "",
+        migratedFromLegacy: true,
+      });
+
+      const actualBalance = Number(Math.max(0, balance - covered).toFixed(2));
+      if (actualBalance > 0) {
+        migratedLiabilities.push({
+          ...liability,
+          amount: actualBalance,
+          balance: actualBalance,
+          payableBuffer: 0,
+          uncoveredDebt: actualBalance,
+          originMonth,
+        });
+      }
+    });
+
+    hydratedCurrentLiabilities = migratedLiabilities;
+  }
+
+  const cardReservedBalanceById = hydratedReservedPayments.reduce((totals, item) => {
+    if (item.status === "paid" || !item.cardId) return totals;
+    const cardKey = String(item.cardId);
+    totals[cardKey] = Number(
+      (Number(totals[cardKey] || 0) + Number(item.balance ?? item.amount ?? 0)).toFixed(2)
+    );
+    return totals;
+  }, {});
+  const unrepresentedCardBuffer = new Map(
+    hydratedCurrentLiabilities
+      .filter((item) => item.type === "card")
+      .map((card) => [
+        String(card.id),
+        Math.max(
+          0,
+          Number(card.payableBuffer || 0) -
+            Number(cardReservedBalanceById[String(card.id)] || 0)
+        ),
+      ])
+  );
+
+  [...storedExpenses]
+    .filter(
+      (expense) =>
+        expense.paymentMethod === "card" &&
+        expense.cardId != null &&
+        Number(expense.budgetCovered || 0) > 0
+    )
+    .sort(
+      (a, b) =>
+        String(a.date || a.createdAt || "").localeCompare(
+          String(b.date || b.createdAt || "")
+        )
+    )
+    .forEach((expense) => {
+      const hasReservedRecord = hydratedReservedPayments.some(
+        (item) =>
+          String(item.expenseId || "") === String(expense.id) &&
+          String(item.cardId || "") === String(expense.cardId)
+      );
+      if (hasReservedRecord) return;
+
+      const cardKey = String(expense.cardId);
+      const availableLegacyBuffer = Number(unrepresentedCardBuffer.get(cardKey) || 0);
+      const covered = Math.min(
+        Number(expense.budgetCovered || 0),
+        availableLegacyBuffer
+      );
+      if (covered <= 0) return;
+
+      const card = hydratedCurrentLiabilities.find(
+        (item) => item.type === "card" && String(item.id) === cardKey
+      );
+      if (!card) return;
+
+      const originMonth =
+        String(expense.date || expense.createdAt || "").slice(0, 7) ||
+        storedState.currentMonth ||
+        INITIAL_STATE.currentMonth;
+      const [year, month] = String(originMonth).split("-").map(Number);
+      const lastDay = new Date(year, month, 0).getDate();
+
+      hydratedReservedPayments.push({
+        id: `${expense.id}-reserved-card-migrated`,
+        amount: covered,
+        balance: covered,
+        status: "pending",
+        source: "card_payment",
+        category: expense.category || "غير مصنف",
+        note: expense.note || "",
+        creditorName: card.name || "بطاقة",
+        cardId: card.id,
+        dueDate: `${originMonth}-${String(lastDay).padStart(2, "0")}`,
+        dueDay: lastDay,
+        originMonth,
+        expenseId: expense.id,
+        date: expense.date || "",
+        createdAt: expense.createdAt || "",
+        migratedFromLegacy: true,
+      });
+      unrepresentedCardBuffer.set(
+        cardKey,
+        Number((availableLegacyBuffer - covered).toFixed(2))
+      );
+    });
 
   return {
     ...INITIAL_STATE,
@@ -5336,10 +6400,9 @@ function hydrateAppState(storedState) {
     structuralLiabilities: Array.isArray(storedState.structuralLiabilities)
       ? storedState.structuralLiabilities
       : [],
-    currentLiabilities: Array.isArray(storedState.currentLiabilities)
-      ? storedState.currentLiabilities
-      : [],
-    expenses: Array.isArray(storedState.expenses) ? storedState.expenses : [],
+    currentLiabilities: hydratedCurrentLiabilities,
+    reservedPayments: hydratedReservedPayments,
+    expenses: storedExpenses,
     transactions: Array.isArray(storedState.transactions) ? storedState.transactions : [],
     monthlySnapshots: Array.isArray(storedState.monthlySnapshots)
       ? storedState.monthlySnapshots
@@ -5353,6 +6416,8 @@ export default function App() {
   const [state, setState] = useState(INITIAL_STATE);
   const [storageReady, setStorageReady] = useState(false);
   const [storageError, setStorageError] = useState("");
+  const saveQueueRef = useRef(Promise.resolve());
+  const resettingStateRef = useRef(false);
   const [authSession, setAuthSession] = useState(null);
   const [authMode, setAuthMode] = useState("signin");
   const [authEmail, setAuthEmail] = useState("");
@@ -5429,8 +6494,16 @@ export default function App() {
     };
   }, [authSession]);
   useEffect(() => {
-    if (!storageReady || !authSession) return;
-    saveState(state, authSession).catch((err) => {
+    if (!storageReady || !authSession || resettingStateRef.current) return;
+    const stateSnapshot = structuredClone(state);
+    const queuedSave = saveQueueRef.current
+      .catch(() => undefined)
+      .then(() => {
+        if (resettingStateRef.current) return undefined;
+        return saveState(stateSnapshot, authSession);
+      });
+    saveQueueRef.current = queuedSave;
+    queuedSave.catch((err) => {
       console.error("Save Error:", err);
       setStorageError("تعذر حفظ البيانات في Supabase. لم يتم استخدام تخزين محلي.");
     });
@@ -5825,10 +6898,22 @@ function handleExtraCashSubmit(data) {
 }
 
 async function handleClearState() {
+  resettingStateRef.current = true;
+  setStorageReady(false);
   try {
+    await saveQueueRef.current.catch(() => undefined);
     await clearState(authSession);
+    const cleanState = structuredClone(INITIAL_STATE);
+    cleanState.currentMonth = new Date().toISOString().slice(0, 7);
+    cleanState.settings.month = cleanState.currentMonth;
+    cleanState.assetHistory = [];
+    cleanState.monthlySnapshots = [];
+    await saveState(cleanState, authSession);
+    setState(cleanState);
     window.location.reload();
   } catch (err) {
+    resettingStateRef.current = false;
+    setStorageReady(true);
     console.error("Clear Error:", err);
     setStorageError("تعذر حذف البيانات من Supabase. لم يتم استخدام تخزين محلي.");
     throw err;
@@ -5961,6 +7046,10 @@ const handleViewMonthChange = (month) => {
         ...state.settings,
         month: selectedViewSnapshot.month || state.settings?.month,
         salary: selectedViewSnapshot.salary ?? state.settings?.salary,
+        expenseCategoryCaps:
+          selectedViewSnapshot.expenseCategoryCaps ??
+          state.settings?.expenseCategoryCaps ??
+          {},
       },
       session: {
         ...state.session,
@@ -5971,6 +7060,7 @@ const handleViewMonthChange = (month) => {
       },
       assets: selectedViewSnapshot.assets || state.assets,
       expenses: selectedViewSnapshot.expenses || [],
+      reservedPayments: selectedViewSnapshot.reservedPayments || [],
       extraCash: selectedViewSnapshot.extraCash || [],
       currentLiabilities:
         selectedViewSnapshot.currentLiabilities ||
@@ -6048,6 +7138,10 @@ const handleViewMonthChange = (month) => {
             state={viewState}
             setState={setState}
             focusDueOnly={liabilitiesFocusDueOnly}
+            onCloseDueFocus={() => {
+              setLiabilitiesFocusDueOnly(false);
+              setTab("overview");
+            }}
           />
         )}
         {!isSnapshotView && tab === "settings" && (

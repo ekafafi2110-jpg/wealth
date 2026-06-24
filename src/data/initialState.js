@@ -2,6 +2,7 @@ export const INITIAL_STATE = {
   settings: {
     month: new Date().toISOString().slice(0, 7),
     salary: 0,
+    expenseCategoryCaps: {},
 
     market: {
       goldGramPrice: 0,
@@ -33,6 +34,7 @@ export const INITIAL_STATE = {
 
   structuralLiabilities: [],
   currentLiabilities: [],
+  reservedPayments: [],
 
   session: {
     isOpen: false,

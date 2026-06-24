@@ -276,6 +276,21 @@ button:hover {
   .asset-summary-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
   }
+
+  .asset-distribution-layout {
+    grid-template-columns: minmax(0, 1fr) 124px !important;
+    gap: 7px !important;
+  }
+
+  .asset-distribution-chart {
+    width: 124px !important;
+    height: 124px !important;
+  }
+
+  .asset-distribution-legend > div {
+    grid-template-columns: 62px minmax(12px, 1fr) 22px 34px !important;
+    gap: 4px !important;
+  }
 }
 
 .asset-summary-tile:nth-child(2)::before,
