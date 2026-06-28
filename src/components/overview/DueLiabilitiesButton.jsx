@@ -1,5 +1,5 @@
 export default function DueLiabilitiesButton({ count, onClick }) {
-  if (Number(count || 0) <= 0) return null;
+  const dueCount = Number(count || 0);
 
   return (
     <button
@@ -26,28 +26,30 @@ export default function DueLiabilitiesButton({ count, onClick }) {
       }}
     >
       🔔
-      <span
-        style={{
-          position: "absolute",
-          top: -5,
-          right: -5,
-          minWidth: 16,
-          height: 16,
-          padding: "0 4px",
-          borderRadius: 999,
-          background: "#ef4444",
-          color: "#fff",
-          display: "inline-flex",
-          alignItems: "center",
-          justifyContent: "center",
-          fontSize: 9,
-          fontWeight: 900,
-          lineHeight: 1,
-          boxShadow: "0 1px 4px rgba(239,68,68,0.18)",
-        }}
-      >
-        {count}
-      </span>
+      {dueCount > 0 && (
+        <span
+          style={{
+            position: "absolute",
+            top: -5,
+            right: -5,
+            minWidth: 16,
+            height: 16,
+            padding: "0 4px",
+            borderRadius: 999,
+            background: "#ef4444",
+            color: "#fff",
+            display: "inline-flex",
+            alignItems: "center",
+            justifyContent: "center",
+            fontSize: 9,
+            fontWeight: 900,
+            lineHeight: 1,
+            boxShadow: "0 1px 4px rgba(239,68,68,0.18)",
+          }}
+        >
+          {dueCount}
+        </span>
+      )}
     </button>
   );
 }

@@ -359,6 +359,10 @@ const incomeEntryMeta = (entry) =>
 function assetBreakdownFromAssets(assets = {}, market = {}) {
   const goldPrice = Number(market.goldGramPrice || 0);
   const silverPrice = Number(market.silverGramPrice || 0);
+  const unitPrice = (item, fallback = 0, referenceField = "wac") =>
+    Number(item?.currentPrice || 0) ||
+    Number(fallback || 0) ||
+    Number(item?.[referenceField] || 0);
   const rows = [];
 
   rows.push({
@@ -381,7 +385,7 @@ function assetBreakdownFromAssets(assets = {}, market = {}) {
       label: item.label || "ذهب",
       value:
         Number(item.units || 0) *
-        (goldPrice > 0 ? goldPrice : Number(item.wac || 0)),
+        unitPrice(item, goldPrice, "wac"),
     })
   );
 
@@ -391,7 +395,7 @@ function assetBreakdownFromAssets(assets = {}, market = {}) {
       label: item.label || "فضة",
       value:
         Number(item.units || 0) *
-        (silverPrice > 0 ? silverPrice : Number(item.wac || 0)),
+        unitPrice(item, silverPrice, "wac"),
     })
   );
 
@@ -399,7 +403,7 @@ function assetBreakdownFromAssets(assets = {}, market = {}) {
     rows.push({
       key: `stock:${item.id}`,
       label: item.name || "سهم",
-      value: Number(item.units || 0) * Number(item.currentPrice || 0),
+      value: Number(item.units || 0) * unitPrice(item, 0, "wac"),
     })
   );
 
@@ -410,7 +414,7 @@ function assetBreakdownFromAssets(assets = {}, market = {}) {
       value:
         item.type === "fixed"
           ? Number(item.amount || 0)
-          : Number(item.units || 0) * Number(item.price || 0),
+          : Number(item.units || 0) * unitPrice(item, 0, "price"),
     })
   );
 
@@ -776,6 +780,8 @@ const [unusualDueDate, setUnusualDueDate] = useState("");
   return dueMonth <= currentMonth;
 });
   const assetSources = getAssetSources(state);
+  const accountingDate = getDateKey(state.__testAccountingDate || new Date());
+  const accountingDateTime = `${accountingDate}T12:00:00.000Z`;
   const isGoodsSource = (source) => {
     if (source.type !== "custom") return false;
     const id = Number(String(source.key).split(":")[1]);
@@ -854,6 +860,28 @@ const mainExpenseCategories = pinnedExpenseCategories;
         ? `التزام — ${selectedExpenseFunding.label || "دائن"}`
         : `أصل — ${selectedExpenseFunding.label || "أصل"}`
     : "";
+  const selectedExpensePaymentParts =
+    selectedExpense && selectedExpenseFundingLabel
+      ? [
+          {
+            label: "كاش",
+            amount: Number(selectedExpense.budgetCovered || 0),
+            color: visualIdentity.semantic.success,
+          },
+          {
+            label: selectedExpenseFundingLabel,
+            amount: Number(
+              selectedExpenseFunding?.amount || selectedExpense.overBudget || 0
+            ),
+            color:
+              selectedExpenseFunding?.type === "asset"
+                ? visualIdentity.colors.gold
+                : selectedExpenseFunding?.type === "card"
+                  ? visualIdentity.colors.cyan
+                  : visualIdentity.colors.red,
+          },
+        ].filter((part) => Number(part.amount || 0) > 0)
+      : [];
 const hasSpendingCap = Number(budget.remainingCap || 0) > 0;
 const isSpendingCapExhausted =
   Number(budget.spendingCap || 0) > 0 && Number(budget.remainingCap || 0) <= 0;
@@ -959,6 +987,10 @@ useEffect(() => {
   };
 
   const addPendingExpense = () => {
+    if (Number(state.session?.pendingSurplus || 0) > 0.01) {
+      alert("وجّه فائض الراتب إلى أحد الأصول قبل تسجيل أي مصروف");
+      return;
+    }
     const value = Number(amount || 0);
 
     if (!value || value <= 0) {
@@ -993,7 +1025,7 @@ useEffect(() => {
         category,
         amount: value,
         note,
-        date: new Date().toISOString().slice(0, 10),
+        date: accountingDate,
         paymentMethod,
         cardId,
         liabilityName,
@@ -1129,12 +1161,85 @@ useEffect(() => {
     }
     return { ...option, amountLabel: enteredAmount.toFixed(2) };
   });
+  const buildAiExpensePrompt = (inputType) => {
+    const categoryLabels = allExpenseCategories
+      .map((item) => item.label)
+      .filter(Boolean);
+    const paymentLabels = paymentOptions.map((option) => ({
+      value: option.value,
+      label: option.label,
+    }));
+    const inputPlaceholder =
+      inputType === "voice"
+        ? "{{TRANSCRIPT_TEXT_FROM_AUDIO}}"
+        : "{{OCR_TEXT_OR_RECEIPT_IMAGE_CONTEXT}}";
+
+    return `أنت مساعد لاستخراج بيانات مصروف شخصي لتطبيق إدارة ثروة.
+المطلوب: حلّل ${inputType === "voice" ? "نص تسجيل صوتي" : "صورة/نص فاتورة"} واستخرج اقتراح تعبئة حقول المصروف فقط.
+لا تسجل المصروف فعليًا، ولا تغيّر أي بيانات، ولا تنفذ أي حساب مالي خارج المطلوب.
+أعد JSON صالحًا فقط بدون شرح إضافي.
+
+سياق التطبيق:
+- العملة الحالية: ${localeCurrencyLabel}
+- الأرقام يجب أن تكون غربية دائمًا 0-9.
+- تغيير العملة في التطبيق يعني تغيير الرمز فقط ولا يعني تحويل المبالغ.
+- التصنيفات المتاحة: ${categoryLabels.join(", ") || "غير مصنف"}
+- طرق الدفع المتاحة حاليًا: ${paymentLabels.map((item) => `${item.value}=${item.label}`).join(", ")}
+- التصنيف المحدد حاليًا في الواجهة: ${category || "غير محدد"}
+- طريقة الدفع المحددة حاليًا في الواجهة: ${paymentMethod || "غير محددة"}
+- الملاحظة الحالية: ${note || "لا توجد"}
+
+قواعد الاستخراج:
+1. استخرج المبلغ المدفوع فقط، ولا تجمع ضرائب أو خصومات بشكل منفصل إذا كان الإجمالي النهائي واضحًا.
+2. اختر أقرب تصنيف من التصنيفات المتاحة، وإذا لم تكن واثقًا استخدم "غير مصنف".
+3. اقترح طريقة الدفع فقط إذا كانت واضحة من النص أو الفاتورة، وإلا اجعلها null.
+4. لا تقترح تمويل العجز أو الالتزامات أو البطاقة إذا لم يظهر ذلك صراحة.
+5. إذا وجدت أكثر من مصروف في نفس النص/الفاتورة، أعدها في expenses كمصفوفة.
+6. إذا كانت البيانات ناقصة أو غير مؤكدة، اجعل needsReview=true وأضف السبب في warnings.
+
+النص/المدخل المراد تحليله:
+${inputPlaceholder}
+
+صيغة الإخراج المطلوبة:
+{
+  "expenses": [
+    {
+      "amount": 0,
+      "category": "طعام",
+      "note": "",
+      "paymentMethodSuggestion": null,
+      "merchant": "",
+      "date": null,
+      "confidence": 0.0,
+      "needsReview": true,
+      "warnings": []
+    }
+  ],
+  "rawText": "",
+  "summary": ""
+}`;
+  };
+
+  const prepareAiExpensePrompt = async (inputType) => {
+    const prompt = buildAiExpensePrompt(inputType);
+    try {
+      await navigator.clipboard.writeText(prompt);
+      alert(
+        inputType === "voice"
+          ? "تم نسخ برومبت تسجيل المصروف بالصوت للحافظة"
+          : "تم نسخ برومبت قراءة الفاتورة للحافظة"
+      );
+    } catch {
+      window.prompt("انسخ البرومبت لاستخدامه لاحقًا مع نموذج الذكاء الاصطناعي", prompt);
+    }
+  };
 
   const submitExpenseWithState = (baseState, fundingOverride = null) => {
     const effectivePaymentMethod =
       fundingOverride?.paymentMethod ?? (isMixedPayment ? "cash" : paymentMethod);
     const effectiveOverBudgetSource = fundingOverride?.source ?? overBudgetSource;
     const effectiveOverBudgetAssetKey = fundingOverride?.assetKey ?? overBudgetAssetKey;
+    const effectiveAssetPaymentKey = fundingOverride?.assetKey ?? "";
     const effectiveEmergencyAssetKey =
       fundingOverride?.assetKey ?? unusualAssetKey;
     const effectiveOverBudget = ["emergency", "asset"].includes(
@@ -1151,7 +1256,7 @@ useEffect(() => {
       return;
     }
 
-    if (effectivePaymentMethod === "asset") {
+    if (effectivePaymentMethod === "asset" && !effectiveAssetPaymentKey) {
       alert("أكمل مناقلة الأصل أولاً لتسجيل المصروف");
       return;
     }
@@ -1286,8 +1391,11 @@ useEffect(() => {
       paymentMethod: effectivePaymentMethod,
       cardId,
       note,
+      date: accountingDate,
+      createdAt: accountingDateTime,
       liabilityName,
       dueDate,
+      assetKey: effectivePaymentMethod === "asset" ? effectiveAssetPaymentKey : "",
       emergencyFunding:
         effectivePaymentMethod === "emergency"
           ? {
@@ -1484,6 +1592,7 @@ setState(nextState);
         category: item.category,
         note: item.note || "",
         date: item.date,
+        createdAt: `${item.date || accountingDate}T12:00:00.000Z`,
         paymentMethod,
         cardId,
         liabilityName,
@@ -1504,10 +1613,15 @@ setState(nextState);
     alert(`تم تسجيل ${pendingExpenses.length} مصاريف بنجاح`);
   };
 
-  const submitExpense = () =>
-    pendingExpenses.length > 0
+  const submitExpense = () => {
+    if (Number(state.session?.pendingSurplus || 0) > 0.01) {
+      alert("وجّه فائض الراتب إلى أحد الأصول قبل تسجيل أي مصروف");
+      return;
+    }
+    return pendingExpenses.length > 0
       ? submitPendingExpenses()
       : submitExpenseWithState(state);
+  };
 
   const getSaleSources = (type) =>
     assetSources.filter((source) => {
@@ -1659,6 +1773,7 @@ setState(nextState);
       transferResult.nextState,
       destinationKey
     );
+    const liquidatedAmount = Number(transferResult.amount || 0);
     if (finalReceiverBalance < requiredAmount) {
       setState(transferResult.nextState);
       setDeficitTransfer(null);
@@ -1668,7 +1783,40 @@ setState(nextState);
       return;
     }
 
-    completeExpense(transferResult.nextState, destinationKey);
+    const shortageCoveredFromReceiver = Math.max(0, requiredAmount - liquidatedAmount);
+    const taggedAssetHistory = [...(transferResult.nextState.assetHistory || [])];
+    const movementToTagIndex = taggedAssetHistory
+      .map((movement, index) => ({ movement, index }))
+      .reverse()
+      .find(({ movement }) =>
+        movement.type === "asset_units_liquidated" &&
+        movement.assetKey === deficitTransfer.fromAsset &&
+        movement.destinationKey === destinationKey &&
+        Number(movement.amount || 0) === liquidatedAmount &&
+        !movement.expensePurpose
+      )?.index;
+
+    if (movementToTagIndex != null) {
+      taggedAssetHistory[movementToTagIndex] = {
+        ...taggedAssetHistory[movementToTagIndex],
+        expensePurpose: "expense_coverage",
+        expenseCategory: category || "غير مصنف",
+        note: `تسييل لتغطية مصروف — ${category || "غير مصنف"}`,
+      };
+    }
+
+    const taggedTransferState = {
+      ...transferResult.nextState,
+      assetHistory: taggedAssetHistory,
+    };
+
+    if (shortageCoveredFromReceiver > 0) {
+      alert(
+        `تنبيه: مبلغ التسييل ${liquidatedAmount.toFixed(2)} ${localeCurrencyLabel} لم يغطِ كامل المطلوب. سيتم تغطية الفرق ${shortageCoveredFromReceiver.toFixed(2)} ${localeCurrencyLabel} من رصيد ${row.allocation === "bank" ? "الحساب البنكي" : "الكاش الادخاري"}.`
+      );
+    }
+
+    completeExpense(taggedTransferState, destinationKey);
   };
 
   function cancelExpense(expenseId) {
@@ -2069,6 +2217,64 @@ function toggleExpenseCategoryPinned(catId) {
             >
               تسجيل مصروف
             </div>
+
+            <div
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 5,
+                flex: "0 0 auto",
+              }}
+            >
+              <button
+                type="button"
+                onClick={() => prepareAiExpensePrompt("voice")}
+                title="تسجيل المصروف بالصوت"
+                aria-label="تسجيل المصروف بالصوت"
+                style={{
+                  width: 26,
+                  height: 26,
+                  borderRadius: 9,
+                  border: "1px solid rgba(255,198,45,0.30)",
+                  background: "rgba(255,198,45,0.10)",
+                  color: visualIdentity.colors.gold,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  cursor: "pointer",
+                  fontSize: 13,
+                  fontWeight: 900,
+                  fontFamily: "inherit",
+                  boxShadow: "inset 0 1px 0 rgba(255,255,255,0.12)",
+                }}
+              >
+                🎙️
+              </button>
+              <button
+                type="button"
+                onClick={() => prepareAiExpensePrompt("receipt")}
+                title="قراءة الفاتورة بالصورة"
+                aria-label="قراءة الفاتورة بالصورة"
+                style={{
+                  width: 26,
+                  height: 26,
+                  borderRadius: 9,
+                  border: "1px solid rgba(255,255,255,0.16)",
+                  background: "rgba(255,255,255,0.08)",
+                  color: visualIdentity.colors.white,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  cursor: "pointer",
+                  fontSize: 13,
+                  fontWeight: 900,
+                  fontFamily: "inherit",
+                  boxShadow: "inset 0 1px 0 rgba(255,255,255,0.12)",
+                }}
+              >
+                📷
+              </button>
+            </div>
           </div>
 
 <ExpenseCategoryGrid
@@ -2428,7 +2634,21 @@ function toggleExpenseCategoryPinned(catId) {
         <button
           onClick={() => {
             const structuralTotal = calcStructuralTotal(state);
-            const net = state.settings.salary - structuralTotal;
+            const salary = Number(state.settings?.salary || 0);
+            if (salary <= 0) {
+              alert("أدخل الراتب أولاً قبل بدء الشهر");
+              return;
+            }
+            if (structuralTotal > salary) {
+              alert("مجموع الالتزامات الهيكلية لا يجوز أن يتجاوز الراتب");
+              return;
+            }
+            const net = salary - structuralTotal;
+            const selectedCap = Math.min(
+              Math.max(0, Number(state.session?.spendingCap ?? state.settings?.spendingCap ?? 0)),
+              net
+            );
+            const salarySurplus = Math.max(0, net - selectedCap);
             const rolledCurrentLiabilities =
   (state.currentLiabilities || [])
     .filter((l) => l.status !== "paid")
@@ -2450,8 +2670,8 @@ function toggleExpenseCategoryPinned(catId) {
                   cashFlow: "salary",
                   amount: Number(p.settings?.salary || 0),
                   structuralTotal,
-                  spendingCap: Math.floor(net * 0.8),
-                  plannedSavings: net - Math.floor(net * 0.8),
+                  spendingCap: selectedCap,
+                  plannedSavings: salarySurplus,
                   date: new Date().toISOString(),
                 },
               ],
@@ -2461,12 +2681,16 @@ function toggleExpenseCategoryPinned(catId) {
                 isOpen: true,
                 salaryNetAfterStructural: net,
                 salaryNetAfterCurrentLiabilities: net,
-                spendingCap: Math.floor(net * 0.8),
+                spendingCap: selectedCap,
                 coveredSpent: 0,
                 overBudgetSpent: 0,
-                savingsAmount: net - Math.floor(net * 0.8),
+                savingsAmount: salarySurplus,
+                pendingSurplus: salarySurplus,
               },
             }));
+            if (salarySurplus > 0.01) {
+              window.setTimeout(() => onAllocateSurplus(salarySurplus), 0);
+            }
           }}
           style={G.btn(visualIdentity.gradients.gold, visualIdentity.colors.navy, {
             width: "100%",
@@ -2541,6 +2765,14 @@ function toggleExpenseCategoryPinned(catId) {
         }
         amountReadOnly
         showAllocations={deficitSourceNeedsSale}
+        directSubmit={Boolean(
+          deficitTransfer?.sources
+            ?.find((source) => source.key === deficitTransfer?.fromAsset)
+            ?.type &&
+            ["cash", "bank"].includes(
+              deficitTransfer.sources.find((source) => source.key === deficitTransfer.fromAsset)?.type
+            )
+        )}
         allowMultiple={false}
         allowedAllocations={["cash", "bank"]}
         allowNewTarget={false}
@@ -2671,6 +2903,41 @@ function toggleExpenseCategoryPinned(catId) {
             {selectedExpenseFundingLabel
               ? `كاش + ${selectedExpenseFundingLabel}`
               : selectedExpense.paymentMethod}
+          </b>
+        </div>
+        {selectedExpensePaymentParts.length > 0 && (
+          <div
+            style={{
+              display: "grid",
+              gap: 6,
+              padding: "7px 0",
+              borderBottom: "1px solid rgba(255,255,255,0.10)",
+            }}
+          >
+            {selectedExpensePaymentParts.map((part) => (
+              <div
+                key={part.label}
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  gap: 8,
+                  color: HOME_UI.muted,
+                  fontSize: 11,
+                }}
+              >
+                <span>{part.label}</span>
+                <b style={{ color: part.color }}>
+                  {Number(part.amount || 0).toFixed(2)} {localeCurrencyLabel}
+                </b>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div style={HOME_UI.row}>
+          <span style={{ color: HOME_UI.muted }}>الملاحظة</span>
+          <b style={{ textAlign: "left", maxWidth: "62%" }}>
+            {selectedExpense.note || "بدون ملاحظة"}
           </b>
         </div>
 
@@ -3343,9 +3610,13 @@ function AssetsScreen({ state, setState, onAddExtraCash, readOnly = false }) {
   const goldPrice = Number(state.settings.market.goldGramPrice || 0);
   const silverPrice = Number(state.settings.market.silverGramPrice || 0);
   const getGoldUnitPrice = (item) =>
-    goldPrice > 0 ? goldPrice : Number(item?.wac || 0);
+    Number(item?.currentPrice || 0) || goldPrice || Number(item?.wac || 0);
   const getSilverUnitPrice = (item) =>
-    silverPrice > 0 ? silverPrice : Number(item?.wac || 0);
+    Number(item?.currentPrice || 0) || silverPrice || Number(item?.wac || 0);
+  const getGenericUnitPrice = (item) =>
+    Number(item?.currentPrice || 0) || Number(item?.price || 0);
+  const getGenericReferencePrice = (item) =>
+    Number(item?.wac ?? item?.price ?? 0);
   const goldTotal = (state.assets.gold || []).reduce(
     (sum, g) => sum + Number(g.units || 0) * getGoldUnitPrice(g),
     0
@@ -3370,7 +3641,7 @@ function AssetsScreen({ state, setState, onAddExtraCash, readOnly = false }) {
     stockUnitsTotal > 0 ? stockCostTotal / stockUnitsTotal : 0;
   const customTotal = (state.assets.custom || []).reduce((sum, c) => {
     if (c.type === "fixed") return sum + Number(c.amount || 0);
-    return sum + Number(c.units || 0) * Number(c.price || 0);
+    return sum + Number(c.units || 0) * getGenericUnitPrice(c);
   }, 0);
 
   const openAddAsset = (kind) => {
@@ -3439,12 +3710,14 @@ function AssetsScreen({ state, setState, onAddExtraCash, readOnly = false }) {
         totalUnits > 0
           ? Number(((oldValue + newValue) / totalUnits).toFixed(4))
           : purchasePrice;
+      existing.currentPrice = purchasePrice;
     } else {
       next.assets.gold.push({
         id,
         label: name,
         units: newUnits,
         wac: purchasePrice,
+        currentPrice: purchasePrice,
       });
     }
   }
@@ -3476,12 +3749,14 @@ function AssetsScreen({ state, setState, onAddExtraCash, readOnly = false }) {
         totalUnits > 0
           ? Number(((oldValue + newValue) / totalUnits).toFixed(4))
           : purchasePrice;
+      existing.currentPrice = purchasePrice;
     } else {
       next.assets.silver.push({
         id,
         label: name,
         units: newUnits,
         wac: purchasePrice,
+        currentPrice: purchasePrice,
       });
     }
   }
@@ -3561,17 +3836,19 @@ function AssetsScreen({ state, setState, onAddExtraCash, readOnly = false }) {
 
     if (existing) {
       const oldUnits = Number(existing.units || 0);
-      const oldPrice = Number(existing.price || 0);
+      const oldPrice = Number(existing.wac ?? existing.price ?? 0);
 
       const oldValue = oldUnits * oldPrice;
       const newValue = newUnits * purchasePrice;
       const totalUnits = oldUnits + newUnits;
 
       existing.units = Number(totalUnits.toFixed(4));
-      existing.price =
+      existing.wac =
         totalUnits > 0
           ? Number(((oldValue + newValue) / totalUnits).toFixed(4))
           : purchasePrice;
+      existing.price = existing.wac;
+      existing.currentPrice = purchasePrice;
     } else {
       next.assets.custom.push({
         id,
@@ -3579,6 +3856,8 @@ function AssetsScreen({ state, setState, onAddExtraCash, readOnly = false }) {
         type: "unit",
         units: newUnits,
         price: purchasePrice,
+        wac: purchasePrice,
+        currentPrice: purchasePrice,
       });
     }
   }
@@ -3753,7 +4032,7 @@ function AssetsScreen({ state, setState, onAddExtraCash, readOnly = false }) {
       if (existing) {
         const oldUnits = Number(existing.units || 0);
         const oldAverage =
-          type === "custom" ? Number(existing.price || 0) : Number(existing.wac || 0);
+          type === "custom" ? Number(existing.wac ?? existing.price ?? 0) : Number(existing.wac || 0);
         const totalUnits = oldUnits + row.units;
         const nextAverage =
           totalUnits > 0
@@ -3761,9 +4040,15 @@ function AssetsScreen({ state, setState, onAddExtraCash, readOnly = false }) {
             : row.price;
 
         existing.units = Number(totalUnits.toFixed(4));
-        if (type === "custom") existing.price = nextAverage;
-        else existing.wac = nextAverage;
-        if (listName === "stocks") existing.currentPrice = row.price;
+        if (type === "custom") {
+          existing.wac = nextAverage;
+          existing.price = nextAverage;
+        } else {
+          existing.wac = nextAverage;
+        }
+        if (["stocks", "gold", "silver", "custom"].includes(listName)) {
+          existing.currentPrice = row.price;
+        }
         next.assetHistory.push({
           id: `${Date.now()}-${row.id}`,
           date: now,
@@ -3802,6 +4087,8 @@ function AssetsScreen({ state, setState, onAddExtraCash, readOnly = false }) {
             type: "unit",
             units: row.units,
             price: row.price,
+            wac: row.price,
+            currentPrice: row.price,
           });
         } else {
           list.push({
@@ -3809,6 +4096,7 @@ function AssetsScreen({ state, setState, onAddExtraCash, readOnly = false }) {
             label: row.assetName,
             units: row.units,
             wac: row.price,
+            currentPrice: row.price,
           });
         }
         next.assetHistory.push({
@@ -3992,18 +4280,14 @@ function AssetsScreen({ state, setState, onAddExtraCash, readOnly = false }) {
   const stockAssetRows = (state.assets.stocks || []).map((stock) => ({
     id: stock.id,
     name: stock.name,
-    value: Number(stock.units || 0) * Number(stock.currentPrice || 0),
-    meta: `${Number(stock.units || 0).toFixed(4)} سهم · سعر ${Number(
-      stock.currentPrice || 0
-    ).toFixed(4)} · متوسط ${Number(stock.wac || 0).toFixed(4)}`,
+    value: Number(stock.units || 0) * (Number(stock.currentPrice || 0) || Number(stock.wac || 0)),
+    meta: `اليوم ${Number(stock.currentPrice || stock.wac || 0).toFixed(2)} · متوسط ${Number(stock.wac || 0).toFixed(2)}`,
   }));
   const goldAssetRows = (state.assets.gold || []).map((gold) => ({
     id: gold.id,
     name: gold.label,
     value: Number(gold.units || 0) * getGoldUnitPrice(gold),
-    meta: `${Number(gold.units || 0).toFixed(4)} غ · متوسط ${Number(
-      gold.wac || 0
-    ).toFixed(4)}`,
+    meta: `اليوم ${getGoldUnitPrice(gold).toFixed(2)} · متوسط ${Number(gold.wac || 0).toFixed(2)}`,
     metaColor: visualIdentity.colors.textSecondary,
     metaWeight: 700,
   }));
@@ -4011,9 +4295,7 @@ function AssetsScreen({ state, setState, onAddExtraCash, readOnly = false }) {
     id: silver.id,
     name: silver.label,
     value: Number(silver.units || 0) * getSilverUnitPrice(silver),
-    meta: `${Number(silver.units || 0).toFixed(4)} غ · سعر ${getSilverUnitPrice(silver).toFixed(
-      4
-    )} · متوسط ${Number(silver.wac || 0).toFixed(4)}`,
+    meta: `اليوم ${getSilverUnitPrice(silver).toFixed(2)} · متوسط ${Number(silver.wac || 0).toFixed(2)}`,
   }));
   const customAssetRows = (state.assets.custom || []).map((asset) => ({
     id: asset.id,
@@ -4021,19 +4303,103 @@ function AssetsScreen({ state, setState, onAddExtraCash, readOnly = false }) {
     value:
       asset.type === "fixed"
         ? Number(asset.amount || 0)
-        : Number(asset.units || 0) * Number(asset.price || 0),
+        : Number(asset.units || 0) * getGenericUnitPrice(asset),
     meta:
       asset.type === "unit"
-        ? `${Number(asset.units || 0).toFixed(4)} وحدة · سعر ${Number(
-            asset.price || 0
-          ).toFixed(4)}`
+        ? `اليوم ${getGenericUnitPrice(asset).toFixed(2)} · متوسط ${getGenericReferencePrice(asset).toFixed(2)}`
         : "",
   }));
 
-  const percentChange = (value, cost) =>
-    Number(cost || 0) > 0
-      ? ((Number(value || 0) - Number(cost || 0)) / Number(cost || 0)) * 100
-      : 0;
+  const formatAssetUnits = (units, kind) => {
+    const value = Number(units || 0);
+    if (!value) return "";
+    if (["gold", "silver"].includes(kind)) return `${value.toFixed(2)} غم`;
+    if (kind === "stocks") return `${Math.round(value)} سهم`;
+    return `${Math.round(value)} وحدة`;
+  };
+  const assetNameWithUnits = (name, units, kind) => {
+    const unitText = formatAssetUnits(units, kind);
+    return unitText ? `${name} ${unitText}` : name;
+  };
+  const todayKey = getDateKey(state.__testAccountingDate || new Date());
+  const currentMonthKey =
+    state.__testAccountingDate
+      ? getMonthKey(todayKey)
+      : state.currentMonth || new Date().toISOString().slice(0, 7);
+  const previousMonthSnapshot = [...(state.monthlySnapshots || [])]
+    .filter((snapshot) => String(snapshot.month || "") < String(currentMonthKey))
+    .sort((a, b) => String(a.month).localeCompare(String(b.month)))
+    .at(-1);
+  const monthStartBreakdown = new Map(
+    assetBreakdownFromAssets(
+      previousMonthSnapshot?.assets || {},
+      state.settings?.market || {}
+    ).map((item) => [item.key, Number(item.value || 0)])
+  );
+  const monthStartTotal = previousMonthSnapshot
+    ? Number(previousMonthSnapshot.assetTotals?.totalAssets || 0)
+    : Number(assets.totalAssets || 0);
+  const dailySnapshots = [...(state.assetDailySnapshots || [])]
+    .filter((snapshot) => snapshot?.date)
+    .sort((a, b) => String(a.date).localeCompare(String(b.date)));
+  const previousDailySnapshot = dailySnapshots
+    .filter((snapshot) => String(snapshot.date) < todayKey)
+    .at(-1);
+  const referenceAssetSnapshot = previousDailySnapshot || previousMonthSnapshot;
+  const referenceBreakdown = new Map(
+    assetBreakdownFromAssets(
+      referenceAssetSnapshot?.assets || {},
+      state.settings?.market || {}
+    ).map((item) => [item.key, Number(item.value || 0)])
+  );
+  const previousChangePct = (assetKey, currentValue) => {
+    const startValue = referenceBreakdown.has(assetKey)
+      ? Number(referenceBreakdown.get(assetKey) || 0)
+      : monthStartBreakdown.has(assetKey)
+        ? Number(monthStartBreakdown.get(assetKey) || 0)
+      : Number(currentValue || 0);
+    if (startValue <= 0) return 0;
+    return ((Number(currentValue || 0) - startValue) / startValue) * 100;
+  };
+  const compactAssetTrendPoints = () => {
+    const daily = new Map([[`${currentMonthKey}-01`, Number(monthStartTotal || 0)]]);
+    dailySnapshots
+      .filter(
+        (snapshot) =>
+          String(snapshot.date) <= todayKey &&
+          (snapshot.month === currentMonthKey || getMonthKey(snapshot.date) === currentMonthKey)
+      )
+      .forEach((snapshot) => {
+        daily.set(
+          snapshot.date,
+          Number(Number(snapshot.assetTotals?.totalAssets || 0).toFixed(2))
+        );
+      });
+    daily.set(todayKey, Number(Number(assets.totalAssets || 0).toFixed(2)));
+
+    const points = [...daily.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([date, value], index, rows) => ({
+        label:
+          index === 0
+            ? "بداية"
+            : index === rows.length - 1
+              ? "اليوم"
+              : new Date(date).toLocaleDateString("en-US", { day: "2-digit", month: "2-digit" }),
+        value: Number(Number(value || 0).toFixed(2)),
+      }));
+
+    const values = points.map((point) => Number(point.value || 0));
+    const minValue = Math.min(...values);
+    const maxValue = Math.max(...values);
+    if (points.length > 1 && maxValue - minValue < 0.01) {
+      return points.map((point) => ({ ...point, value: Number(maxValue.toFixed(2)) }));
+    }
+
+    if (points.length <= 7) return points;
+    const weekly = points.filter((_, index) => index === 0 || index === points.length - 1 || index % 7 === 0);
+    return weekly.length >= 2 ? weekly : points.slice(-7);
+  };
   const dashboardRows = [
     {
       id: "cash",
@@ -4041,7 +4407,7 @@ function AssetsScreen({ state, setState, onAddExtraCash, readOnly = false }) {
       assetKind: "cash",
       name: "الكاش الادخاري",
       value: Number(state.assets.cash || 0),
-      change: 0,
+      change: previousChangePct("cash", Number(state.assets.cash || 0)),
       icon: "cash",
       color: visualIdentity.colors.green,
       meta: "رصيد سائل متاح",
@@ -4053,7 +4419,7 @@ function AssetsScreen({ state, setState, onAddExtraCash, readOnly = false }) {
       assetId: item.id,
       name: item.name,
       value: Number(item.balance || 0),
-      change: 0,
+      change: previousChangePct(`bank:${item.id}`, Number(item.balance || 0)),
       icon: "bank",
       color: visualIdentity.colors.sky,
       meta: "حساب بنكي",
@@ -4063,51 +4429,56 @@ function AssetsScreen({ state, setState, onAddExtraCash, readOnly = false }) {
       assetKey: `gold:${item.id}`,
       assetKind: "gold",
       assetId: item.id,
-      name: item.label,
+      name: assetNameWithUnits(item.label, item.units, "gold"),
       value: Number(item.units || 0) * getGoldUnitPrice(item),
-      change: percentChange(getGoldUnitPrice(item), item.wac),
+      change: previousChangePct(`gold:${item.id}`, Number(item.units || 0) * getGoldUnitPrice(item)),
       icon: "gold",
       color: "#FFC62D",
-      meta: `${Number(item.units || 0).toFixed(4)} غرام · سعر ${getGoldUnitPrice(item).toFixed(2)}`,
+      meta: `اليوم ${getGoldUnitPrice(item).toFixed(2)} · متوسط ${Number(item.wac || 0).toFixed(2)}`,
     })),
     ...(state.assets.stocks || []).map((item) => ({
       id: `stock-${item.id}`,
       assetKey: `stock:${item.id}`,
       assetKind: "stocks",
       assetId: item.id,
-      name: item.name,
-      value: Number(item.units || 0) * Number(item.currentPrice || 0),
-      change: percentChange(item.currentPrice, item.wac),
+      name: assetNameWithUnits(item.name, item.units, "stocks"),
+      value: Number(item.units || 0) * (Number(item.currentPrice || 0) || Number(item.wac || 0)),
+      change: previousChangePct(`stock:${item.id}`, Number(item.units || 0) * (Number(item.currentPrice || 0) || Number(item.wac || 0))),
       icon: "stock",
       color: visualIdentity.colors.purple,
-      meta: `${Number(item.units || 0).toFixed(4)} سهم · سعر ${Number(item.currentPrice || 0).toFixed(2)}`,
+      meta: `اليوم ${Number(item.currentPrice || item.wac || 0).toFixed(2)} · متوسط ${Number(item.wac || 0).toFixed(2)}`,
     })),
     ...(state.assets.silver || []).map((item) => ({
       id: `silver-${item.id}`,
       assetKey: `silver:${item.id}`,
       assetKind: "silver",
       assetId: item.id,
-      name: item.label,
+      name: assetNameWithUnits(item.label, item.units, "silver"),
       value: Number(item.units || 0) * getSilverUnitPrice(item),
-      change: percentChange(getSilverUnitPrice(item), item.wac),
+      change: previousChangePct(`silver:${item.id}`, Number(item.units || 0) * getSilverUnitPrice(item)),
       icon: "silver",
       color: "#B7D3EA",
-      meta: `${Number(item.units || 0).toFixed(4)} غرام · سعر ${getSilverUnitPrice(item).toFixed(2)}`,
+      meta: `اليوم ${getSilverUnitPrice(item).toFixed(2)} · متوسط ${Number(item.wac || 0).toFixed(2)}`,
     })),
     ...(state.assets.custom || []).map((item) => ({
       id: `custom-${item.id}`,
       assetKey: `custom:${item.id}`,
       assetKind: "custom",
       assetId: item.id,
-      name: item.name,
+      name: item.type === "unit" ? assetNameWithUnits(item.name, item.units, "custom") : item.name,
       value: item.type === "fixed"
         ? Number(item.amount || 0)
-        : Number(item.units || 0) * Number(item.price || 0),
-      change: 0,
+        : Number(item.units || 0) * getGenericUnitPrice(item),
+      change: previousChangePct(
+        `custom:${item.id}`,
+        item.type === "fixed"
+          ? Number(item.amount || 0)
+          : Number(item.units || 0) * getGenericUnitPrice(item)
+      ),
       icon: item.type === "fixed" ? "fixed" : "goods",
       color: "#42CFE6",
       meta: item.type === "unit"
-        ? `${Number(item.units || 0).toFixed(4)} وحدة · سعر ${Number(item.price || 0).toFixed(2)}`
+        ? `اليوم ${getGenericUnitPrice(item).toFixed(2)} · متوسط ${getGenericReferencePrice(item).toFixed(2)}`
         : "أصل ثابت",
     })),
   ];
@@ -4152,10 +4523,28 @@ function AssetsScreen({ state, setState, onAddExtraCash, readOnly = false }) {
           ["transfer_out", "asset_units_liquidated"].includes(movement.type) &&
             movement.destinationKey !== row.assetKey;
         const date = movement.date ? new Date(movement.date) : null;
+        const movementUnits =
+          movement.unitsSold ??
+          movement.unitsAdded ??
+          movement.units ??
+          null;
+        const unitText =
+          movementUnits != null && Number(movementUnits || 0) > 0
+            ? `${isOutgoing ? "−" : "+"}${formatAssetUnits(movementUnits, row.assetKind)}`
+            : "";
+        const unitPriceText =
+          Number(movement.unitPrice || 0) > 0
+            ? `اليوم ${Number(movement.unitPrice || 0).toFixed(2)}`
+            : "";
         return {
           id: `${movement.id ?? index}-${row.id}`,
-          label: movementLabels[movement.type] || movement.note || "حركة على الأصل",
+          label:
+            movement.expensePurpose === "expense_coverage"
+              ? movement.note || `تسييل لتغطية مصروف — ${movement.expenseCategory || "غير مصنف"}`
+              : movementLabels[movement.type] || movement.note || "حركة على الأصل",
           amount: Number(movement.amount || 0),
+          unitText,
+          unitPriceText,
           direction: isOutgoing ? "out" : "in",
           date:
             date && !Number.isNaN(date.getTime())
@@ -4182,13 +4571,7 @@ function AssetsScreen({ state, setState, onAddExtraCash, readOnly = false }) {
     ...item,
     percent: distributionTotal > 0 ? (item.value / distributionTotal) * 100 : 0,
   }));
-  const trendPoints = distributionBase.reduce(
-    (points, item) => [
-      ...points,
-      { value: Number((points[points.length - 1].value + item.value).toFixed(2)) },
-    ],
-    [{ value: 0 }]
-  );
+  const trendPoints = compactAssetTrendPoints();
   const showLegacyAssetsLayout = false;
 
   return (
@@ -4917,6 +5300,7 @@ const [liabilityAssetKey, setLiabilityAssetKey] = useState("cash");
     const uncovered = getUncoveredAmount(item);
     const isCard = item.type === "card";
     const creditLimit = Number(item.creditLimit || 0);
+    const capChargeNeeded = Math.max(0, amount - Math.min(covered, amount));
     const availableCredit = Math.max(
       0,
       creditLimit - Number(item.balance || 0)
@@ -4935,6 +5319,7 @@ const [liabilityAssetKey, setLiabilityAssetKey] = useState("cash");
       amount,
       covered,
       uncovered,
+      creditLimit,
       coveragePct:
         amount > 0 ? Math.min(100, (covered / amount) * 100) : 0,
       isCard,
@@ -4956,7 +5341,8 @@ const [liabilityAssetKey, setLiabilityAssetKey] = useState("cash");
       dueText: getDueText(item),
       canPayFromCap:
         amount > 0 &&
-        remainingSpendingCap + Math.min(covered, amount) >= amount &&
+        capChargeNeeded > 0 &&
+        remainingSpendingCap >= capChargeNeeded &&
         (item.source !== "expense_payment" ||
           ((item.originMonth || String(item.createdAt || item.date || "").slice(0, 7)) <
             (state.currentMonth || new Date().toISOString().slice(0, 7)) &&
@@ -5103,13 +5489,22 @@ function SettingsScreen({ state, setState, authSession, onResetAllData }) {
   const { t } = useLocale();
   const [settingsView, setSettingsView] = useState("menu");
   const currencyLabel = getCurrencyLabel(state);
-  const structuralTotal = calcStructuralTotal(state);
+const structuralTotal = calcStructuralTotal(state);
 const salary = Number(state.settings?.salary || 0);
 const maxSpendingCap = Math.max(0, salary - structuralTotal);
-function clampSpendingCapAfterStructuralChange(nextState) {
+const getCoveredSpentFromCap = (sourceState) =>
+  Math.max(
+    Number(sourceState.session?.coveredSpent || 0),
+    (sourceState.expenses || []).reduce(
+      (sum, expense) => sum + Number(expense.budgetCovered || 0),
+      0
+    )
+  );
+function applyFinancialSettingGuards(nextState, { blockMessage = true } = {}) {
   const nextStructuralTotal = calcStructuralTotal(nextState);
   const nextSalary = Number(nextState.settings?.salary || 0);
   const nextMaxCap = Math.max(0, nextSalary - nextStructuralTotal);
+  const coveredSpent = getCoveredSpentFromCap(nextState);
 
   const currentCap = Number(
     nextState.session?.spendingCap ??
@@ -5117,13 +5512,84 @@ function clampSpendingCapAfterStructuralChange(nextState) {
       0
   );
 
+  if (nextStructuralTotal > 0 && nextSalary <= 0) {
+    if (blockMessage) alert("أدخل الراتب أولاً قبل إضافة الالتزامات الهيكلية");
+    return { ok: false, state: nextState };
+  }
+
+  if (nextStructuralTotal > nextSalary) {
+    if (blockMessage) alert("مجموع الالتزامات الهيكلية لا يجوز أن يتجاوز الراتب");
+    return { ok: false, state: nextState };
+  }
+
+  if (nextSalary < nextStructuralTotal + coveredSpent) {
+    if (blockMessage) {
+      alert(
+        `لا يجوز أن يقل الراتب عن الالتزامات الهيكلية والمصروف فعلياً من سقف الصرف. الحد الأدنى ${(
+          nextStructuralTotal + coveredSpent
+        ).toFixed(2)} ${currencyLabel}`
+      );
+    }
+    return { ok: false, state: nextState };
+  }
+
+  if (currentCap < coveredSpent) {
+    if (blockMessage) {
+      alert(
+        `لا يجوز أن يقل سقف الصرف عن المبلغ المصروف فعلياً من السقف. الحد الأدنى ${coveredSpent.toFixed(
+          2
+        )} ${currencyLabel}`
+      );
+    }
+    return { ok: false, state: nextState };
+  }
+
+  if (nextMaxCap < coveredSpent) {
+    if (blockMessage) {
+      alert(
+        `التعديل غير ممكن لأن المتاح بعد الالتزامات أقل من المصروف فعلياً من سقف الصرف. الحد الأدنى للمتاح ${coveredSpent.toFixed(
+          2
+        )} ${currencyLabel}`
+      );
+    }
+    return { ok: false, state: nextState };
+  }
+
+  const guardedCap = Math.min(currentCap, nextMaxCap);
+  const plannedCapsTotal = Object.values(nextState.settings?.expenseCategoryCaps || {}).reduce(
+    (sum, value) => sum + Math.max(0, Number(value || 0)),
+    0
+  );
+
+  if (plannedCapsTotal > guardedCap) {
+    if (blockMessage) {
+      alert(
+        `مجموع سقوف بنود المصروفات لا يجوز أن يتجاوز سقف الصرف الجديد. خفّض سقوف البنود أولاً إلى ${guardedCap.toFixed(
+          2
+        )} ${currencyLabel} أو أقل`
+      );
+    }
+    return { ok: false, state: nextState };
+  }
+
   return {
-    ...nextState,
-    session: {
-      ...nextState.session,
-      spendingCap: Math.min(currentCap, nextMaxCap),
+    ok: true,
+    state: {
+      ...nextState,
+      session: {
+        ...nextState.session,
+        spendingCap: guardedCap,
+      },
+      settings: {
+        ...nextState.settings,
+        spendingCap: guardedCap,
+      },
     },
   };
+}
+function clampSpendingCapAfterStructuralChange(nextState) {
+  const guarded = applyFinancialSettingGuards(nextState);
+  return guarded.ok ? guarded.state : null;
 }
 
   const updateSetting = (path, value) => {
@@ -5136,6 +5602,10 @@ function clampSpendingCapAfterStructuralChange(nextState) {
         ref = ref[keys[i]];
       }
       ref[keys[keys.length - 1]] = value;
+      if (path === "settings.salary" || path === "settings.spendingCap" || path === "session.spendingCap") {
+        const guarded = applyFinancialSettingGuards(copy);
+        return guarded.ok ? guarded.state : prev;
+      }
       return copy;
     });
   };
@@ -5271,8 +5741,11 @@ const updateAssetItem = (assetGroup, itemId, patch) => {
           ? {
               ...item,
               ...patch,
-              ...(assetGroup === "stocks" && patch.wac !== undefined
+              ...(["gold", "silver", "stocks"].includes(assetGroup) && patch.wac !== undefined
                 ? { currentPrice: patch.wac }
+                : {}),
+              ...(assetGroup === "custom" && patch.price !== undefined
+                ? { currentPrice: patch.price, wac: item.wac ?? item.price ?? patch.price }
                 : {}),
             }
           : item
@@ -5326,7 +5799,9 @@ const addOpeningAsset = () => {
 
         existing.units = Number(totalUnits.toFixed(4));
         existing[priceField] = average;
-        if (listName === "stocks") existing.currentPrice = price;
+        if (["stocks", "gold", "silver", "custom"].includes(listName)) {
+          existing.currentPrice = price;
+        }
 
         historyPatch.assetId = existing.id;
         historyPatch.unitsBefore = oldUnits;
@@ -5340,6 +5815,7 @@ const addOpeningAsset = () => {
           [nameField]: name,
           units,
           [priceField]: price,
+          currentPrice: price,
           ...extraNew,
         };
         list.push(newItem);
@@ -5465,7 +5941,7 @@ const addOpeningAsset = () => {
       ],
     };
 
-    return clampSpendingCapAfterStructuralChange(next);
+    return clampSpendingCapAfterStructuralChange(next) || p;
   });
 
   setStructuralName("");
@@ -5491,7 +5967,7 @@ const updateStructuralLiability = (id, field, value) => {
       ),
     };
 
-    return clampSpendingCapAfterStructuralChange(next);
+    return clampSpendingCapAfterStructuralChange(next) || p;
   });
 };
 const deleteStructuralLiability = (id) => {
@@ -5505,7 +5981,7 @@ const deleteStructuralLiability = (id) => {
       structuralLiabilities: list.filter((item) => item.id !== id),
     };
 
-    return clampSpendingCapAfterStructuralChange(next);
+    return clampSpendingCapAfterStructuralChange(next) || p;
   });
 };
 const addSettingsCreditCard = () => {
@@ -5817,9 +6293,14 @@ const openingBalanceRows = [
               return;
             }
 
-            setState({
-              ...state,
-              session: { ...state.session, spendingCap: value },
+            setState((prev) => {
+              const next = {
+                ...prev,
+                settings: { ...prev.settings, spendingCap: value },
+                session: { ...prev.session, spendingCap: value },
+              };
+              const guarded = applyFinancialSettingGuards(next);
+              return guarded.ok ? guarded.state : prev;
             });
           }}
           inputStyle={G.inp()}
@@ -6034,6 +6515,29 @@ function getMonthKey(dateValue) {
   return String(dateValue).slice(0, 7);
 }
 
+function getDateKey(dateValue = new Date()) {
+  if (!dateValue) return new Date().toISOString().slice(0, 10);
+  if (typeof dateValue === "string") return dateValue.slice(0, 10);
+  return dateValue.toISOString().slice(0, 10);
+}
+
+function getCoveredSpentFromCap(state) {
+  return Math.max(
+    Number(state.session?.coveredSpent || 0),
+    (state.expenses || []).reduce(
+      (sum, expense) => sum + Number(expense.budgetCovered || 0),
+      0
+    )
+  );
+}
+
+function getRemainingSpendingCapAtClose(state) {
+  return Math.max(
+    0,
+    Number(state.session?.spendingCap || 0) - getCoveredSpentFromCap(state)
+  );
+}
+
 function formatMonthKey(monthKey) {
   if (!monthKey) return "الشهر الحالي";
   const [year, month] = String(monthKey).split("-").map(Number);
@@ -6142,13 +6646,46 @@ function buildMonthlySnapshot(state) {
   };
 }
 
+function buildAssetDailySnapshot(state, dateValue = new Date()) {
+  const date = getDateKey(dateValue);
+  const assetTotals = calcAssets(state);
+
+  return {
+    id: `${date}-${Date.now()}`,
+    date,
+    month: date.slice(0, 7),
+    assetTotals: {
+      totalAssets: assetTotals.totalAssets,
+      currentLiabilities: assetTotals.currentLiabilities,
+      netWorth: assetTotals.netWorth,
+    },
+    assets: structuredClone(state.assets || {}),
+  };
+}
+
+function syncAssetDailySnapshot(prev, dateValue = new Date()) {
+  const date = getDateKey(dateValue);
+  const snapshot = buildAssetDailySnapshot(prev, date);
+  const existing = (prev.assetDailySnapshots || []).find((item) => item.date === date);
+  const existingTotal = Number(existing?.assetTotals?.totalAssets || 0);
+  const nextTotal = Number(snapshot.assetTotals.totalAssets || 0);
+
+  if (existing && Math.abs(existingTotal - nextTotal) < 0.01) {
+    return prev;
+  }
+
+  return {
+    ...prev,
+    assetDailySnapshots: [
+      ...(prev.assetDailySnapshots || []).filter((item) => item.date !== date),
+      snapshot,
+    ].slice(-370),
+  };
+}
+
 function closeMonthState(prev, targetMonth = new Date().toISOString().slice(0, 7)) {
   const snapshot = buildMonthlySnapshot(prev);
   const nextMonth = getNextMonthKey(prev.currentMonth || targetMonth);
-  const structuralTotal = calcStructuralTotal(prev);
-  const netSalary = Math.max(0, Number(prev.settings?.salary || 0) - structuralTotal);
-  const spendingCap = Number(prev.session?.spendingCap || 0);
-  const pendingSurplus = Math.max(0, netSalary - spendingCap);
 
   const rolledCurrentLiabilities = (prev.currentLiabilities || [])
     .filter((l) => l.status !== "paid")
@@ -6173,9 +6710,10 @@ function closeMonthState(prev, targetMonth = new Date().toISOString().slice(0, 7
     extraCash: [],
     session: {
       ...prev.session,
+      isOpen: false,
       coveredSpent: 0,
       overBudgetSpent: 0,
-      pendingSurplus: Number(pendingSurplus.toFixed(2)),
+      pendingSurplus: 0,
     },
     structuralLiabilities: prev.structuralLiabilities || [],
     currentLiabilities: rolledCurrentLiabilities,
@@ -6407,6 +6945,9 @@ function hydrateAppState(storedState) {
     monthlySnapshots: Array.isArray(storedState.monthlySnapshots)
       ? storedState.monthlySnapshots
       : [],
+    assetDailySnapshots: Array.isArray(storedState.assetDailySnapshots)
+      ? storedState.assetDailySnapshots
+      : [],
     assetHistory: Array.isArray(storedState.assetHistory) ? storedState.assetHistory : [],
     currentMonth: storedState.currentMonth || INITIAL_STATE.currentMonth,
   };
@@ -6553,19 +7094,43 @@ export default function App() {
       window.clearInterval(timer);
     };
   }, [state, storageReady]);
-    useEffect(() => {
+  useEffect(() => {
     if (!storageReady) return undefined;
+    const rollOrRequestSurplusAllocation = (prev) => {
+      const targetMonth = new Date().toISOString().slice(0, 7);
+      const hasMonthToClose = String(prev.currentMonth || targetMonth) < targetMonth;
+      const remainingCap = getRemainingSpendingCapAtClose(prev);
+      if (hasMonthToClose && prev.session?.isOpen && remainingCap > 0.01) {
+        setExtraCashPreset({
+          amount: Number(remainingCap.toFixed(2)),
+          lockedAmount: true,
+          lockedNote: true,
+          note: "فائض نهاية الشهر",
+          source: "month_end_surplus",
+        });
+        setShowExtraCash(true);
+        return prev;
+      }
+      return rollStateToCurrentMonth(prev);
+    };
     const initialTimer = window.setTimeout(() => {
-      setState((prev) => rollStateToCurrentMonth(prev));
+      setState((prev) => rollOrRequestSurplusAllocation(prev));
     }, 0);
     const timer = window.setInterval(() => {
-      setState((prev) => rollStateToCurrentMonth(prev));
+      setState((prev) => rollOrRequestSurplusAllocation(prev));
     }, 60 * 1000);
     return () => {
       window.clearTimeout(initialTimer);
       window.clearInterval(timer);
     };
   }, [storageReady]);
+    useEffect(() => {
+    if (!storageReady) return undefined;
+    const timer = window.setTimeout(() => {
+      setState((prev) => syncAssetDailySnapshot(prev, prev.__testAccountingDate || new Date()));
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [storageReady, state.assets, state.settings?.market, state.__testAccountingDate]);
 function handleExtraCashSubmit(data) {
   const amount = Number(data.amount || 0);
 
@@ -6578,6 +7143,8 @@ function handleExtraCashSubmit(data) {
     const now = new Date().toISOString();
     const allocation = data.allocation || data.direction || "spendingCap";
     const isSalarySurplus = data.source === "salary_surplus";
+    const isMonthEndSurplus = data.source === "month_end_surplus";
+    const isRequiredSurplus = isSalarySurplus || isMonthEndSurplus;
     const targetName = String(data.assetName || data.note || "").trim();
     const units = Number(data.units || 0);
     const price = Number(data.price || 0);
@@ -6595,8 +7162,8 @@ function handleExtraCashSubmit(data) {
 
     let next = {
       ...structuredClone(prev),
-      extraCash: isSalarySurplus ? prev.extraCash || [] : [...(prev.extraCash || []), record],
-      transactions: [...(prev.transactions || []), record],
+      extraCash: isRequiredSurplus ? prev.extraCash || [] : [...(prev.extraCash || []), record],
+      transactions: isRequiredSurplus ? prev.transactions || [] : [...(prev.transactions || []), record],
       assetHistory: [...(prev.assetHistory || [])],
     };
 
@@ -6619,7 +7186,7 @@ function handleExtraCashSubmit(data) {
       if (existing) {
         const oldUnits = Number(existing.units || 0);
         const oldAverage =
-          type === "custom" ? Number(existing.price || 0) : Number(existing.wac || 0);
+          type === "custom" ? Number(existing.wac ?? existing.price ?? 0) : Number(existing.wac || 0);
         const totalUnits = oldUnits + units;
         const nextAverage =
           totalUnits > 0
@@ -6628,11 +7195,14 @@ function handleExtraCashSubmit(data) {
 
         existing.units = Number(totalUnits.toFixed(4));
         if (type === "custom") {
+          existing.wac = nextAverage;
           existing.price = nextAverage;
         } else {
           existing.wac = nextAverage;
         }
-        if (listName === "stocks") existing.currentPrice = price;
+        if (["stocks", "gold", "silver", "custom"].includes(listName)) {
+          existing.currentPrice = price;
+        }
         next.assetHistory.push({
           id: `${Date.now()}-${allocation}`,
           date: now,
@@ -6672,6 +7242,8 @@ function handleExtraCashSubmit(data) {
             type: "unit",
             units,
             price,
+            wac: price,
+            currentPrice: price,
           });
         } else {
           list.push({
@@ -6679,6 +7251,7 @@ function handleExtraCashSubmit(data) {
             label: targetName,
             units,
             wac: price,
+            currentPrice: price,
           });
         }
         next.assetHistory.push({
@@ -6890,6 +7463,20 @@ function handleExtraCashSubmit(data) {
       };
     }
 
+    if (isMonthEndSurplus) {
+      next.session = {
+        ...next.session,
+        spendingCap: getCoveredSpentFromCap(next),
+        pendingSurplus: 0,
+      };
+      next = closeMonthState(next, next.currentMonth || getMonthKey(now));
+      next = {
+        ...next,
+        __testAccountingDate: `${next.currentMonth}-01`,
+      };
+      next = syncAssetDailySnapshot(next, next.__testAccountingDate);
+    }
+
     return next;
   });
 
@@ -6982,7 +7569,11 @@ async function handlePasswordReset() {
     { id: "liabilities", label: "الخصوم" },
   ];
   const snapshots = state.monthlySnapshots || [];
-  const currentMonthLabel = formatMonthKey(state.currentMonth || new Date().toISOString().slice(0, 7));
+  const activeAccountingDate = getDateKey(state.__testAccountingDate || new Date());
+  const activeAccountingMonth = state.__testAccountingDate
+    ? getMonthKey(activeAccountingDate)
+    : state.currentMonth || new Date().toISOString().slice(0, 7);
+  const currentMonthLabel = formatMonthKey(activeAccountingMonth);
 
 const selectedViewSnapshot =
   selectedViewMonth === "current"
@@ -6997,6 +7588,59 @@ const handleViewMonthChange = (month) => {
   if (month !== "current" && !["overview", "reports", "assets"].includes(tab)) {
     setTab("overview");
   }
+};
+const handleTestEndDay = () => {
+  setSelectedViewMonth("current");
+  setState((prev) => {
+    const currentDate = getDateKey(prev.__testAccountingDate || new Date());
+    const closedToday = syncAssetDailySnapshot(prev, currentDate);
+    const nextDate = new Date(`${currentDate}T12:00:00`);
+    nextDate.setDate(nextDate.getDate() + 1);
+    const nextDateKey = getDateKey(nextDate);
+    return syncAssetDailySnapshot(
+      {
+        ...closedToday,
+        currentMonth: getMonthKey(nextDateKey),
+        settings: {
+          ...closedToday.settings,
+          month: getMonthKey(nextDateKey),
+        },
+        __testAccountingDate: nextDateKey,
+      },
+      nextDateKey
+    );
+  });
+};
+const requestMonthClose = () => {
+  setSelectedViewMonth("current");
+  const remainingCap = getRemainingSpendingCapAtClose(state);
+  if (remainingCap > 0.01) {
+    setExtraCashPreset({
+      amount: Number(remainingCap.toFixed(2)),
+      lockedAmount: true,
+      lockedNote: true,
+      note: "فائض نهاية الشهر",
+      source: "month_end_surplus",
+    });
+    setShowExtraCash(true);
+    return;
+  }
+  setState((prev) => {
+    const closedMonth = closeMonthState(
+      syncAssetDailySnapshot(prev, prev.__testAccountingDate || new Date())
+    );
+    const nextMonthDate = `${closedMonth.currentMonth}-01`;
+    return syncAssetDailySnapshot(
+      {
+        ...closedMonth,
+        __testAccountingDate: nextMonthDate,
+      },
+      nextMonthDate
+    );
+  });
+};
+const handleTestEndMonth = () => {
+  requestMonthClose();
 };
 
   if (!authSession) {
@@ -7097,6 +7741,69 @@ const handleViewMonthChange = (month) => {
         headerStyle={G.hdr}
         formatMonth={formatMonthKey}
       />
+
+      {!isSnapshotView && (
+        <div
+          style={{
+            margin: "8px auto 0",
+            width: "min(100% - 28px, 470px)",
+            display: "grid",
+            gridTemplateColumns: "1fr 1fr",
+            gap: 8,
+            padding: 8,
+            borderRadius: 14,
+            border: "1px dashed rgba(255,198,45,0.62)",
+            background: "rgba(255,198,45,0.10)",
+            boxShadow: "0 8px 24px rgba(0,0,0,0.16)",
+          }}
+        >
+          <button
+            type="button"
+            onClick={handleTestEndDay}
+            style={{
+              minHeight: 34,
+              border: "1px solid rgba(91,238,212,0.55)",
+              borderRadius: 11,
+              background: "rgba(91,238,212,0.14)",
+              color: "#D9FFF8",
+              fontFamily: "inherit",
+              fontSize: 11,
+              fontWeight: 900,
+              cursor: "pointer",
+            }}
+          >
+            اختبار: إنهاء اليوم
+          </button>
+          <button
+            type="button"
+            onClick={handleTestEndMonth}
+            style={{
+              minHeight: 34,
+              border: "1px solid rgba(255,112,112,0.55)",
+              borderRadius: 11,
+              background: "rgba(255,112,112,0.14)",
+              color: "#FFE2E2",
+              fontFamily: "inherit",
+              fontSize: 11,
+              fontWeight: 900,
+              cursor: "pointer",
+            }}
+          >
+            اختبار: إنهاء الشهر
+          </button>
+          <div
+            style={{
+              gridColumn: "1 / -1",
+              color: visualIdentity.colors.textSecondary,
+              fontSize: 9,
+              textAlign: "center",
+              fontWeight: 800,
+            }}
+          >
+            تاريخ الاختبار: {state.__testAccountingDate || getDateKey()} — أزرار مؤقتة للاختبار فقط
+          </div>
+        </div>
+      )}
 
       <main key={`${tab}-${selectedViewMonth}`} className="tab-page-motion">
         {tab === "overview" && (

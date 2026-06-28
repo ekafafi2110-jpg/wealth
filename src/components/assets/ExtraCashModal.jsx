@@ -2,9 +2,10 @@ import { useState } from "react";
 import visualIdentity from "../../theme/visualIdentity";
 
 export default function ExtraCashModal({ state, onSubmit, onClose, preset = null }) {
+  const isRequiredSurplus = ["salary_surplus", "month_end_surplus"].includes(preset?.source);
   const [amount, setAmount] = useState(preset?.amount ? String(preset.amount) : "");
   const [note, setNote] = useState(preset?.note || "");
-  const [allocation, setAllocation] = useState("spendingCap");
+  const [allocation, setAllocation] = useState(isRequiredSurplus ? "cash" : "spendingCap");
   const [targetId, setTargetId] = useState("");
   const [assetName, setAssetName] = useState("");
   const [units, setUnits] = useState("");
@@ -71,6 +72,11 @@ export default function ExtraCashModal({ state, onSubmit, onClose, preset = null
         alert("قيمة الدخل يجب أن تساوي العدد × السعر");
         return;
       }
+    }
+
+    if (isRequiredSurplus && allocation === "spendingCap") {
+      alert("فائض الراتب يجب توجيهه إلى أصل وليس إلى سقف الصرف");
+      return;
     }
 
     onSubmit({
@@ -164,7 +170,7 @@ export default function ExtraCashModal({ state, onSubmit, onClose, preset = null
             color: "white",
           }}
         >
-          <option value="spendingCap">زيادة سقف الصرف</option>
+          {!isRequiredSurplus && <option value="spendingCap">زيادة سقف الصرف</option>}
           <option value="cash">ادخار كاش احتياطي</option>
           <option value="bank">حساب بنكي</option>
           <option value="stock">أسهم</option>

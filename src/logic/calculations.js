@@ -27,6 +27,10 @@ export function calcCurrentLiabilitiesTotal(state) {
 export function calcAssets(state) {
   const goldPrice = Number(state.settings.market.goldGramPrice || 0);
   const silverPrice = Number(state.settings.market.silverGramPrice || 0);
+  const unitPrice = (item, fallback = 0, referenceField = "wac") =>
+    Number(item?.currentPrice || 0) ||
+    Number(fallback || 0) ||
+    Number(item?.[referenceField] || 0);
 
   const cash = Number(state.assets.cash || 0);
 
@@ -39,7 +43,7 @@ export function calcAssets(state) {
     (sum, g) =>
       sum +
       Number(g.units || 0) *
-        (goldPrice > 0 ? goldPrice : Number(g.wac || 0)),
+        unitPrice(g, goldPrice, "wac"),
     0
   );
 
@@ -47,18 +51,18 @@ export function calcAssets(state) {
     (sum, s) =>
       sum +
       Number(s.units || 0) *
-        (silverPrice > 0 ? silverPrice : Number(s.wac || 0)),
+        unitPrice(s, silverPrice, "wac"),
     0
   );
 
   const stocks = state.assets.stocks.reduce(
-    (sum, s) => sum + Number(s.units || 0) * Number(s.currentPrice || 0),
+    (sum, s) => sum + Number(s.units || 0) * unitPrice(s, 0, "wac"),
     0
   );
 
   const custom = state.assets.custom.reduce((sum, a) => {
     if (a.type === "fixed") return sum + Number(a.amount || 0);
-    return sum + Number(a.units || 0) * Number(a.price || 0);
+    return sum + Number(a.units || 0) * unitPrice(a, 0, "price");
   }, 0);
 
   const totalAssets = cash + banks + gold + silver + stocks + custom;

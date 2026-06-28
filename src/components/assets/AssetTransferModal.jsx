@@ -29,9 +29,11 @@ export default function AssetTransferModal({
   onSourcePriceChange,
   amountReadOnly = false,
   showAllocations = true,
+  directSubmit = false,
 }) {
   const { currencyLabel } = useLocale();
   if (!open) return null;
+  const selectedSource = sources.find((source) => source.key === fromAsset);
 
   return (
     <div
@@ -72,9 +74,11 @@ export default function AssetTransferModal({
           <button type="button" onClick={onClose} style={closeButtonStyle}>
             ✕
           </button>
-          <span style={{ fontSize: 15, fontWeight: 900, color: visualIdentity.colors.white }}>
-            ⇄ مناقلة بين الأصول
-          </span>
+          {!directSubmit && (
+            <span style={{ fontSize: 15, fontWeight: 900, color: visualIdentity.colors.white }}>
+              ⇄ مناقلة بين الأصول
+            </span>
+          )}
         </div>
 
         <label style={{ fontSize: 11, color: visualIdentity.colors.textSecondary }}>من أصل</label>
@@ -85,7 +89,7 @@ export default function AssetTransferModal({
         >
           {sources.map((source) => (
             <option key={source.key} value={source.key}>
-              {source.label} — متاح {Number(source.available || 0).toFixed(2)} {currencyLabel}
+              {source.label} — {source.units != null ? `${Number(source.units || 0).toFixed(4)} وحدة · ` : ""}متاح {Number(source.available || 0).toFixed(2)} {currencyLabel}
             </option>
           ))}
         </select>
@@ -100,29 +104,45 @@ export default function AssetTransferModal({
         />
 
         {sourceSaleFields && (
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "1fr 1fr",
-              gap: 8,
-              marginBottom: 12,
-            }}
-          >
-            <input
-              type="number"
-              value={sourceSaleFields.units}
-              onChange={(event) => onSourceUnitsChange(event.target.value)}
-              placeholder="عدد الوحدات المباعة"
-              style={inputStyle}
-            />
-            <input
-              type="number"
-              value={sourceSaleFields.price}
-              onChange={(event) => onSourcePriceChange(event.target.value)}
-              placeholder="سعر بيع الوحدة"
-              style={inputStyle}
-            />
-          </div>
+          <>
+            {selectedSource?.units != null && (
+              <div
+                style={{
+                  margin: "-2px 0 8px",
+                  color: visualIdentity.colors.textSecondary,
+                  fontSize: 10,
+                  fontWeight: 800,
+                  textAlign: "right",
+                }}
+              >
+                الوحدات المتاحة للتسييل: {Number(selectedSource.units || 0).toFixed(4)}
+                {selectedSource.unitPrice ? ` · سعر اليوم ${Number(selectedSource.unitPrice || 0).toFixed(2)} ${currencyLabel}` : ""}
+              </div>
+            )}
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "1fr 1fr",
+                gap: 8,
+                marginBottom: 12,
+              }}
+            >
+              <input
+                type="number"
+                value={sourceSaleFields.units}
+                onChange={(event) => onSourceUnitsChange(event.target.value)}
+                placeholder="عدد الوحدات المباعة"
+                style={inputStyle}
+              />
+              <input
+                type="number"
+                value={sourceSaleFields.price}
+                onChange={(event) => onSourcePriceChange(event.target.value)}
+                placeholder="سعر بيع الوحدة"
+                style={inputStyle}
+              />
+            </div>
+          </>
         )}
 
         {showAllocations && (
@@ -161,7 +181,7 @@ export default function AssetTransferModal({
         )}
 
         <button type="button" onClick={onSubmit} style={submitButtonStyle}>
-          تنفيذ المناقلة
+          {directSubmit ? "تسجيل المصروف" : "تنفيذ المناقلة"}
         </button>
       </div>
     </div>

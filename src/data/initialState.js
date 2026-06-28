@@ -49,6 +49,7 @@ export const INITIAL_STATE = {
   expenses: [],
   transactions: [],
   monthlySnapshots: [],
+  assetDailySnapshots: [],
   currentMonth: new Date().toISOString().slice(0, 7),
   assetHistory: [],
 };

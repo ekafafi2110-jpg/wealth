@@ -73,6 +73,23 @@ export default function AssetsDashboard({
   const [selectedAssetKey, setSelectedAssetKey] = useState("");
   const [animatedNetWorth, setAnimatedNetWorth] = useState(0);
   const selectedAsset = assetRows.find((row) => row.id === selectedAssetKey);
+  const firstTrendValue = Number(trendPoints?.[0]?.value || 0);
+  const lastTrendValue = Number(trendPoints?.[trendPoints.length - 1]?.value || 0);
+  const trendChange = lastTrendValue - firstTrendValue;
+  const trendPercent =
+    firstTrendValue > 0 ? (trendChange / firstTrendValue) * 100 : 0;
+  const trendState =
+    Math.abs(trendChange) < 0.01 ? "flat" : trendChange > 0 ? "up" : "down";
+  const trendColor =
+    trendState === "up"
+      ? visualIdentity.colors.green
+      : trendState === "down"
+        ? visualIdentity.colors.red
+        : visualIdentity.colors.textSecondary;
+  const trendText =
+    trendState === "flat"
+      ? "— ثابت"
+      : `${trendState === "up" ? "▲" : "▼"} ${Math.abs(trendPercent).toFixed(1)}%`;
 
   useEffect(() => {
     const target = Number(totalAssets || 0);
@@ -221,22 +238,22 @@ export default function AssetsDashboard({
           </div>
           <div style={{ minWidth: 0 }}>
             <div style={{ color: visualIdentity.colors.textSecondary, fontSize: 9 }}>مؤشر الأصول</div>
-            <div style={{ color: visualIdentity.colors.green, fontWeight: 900, fontSize: 15 }}>
-              {totalAssets > 0 ? "▲ نشط" : "—"}
+            <div style={{ color: trendColor, fontWeight: 900, fontSize: 15 }}>
+              {totalAssets > 0 ? trendText : "—"}
             </div>
             <div style={{ width: "100%", height: 62, marginTop: 4 }}>
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={trendPoints} margin={{ top: 4, right: 2, left: 2, bottom: 2 }}>
                   <defs>
                     <linearGradient id="assetTrendFill" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#42E6C1" stopOpacity={0.45} />
-                      <stop offset="100%" stopColor="#42E6C1" stopOpacity={0} />
+                      <stop offset="0%" stopColor={trendColor} stopOpacity={0.45} />
+                      <stop offset="100%" stopColor={trendColor} stopOpacity={0} />
                     </linearGradient>
                   </defs>
                   <Area
                     type="monotone"
                     dataKey="value"
-                    stroke="#5BEED4"
+                    stroke={trendColor}
                     strokeWidth={2}
                     fill="url(#assetTrendFill)"
                     dot={false}
@@ -340,6 +357,11 @@ export default function AssetsDashboard({
                 >
                   <div>
                     <div style={{ fontSize: 11, fontWeight: 800 }}>{movement.label}</div>
+                    {movement.unitText && (
+                      <div style={{ marginTop: 2, color: visualIdentity.colors.textSecondary, fontSize: 9, fontWeight: 800 }}>
+                        {movement.unitText}{movement.unitPriceText ? ` · ${movement.unitPriceText}` : ""}
+                      </div>
+                    )}
                     <div style={{ marginTop: 2, color: visualIdentity.colors.textFaint, fontSize: 9 }}>{movement.date}</div>
                   </div>
                   <b style={{ color: movement.direction === "out" ? visualIdentity.colors.red : visualIdentity.colors.green, fontSize: 12 }}>
@@ -393,7 +415,7 @@ export default function AssetsDashboard({
               <div style={{ color: row.change >= 0 ? visualIdentity.colors.green : visualIdentity.colors.red, fontSize: 11, fontWeight: 900 }}>
                 {row.change >= 0 ? "+" : ""}{row.change.toFixed(1)}%
               </div>
-              <div style={{ color: visualIdentity.colors.textFaint, fontSize: 8 }}>من التكلفة</div>
+              <div style={{ color: visualIdentity.colors.textFaint, fontSize: 8 }}>عن السابق</div>
             </div>
             <button
               type="button"

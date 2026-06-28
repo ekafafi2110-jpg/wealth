@@ -1,8 +1,8 @@
 import { deductFromAsset } from "./assets.js";
 
 export function recordExpense(state, expenseData) {
-  const now = new Date().toISOString();
-const today = now.slice(0, 10);
+  const today = expenseData.date || new Date().toISOString().slice(0, 10);
+  const now = expenseData.createdAt || `${today}T12:00:00.000Z`;
   const operationId = Number(expenseData.operationId ?? Date.now());
   const expenseId = Number(expenseData.id ?? operationId);
   const amount = Number(expenseData.amount || 0);

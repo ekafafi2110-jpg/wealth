@@ -35,8 +35,17 @@ function CurrentLiabilityItem({
   const accent = row.uncovered > 0
     ? visualIdentity.semantic.danger
     : row.isCard
-    ? visualIdentity.semantic.info
+    ? visualIdentity.colors.cyan
     : visualIdentity.semantic.warning;
+  const cardLimit = Number(row.creditLimit || 0);
+  const cardUsed = Number(row.amount || 0);
+  const cardCovered = Math.min(cardUsed, Math.max(0, Number(row.covered || 0)));
+  const cardUncovered = Math.min(
+    Math.max(0, cardUsed - cardCovered),
+    Math.max(0, Number(row.uncovered || 0))
+  );
+  const cardCoveredPct = cardLimit > 0 ? Math.min(100, (cardCovered / cardLimit) * 100) : 0;
+  const cardUncoveredPct = cardLimit > 0 ? Math.min(100 - cardCoveredPct, (cardUncovered / cardLimit) * 100) : 0;
 
   return (
     <div
@@ -128,24 +137,79 @@ function CurrentLiabilityItem({
 
       {row.isOpen && (
         <>
-          <div
-            style={{
-              height: 7,
-              background: "rgba(255,255,255,0.10)",
-              borderRadius: 999,
-              overflow: "hidden",
-              marginTop: 10,
-            }}
-          >
+          {row.isCard ? (
             <div
               style={{
-                width: `${row.coveragePct}%`,
-                height: "100%",
-                background: `linear-gradient(90deg,${visualIdentity.semantic.success},${visualIdentity.semantic.warning})`,
-                boxShadow: `0 0 9px ${visualIdentity.semantic.success}66`,
+                marginTop: 10,
               }}
-            />
-          </div>
+            >
+              <div
+                style={{
+                  height: 9,
+                  display: "flex",
+                  overflow: "hidden",
+                  borderRadius: 999,
+                  background: "rgba(255,255,255,0.16)",
+                  border: "1px solid rgba(255,255,255,0.12)",
+                  boxShadow: "inset 0 1px 3px rgba(0,0,0,0.20)",
+                }}
+                title={`سقف البطاقة ${cardLimit.toFixed(2)} ${currencyLabel}`}
+              >
+                {cardCoveredPct > 0 && (
+                  <span
+                    style={{
+                      width: `${cardCoveredPct}%`,
+                      background: `linear-gradient(90deg, ${visualIdentity.semantic.success}, ${visualIdentity.colors.green})`,
+                      boxShadow: `0 0 9px ${visualIdentity.semantic.success}66`,
+                    }}
+                  />
+                )}
+                {cardUncoveredPct > 0 && (
+                  <span
+                    style={{
+                      width: `${cardUncoveredPct}%`,
+                      background: `linear-gradient(90deg, ${visualIdentity.colors.red}, ${visualIdentity.semantic.danger})`,
+                      boxShadow: `0 0 9px ${visualIdentity.semantic.danger}66`,
+                    }}
+                  />
+                )}
+              </div>
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  marginTop: 5,
+                  color: visualIdentity.colors.textSecondary,
+                  fontSize: 8.5,
+                  fontWeight: 800,
+                  fontVariantNumeric: "tabular-nums",
+                }}
+              >
+                <span>مغطى {cardCovered.toFixed(2)}</span>
+                <span>سقف {cardLimit.toFixed(2)}</span>
+                <span style={{ color: visualIdentity.colors.red }}>غير مغطى {cardUncovered.toFixed(2)}</span>
+              </div>
+            </div>
+          ) : (
+            <div
+              style={{
+                height: 7,
+                background: "rgba(255,255,255,0.10)",
+                borderRadius: 999,
+                overflow: "hidden",
+                marginTop: 10,
+              }}
+            >
+              <div
+                style={{
+                  width: `${row.coveragePct}%`,
+                  height: "100%",
+                  background: `linear-gradient(90deg,${visualIdentity.semantic.success},${visualIdentity.semantic.warning})`,
+                  boxShadow: `0 0 9px ${visualIdentity.semantic.success}66`,
+                }}
+              />
+            </div>
+          )}
           <div
             style={{
               display: "grid",
