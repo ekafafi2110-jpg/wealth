@@ -367,7 +367,7 @@ export default function SpendingCapCard({
                     style={{
                       ...progressValueStyle,
                       insetInlineStart: 7,
-                      maxWidth: "calc(100% - 28px)",
+                      maxWidth: "calc(100% - 14px)",
                       color: colors.white,
                       background: "rgba(5,24,48,0.38)",
                       border: "1px solid rgba(255,255,255,0.18)",
@@ -387,7 +387,7 @@ export default function SpendingCapCard({
                       width: 20,
                       height: 20,
                       borderRadius: "50%",
-                      display: "inline-flex",
+                      display: "none",
                       alignItems: "center",
                       justifyContent: "center",
                       background: "linear-gradient(145deg, rgba(255,255,255,0.98), rgba(255,223,223,0.92))",

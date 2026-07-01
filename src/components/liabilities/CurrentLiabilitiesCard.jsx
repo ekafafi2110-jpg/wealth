@@ -376,6 +376,11 @@ function CurrentLiabilityItem({
 }
 
 export default function CurrentLiabilitiesCard({
+  title,
+  subtitle,
+  icon = "card",
+  accentColor,
+  showSummary = true,
   total,
   coveredTotal,
   uncoveredTotal,
@@ -399,9 +404,11 @@ export default function CurrentLiabilitiesCard({
 }) {
   const { currencyLabel, t } = useLocale();
   const danger = visualIdentity.semantic.danger;
+  const accent = accentColor || danger;
+  const HeaderIcon = icon === "liability" ? ReceiptText : CreditCard;
   return (
-    <section className="asset-dashboard-card" style={{ position: "relative", padding: 14, borderRadius: visualIdentity.cards.outer.borderRadius, border: `1px solid ${danger}66`, background: visualIdentity.gradients.outerCard, boxShadow: `${visualIdentity.cards.outer.boxShadow}, 0 0 22px ${danger}10`, color: visualIdentity.colors.white }}>
-      <span aria-hidden="true" style={{ position: "absolute", insetInlineStart: 0, top: 18, bottom: 18, width: 3, borderRadius: 99, background: danger, boxShadow: `0 0 12px ${danger}88` }} />
+    <section className="asset-dashboard-card" style={{ position: "relative", padding: 14, marginBottom: 13, borderRadius: visualIdentity.cards.outer.borderRadius, border: `1px solid ${accent}66`, background: visualIdentity.gradients.outerCard, boxShadow: `${visualIdentity.cards.outer.boxShadow}, 0 0 22px ${accent}10`, color: visualIdentity.colors.white }}>
+      <span aria-hidden="true" style={{ position: "absolute", insetInlineStart: 0, top: 18, bottom: 18, width: 3, borderRadius: 99, background: accent, boxShadow: `0 0 12px ${accent}88` }} />
       <div
         onClick={onToggleDetails}
         role="button"
@@ -418,15 +425,20 @@ export default function CurrentLiabilitiesCard({
           cursor: "pointer",
         }}
       >
-        <span className="asset-icon-shell" style={{ width: 42, height: 42, borderRadius: 13, display: "grid", placeItems: "center", color: danger, border: `1px solid ${danger}66`, background: `${danger}18` }}><CreditCard size={21} /></span>
+        <span className="asset-icon-shell" style={{ width: 42, height: 42, borderRadius: 13, display: "grid", placeItems: "center", color: accent, border: `1px solid ${accent}66`, background: `${accent}18` }}><HeaderIcon size={21} /></span>
         <div style={{ minWidth: 0, textAlign: "right" }}>
-          <div style={{ fontSize: 15, fontWeight: 900 }}>{t("liabilities.cards")}</div>
-          <div style={{ fontSize: 9, color: visualIdentity.colors.textSecondary, marginTop: 3 }}>
+          <div style={{ fontSize: 15, fontWeight: 900 }}>{title || t("liabilities.cards")}</div>
+          {subtitle && (
+            <div style={{ fontSize: 9, color: visualIdentity.colors.textSecondary, marginTop: 3 }}>
+              {subtitle}
+            </div>
+          )}
+          <div style={{ display: subtitle ? "none" : "block", fontSize: 9, color: visualIdentity.colors.textSecondary, marginTop: 3 }}>
             ديون قصيرة الأجل وبطاقات مستحقة
           </div>
         </div>
         <div style={{ textAlign: "left" }}>
-          <div style={{ fontSize: 18, fontWeight: 900, color: danger }}>
+          <div style={{ fontSize: 18, fontWeight: 900, color: accent }}>
             {total.toFixed(2)}
             <span style={{ fontSize: 8, color: visualIdentity.colors.textSecondary }}> {currencyLabel}</span>
           </div>
@@ -436,6 +448,7 @@ export default function CurrentLiabilitiesCard({
         </div>
       </div>
 
+      {showSummary && (
       <div
         style={{
           display: "grid",
@@ -453,6 +466,7 @@ export default function CurrentLiabilitiesCard({
           <div style={{ marginTop: 4, color: danger, fontSize: 16, fontWeight: 900 }}>{uncoveredTotal.toFixed(2)}</div>
         </div>
       </div>
+      )}
 
       {open &&
         rows.map((row) => (

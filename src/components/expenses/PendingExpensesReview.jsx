@@ -22,18 +22,7 @@ export default function PendingExpensesReview({ items, total, onRemove }) {
         direction,
       }}
     >
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          gap: 8,
-          marginBottom: 7,
-        }}
-      >
-        <b style={{ color: visualIdentity.colors.cyan, fontSize: 12 }}>
-          {t("expenses.total")}: {money(total)} {currencyLabel}
-        </b>
+      <div style={{ marginBottom: 7, textAlign: "right" }}>
         <b style={{ fontSize: 13 }}>{t("expenses.pendingReview")} ({items.length})</b>
       </div>
 
@@ -91,6 +80,25 @@ export default function PendingExpensesReview({ items, total, onRemove }) {
           </b>
         </div>
       ))}
+
+      <div
+        style={{
+          marginTop: 8,
+          paddingTop: 8,
+          borderTop: "1px solid rgba(255,255,255,0.12)",
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          gap: 8,
+        }}
+      >
+        <span style={{ color: visualIdentity.colors.textSecondary, fontSize: 10, fontWeight: 800 }}>
+          {t("expenses.total")}
+        </span>
+        <b style={{ color: visualIdentity.colors.cyan, fontSize: 13 }}>
+          {money(total)} {currencyLabel}
+        </b>
+      </div>
     </section>
   );
 }

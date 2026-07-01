@@ -756,11 +756,17 @@ const [overBudgetAssetKey, setOverBudgetAssetKey] = useState("cash");
 const [deficitFundingType, setDeficitFundingType] = useState("");
 const [overBudgetLiabilityName, setOverBudgetLiabilityName] = useState("تجاوز سقف الصرف");
 const [overBudgetDueDate, setOverBudgetDueDate] = useState("");
-const [unusualFundingMode, setUnusualFundingMode] = useState("asset");
-const [unusualCapAmount, setUnusualCapAmount] = useState("");
-const [unusualRemainderSource, setUnusualRemainderSource] = useState("asset");
-const [unusualAssetKey, setUnusualAssetKey] = useState("");
-const [unusualDueDate, setUnusualDueDate] = useState("");
+  const [unusualFundingMode, setUnusualFundingMode] = useState("asset");
+  const [unusualCapAmount, setUnusualCapAmount] = useState("");
+  const [unusualRemainderSource, setUnusualRemainderSource] = useState("asset");
+  const [unusualAssetKey, setUnusualAssetKey] = useState("");
+  const [unusualDueDate, setUnusualDueDate] = useState("");
+  const [aiExpenseBusy, setAiExpenseBusy] = useState(false);
+  const [voiceRecording, setVoiceRecording] = useState(false);
+  const aiReceiptInputRef = useRef(null);
+  const aiRecorderRef = useRef(null);
+  const aiAudioChunksRef = useRef([]);
+  const aiVoiceStopTimerRef = useRef(null);
   const selectExpenseCategory = (nextCategory) => {
     setCategory(nextCategory);
     window.requestAnimationFrame(() => {
@@ -838,12 +844,7 @@ const mainExpenseCategories = pinnedExpenseCategories;
   const remainingValue = Math.max(0, Number(budget.remainingCap || 0));
 
   const saveButtonTitle = pendingCount > 0 ? t("expenses.logMany") : t("expenses.logOne");
-  const saveButtonMeta =
-    pendingCount === 0
-      ? ""
-      : pendingCount === 1
-      ? `${t("expenses.pendingReview")}: ${pendingTotal.toFixed(2)} ${localeCurrencyLabel} | 1`
-      : `${t("expenses.pendingReview")}: ${pendingTotal.toFixed(2)} ${localeCurrencyLabel} | ${pendingCount}`;
+  const saveButtonMeta = "";
   const selectedExpenseTotal = Number(
     selectedExpense?.originalAmount ?? selectedExpense?.amount ?? 0
   );
@@ -989,8 +990,29 @@ useEffect(() => {
     const surplus = Number(state.session?.pendingSurplus || 0);
     if (surplus > 0.01) onAllocateSurplus(surplus);
   };
+  const requiresLiabilityDecisionBeforeExpense = (sourceState = state) => {
+    const currentMonth = sourceState.currentMonth || new Date().toISOString().slice(0, 7);
+    const pendingReserved = (sourceState.reservedPayments || []).filter((item) => {
+      const balance = Number(item.balance ?? item.amount ?? 0);
+      const dueMonth = String(item.dueDate || item.originMonth || "").slice(0, 7);
+      return item.status !== "paid" && balance > 0.01 && dueMonth && dueMonth < currentMonth;
+    });
+    const dueLiabilities = (sourceState.currentLiabilities || []).filter((item) => {
+      const balance = Number(item.balance ?? item.amount ?? 0);
+      const dueMonth = String(item.dueDate || "").slice(0, 7);
+      return item.status !== "paid" && balance > 0.01 && dueMonth && dueMonth < currentMonth;
+    });
+
+    if (!pendingReserved.length && !dueLiabilities.length) return false;
+
+    alert("قبل تسجيل أي مصروف جديد، راجع الالتزامات المستحقة وبرسم الدفع واتخذ قرار السداد أو التأجيل حتى لا تتراكم عبر الشهور.");
+    onOpenDueLiabilities();
+    return true;
+  };
 
   const addPendingExpense = () => {
+    if (requiresLiabilityDecisionBeforeExpense()) return;
+
     if (Number(state.session?.pendingSurplus || 0) > 0.01) {
       openPendingSurplusAllocation();
       return;
@@ -1167,80 +1189,189 @@ useEffect(() => {
     }
     return { ...option, amountLabel: enteredAmount.toFixed(2) };
   });
-  const buildAiExpensePrompt = (inputType) => {
-    const categoryLabels = allExpenseCategories
-      .map((item) => item.label)
-      .filter(Boolean);
-    const paymentLabels = paymentOptions.map((option) => ({
-      value: option.value,
-      label: option.label,
-    }));
-    const inputPlaceholder =
-      inputType === "voice"
-        ? "{{TRANSCRIPT_TEXT_FROM_AUDIO}}"
-        : "{{OCR_TEXT_OR_RECEIPT_IMAGE_CONTEXT}}";
+  const fileToDataUrl = (file) =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
 
-    return `أنت مساعد لاستخراج بيانات مصروف شخصي لتطبيق إدارة ثروة.
-المطلوب: حلّل ${inputType === "voice" ? "نص تسجيل صوتي" : "صورة/نص فاتورة"} واستخرج اقتراح تعبئة حقول المصروف فقط.
-لا تسجل المصروف فعليًا، ولا تغيّر أي بيانات، ولا تنفذ أي حساب مالي خارج المطلوب.
-أعد JSON صالحًا فقط بدون شرح إضافي.
+  const compressImageFile = (file) =>
+    new Promise((resolve, reject) => {
+      const image = new Image();
+      image.onload = () => {
+        const maxSide = 1400;
+        const ratio = Math.min(1, maxSide / Math.max(image.width, image.height));
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.max(1, Math.round(image.width * ratio));
+        canvas.height = Math.max(1, Math.round(image.height * ratio));
+        const context = canvas.getContext("2d");
+        context.drawImage(image, 0, 0, canvas.width, canvas.height);
+        resolve(canvas.toDataURL("image/jpeg", 0.82));
+      };
+      image.onerror = reject;
+      image.src = URL.createObjectURL(file);
+    });
 
-سياق التطبيق:
-- العملة الحالية: ${localeCurrencyLabel}
-- الأرقام يجب أن تكون غربية دائمًا 0-9.
-- تغيير العملة في التطبيق يعني تغيير الرمز فقط ولا يعني تحويل المبالغ.
-- التصنيفات المتاحة: ${categoryLabels.join(", ") || "غير مصنف"}
-- طرق الدفع المتاحة حاليًا: ${paymentLabels.map((item) => `${item.value}=${item.label}`).join(", ")}
-- التصنيف المحدد حاليًا في الواجهة: ${category || "غير محدد"}
-- طريقة الدفع المحددة حاليًا في الواجهة: ${paymentMethod || "غير محددة"}
-- الملاحظة الحالية: ${note || "لا توجد"}
+  const applyAiExpenseSuggestion = (suggestion) => {
+    const nextAmount = Number(suggestion?.amount || 0);
+    if (nextAmount > 0) setAmount(String(nextAmount));
 
-قواعد الاستخراج:
-1. استخرج المبلغ المدفوع فقط، ولا تجمع ضرائب أو خصومات بشكل منفصل إذا كان الإجمالي النهائي واضحًا.
-2. اختر أقرب تصنيف من التصنيفات المتاحة، وإذا لم تكن واثقًا استخدم "غير مصنف".
-3. اقترح طريقة الدفع فقط إذا كانت واضحة من النص أو الفاتورة، وإلا اجعلها null.
-4. لا تقترح تمويل العجز أو الالتزامات أو البطاقة إذا لم يظهر ذلك صراحة.
-5. إذا وجدت أكثر من مصروف في نفس النص/الفاتورة، أعدها في expenses كمصفوفة.
-6. إذا كانت البيانات ناقصة أو غير مؤكدة، اجعل needsReview=true وأضف السبب في warnings.
+    const suggestedCategory = String(suggestion?.category || "").trim();
+    const matchedCategory = allExpenseCategories.find(
+      (item) =>
+        String(item.label || "").trim() === suggestedCategory ||
+        String(item.id || "").trim() === suggestedCategory
+    );
+    if (matchedCategory?.label) setCategory(matchedCategory.label);
+    else if (suggestedCategory) setCategory(suggestedCategory);
 
-النص/المدخل المراد تحليله:
-${inputPlaceholder}
+    const nextNote = [suggestion?.note, suggestion?.summary]
+      .filter(Boolean)
+      .join(" - ");
+    if (nextNote) setNote(nextNote);
 
-صيغة الإخراج المطلوبة:
-{
-  "expenses": [
-    {
-      "amount": 0,
-      "category": "طعام",
-      "note": "",
-      "paymentMethodSuggestion": null,
-      "merchant": "",
-      "date": null,
-      "confidence": 0.0,
-      "needsReview": true,
-      "warnings": []
+    const suggestedPayment = suggestion?.paymentMethodSuggestion;
+    if (suggestedPayment && paymentOptions.some((option) => option.value === suggestedPayment)) {
+      changePaymentMethod(suggestedPayment);
     }
-  ],
-  "rawText": "",
-  "summary": ""
-}`;
   };
 
-  const prepareAiExpensePrompt = async (inputType) => {
-    const prompt = buildAiExpensePrompt(inputType);
+  const sendAiExpenseRequest = async (payload) => {
+    const context = {
+      currency: localeCurrencyLabel,
+      categories: allExpenseCategories.map((item) => item.label).filter(Boolean),
+      paymentMethods: paymentOptions.map((option) => ({
+        value: option.value,
+        label: option.label,
+      })),
+    };
+    const isVoiceRequest = payload?.mode === "voice";
+    const audioDataUrl = isVoiceRequest ? payload.audioDataUrl : "";
+
+    if (isVoiceRequest && !audioDataUrl) {
+      alert("ابدأ التسجيل الصوتي أولاً ثم أعد المحاولة.");
+      return;
+    }
+
+    const requestBody = isVoiceRequest
+      ? { mode: "voice", audioDataUrl, context }
+      : { ...payload, context };
+
+    setAiExpenseBusy(true);
     try {
-      await navigator.clipboard.writeText(prompt);
-      alert(
-        inputType === "voice"
-          ? "تم نسخ برومبت تسجيل المصروف بالصوت للحافظة"
-          : "تم نسخ برومبت قراءة الفاتورة للحافظة"
-      );
+      const response = await fetch("/api/ai-expense", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(requestBody),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(data.error || "تعذر تحليل المصروف بالذكاء الاصطناعي");
+      }
+      applyAiExpenseSuggestion(data);
+    } catch (error) {
+      alert(error.message || "تعذر تحليل المصروف بالذكاء الاصطناعي");
+    } finally {
+      setAiExpenseBusy(false);
+    }
+  };
+
+  const stopVoiceExpenseRecording = () => {
+    if (aiVoiceStopTimerRef.current) {
+      clearTimeout(aiVoiceStopTimerRef.current);
+      aiVoiceStopTimerRef.current = null;
+    }
+    if (aiRecorderRef.current?.state === "recording") {
+      aiRecorderRef.current.stop();
+    }
+  };
+
+  const startVoiceExpenseRecording = async () => {
+    if (voiceRecording) {
+      stopVoiceExpenseRecording();
+      return;
+    }
+    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
+      alert("تسجيل الصوت غير مدعوم في هذا المتصفح");
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorder = new MediaRecorder(stream);
+      aiAudioChunksRef.current = [];
+      aiRecorderRef.current = recorder;
+
+      recorder.ondataavailable = (event) => {
+        if (event.data?.size > 0) aiAudioChunksRef.current.push(event.data);
+      };
+
+      recorder.onstop = async () => {
+        setVoiceRecording(false);
+        if (aiVoiceStopTimerRef.current) {
+          clearTimeout(aiVoiceStopTimerRef.current);
+          aiVoiceStopTimerRef.current = null;
+        }
+        stream.getTracks().forEach((track) => track.stop());
+        const audioChunks = [...aiAudioChunksRef.current];
+        aiAudioChunksRef.current = [];
+        console.log("voice chunks:", audioChunks.length);
+        if (!audioChunks.length) {
+          alert("لم يتم التقاط صوت. حاول التسجيل مرة أخرى.");
+          return;
+        }
+        const audioBlob = new Blob(audioChunks, { type: recorder.mimeType || "audio/webm" });
+        console.log("voice blob size:", audioBlob.size);
+        if (audioBlob.size <= 0) {
+          alert("لم يتم التقاط صوت. حاول التسجيل مرة أخرى.");
+          return;
+        }
+        const audioDataUrl = await fileToDataUrl(audioBlob);
+        console.log("audioDataUrl exists:", Boolean(audioDataUrl));
+        if (!audioDataUrl) {
+          alert("ابدأ التسجيل الصوتي أولاً ثم أعد المحاولة.");
+          return;
+        }
+        await sendAiExpenseRequest({ mode: "voice", audioDataUrl });
+      };
+
+      recorder.start(250);
+      setVoiceRecording(true);
+      aiVoiceStopTimerRef.current = setTimeout(() => {
+        stopVoiceExpenseRecording();
+      }, 4000);
     } catch {
-      window.prompt("انسخ البرومبت لاستخدامه لاحقًا مع نموذج الذكاء الاصطناعي", prompt);
+      setVoiceRecording(false);
+      if (aiVoiceStopTimerRef.current) {
+        clearTimeout(aiVoiceStopTimerRef.current);
+        aiVoiceStopTimerRef.current = null;
+      }
+      alert("لم أتمكن من تشغيل المايكروفون. تحقق من صلاحيات المتصفح.");
+    }
+  };
+
+  const handleReceiptImageChange = async (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      alert("اختر صورة فاتورة أو إيصال");
+      return;
+    }
+
+    try {
+      const imageDataUrl = await compressImageFile(file);
+      await sendAiExpenseRequest({ mode: "receipt", imageDataUrl });
+    } catch (error) {
+      alert(error.message || "تعذر قراءة صورة الفاتورة");
     }
   };
 
   const submitExpenseWithState = (baseState, fundingOverride = null) => {
+    if (requiresLiabilityDecisionBeforeExpense(baseState)) return;
+
     const effectivePaymentMethod =
       fundingOverride?.paymentMethod ?? (isMixedPayment ? "cash" : paymentMethod);
     const effectiveOverBudgetSource = fundingOverride?.source ?? overBudgetSource;
@@ -2293,31 +2424,37 @@ function toggleExpenseCategoryPinned(catId) {
             >
               <button
                 type="button"
-                onClick={() => prepareAiExpensePrompt("voice")}
-                title="تسجيل المصروف بالصوت"
-                aria-label="تسجيل المصروف بالصوت"
+                className={voiceRecording ? "voice-recording-pulse" : ""}
+                onClick={startVoiceExpenseRecording}
+                disabled={aiExpenseBusy}
+                title={voiceRecording ? "التسجيل يعمل الآن، اضغط للإيقاف والتحليل" : "تسجيل المصروف بالصوت"}
+                aria-label={voiceRecording ? "التسجيل يعمل الآن، اضغط للإيقاف والتحليل" : "تسجيل المصروف بالصوت"}
                 style={{
                   width: 26,
                   height: 26,
                   borderRadius: 9,
-                  border: "1px solid rgba(255,198,45,0.30)",
-                  background: "rgba(255,198,45,0.10)",
-                  color: visualIdentity.colors.gold,
+                  border: voiceRecording ? `1px solid ${visualIdentity.colors.red}88` : "1px solid rgba(255,198,45,0.30)",
+                  background: voiceRecording ? `${visualIdentity.colors.red}22` : "rgba(255,198,45,0.10)",
+                  color: voiceRecording ? visualIdentity.colors.red : visualIdentity.colors.gold,
                   display: "inline-flex",
                   alignItems: "center",
                   justifyContent: "center",
-                  cursor: "pointer",
+                  cursor: aiExpenseBusy ? "not-allowed" : "pointer",
+                  opacity: aiExpenseBusy ? 0.6 : 1,
                   fontSize: 13,
                   fontWeight: 900,
                   fontFamily: "inherit",
-                  boxShadow: "inset 0 1px 0 rgba(255,255,255,0.12)",
+                  boxShadow: voiceRecording
+                    ? `0 0 0 4px ${visualIdentity.colors.red}18, 0 0 14px ${visualIdentity.colors.red}66, inset 0 1px 0 rgba(255,255,255,0.16)`
+                    : "inset 0 1px 0 rgba(255,255,255,0.12)",
                 }}
               >
                 🎙️
               </button>
               <button
                 type="button"
-                onClick={() => prepareAiExpensePrompt("receipt")}
+                onClick={() => aiReceiptInputRef.current?.click()}
+                disabled={aiExpenseBusy || voiceRecording}
                 title="قراءة الفاتورة بالصورة"
                 aria-label="قراءة الفاتورة بالصورة"
                 style={{
@@ -2330,7 +2467,8 @@ function toggleExpenseCategoryPinned(catId) {
                   display: "inline-flex",
                   alignItems: "center",
                   justifyContent: "center",
-                  cursor: "pointer",
+                  cursor: aiExpenseBusy || voiceRecording ? "not-allowed" : "pointer",
+                  opacity: aiExpenseBusy || voiceRecording ? 0.6 : 1,
                   fontSize: 13,
                   fontWeight: 900,
                   fontFamily: "inherit",
@@ -2339,6 +2477,14 @@ function toggleExpenseCategoryPinned(catId) {
               >
                 📷
               </button>
+              <input
+                ref={aiReceiptInputRef}
+                type="file"
+                accept="image/*"
+                capture="environment"
+                onChange={handleReceiptImageChange}
+                style={{ display: "none" }}
+              />
             </div>
           </div>
 
@@ -4626,11 +4772,22 @@ function AssetsScreen({ state, setState, onAddExtraCash, readOnly = false }) {
         return directKeyMatch || idMatch || cashMatch || nameMatch;
       })
       .map((movement, index) => {
+        const incomingMovementTypes = [
+          "reserved_asset_payment_paid",
+          "opening_balance",
+          "opening_asset",
+          "extra_cash",
+          "transfer_to_cash",
+          "transfer_to_bank",
+          "transfer_in_units",
+        ];
+        const isIncoming = incomingMovementTypes.includes(movement.type);
         const isOutgoing =
-          movement.assetKey === row.assetKey ||
-          movement.from === row.assetKey ||
-          ["transfer_out", "asset_units_liquidated"].includes(movement.type) &&
-            movement.destinationKey !== row.assetKey;
+          !isIncoming &&
+          (movement.assetKey === row.assetKey ||
+            movement.from === row.assetKey ||
+            (["transfer_out", "asset_units_liquidated"].includes(movement.type) &&
+              movement.destinationKey !== row.assetKey));
         const date = movement.date ? new Date(movement.date) : null;
         const sortTime = new Date(movement.recordedAt || movement.createdAt || 0);
         const movementUnits =
@@ -4960,7 +5117,8 @@ function LiabilitiesScreen({
 }) {
   const { currencyLabel, t } = useLocale();
   const [showStructuralDetails, setShowStructuralDetails] = useState(false);
-const [showCurrentDetails, setShowCurrentDetails] = useState(focusDueOnly);
+const [showDirectLiabilityDetails, setShowDirectLiabilityDetails] = useState(focusDueOnly);
+const [showCardLiabilityDetails, setShowCardLiabilityDetails] = useState(focusDueOnly);
 
 const structuralList = state.structural || state.structuralLiabilities || [];
 const currentList = state.currentLiabilities || [];
@@ -5187,14 +5345,6 @@ const [liabilityAssetKey, setLiabilityAssetKey] = useState("cash");
   };
   const getDueText = (item) =>
     item.dueDate ? formatDate(item.dueDate) : item.dueDay ? `يوم ${item.dueDay}` : "غير محدد";
-  const coveredCurrentTotal = pendingCurrent.reduce(
-    (sum, item) => sum + getCoveredAmount(item),
-    0
-  );
-  const uncoveredCurrentTotal = pendingCurrent.reduce(
-    (sum, item) => sum + getUncoveredAmount(item),
-    0
-  );
   const updateCurrentPaymentMethod = (liability, value) => {
     setState((prev) => ({
       ...prev,
@@ -5494,6 +5644,12 @@ const [liabilityAssetKey, setLiabilityAssetKey] = useState("cash");
       item.category || originExpense?.category || "غير مصنف";
     const linkedNote = item.note || originExpense?.note || "";
     const isEmergencyLiability = item.source === "emergency_expense";
+    const isExpenseLiability = item.source === "expense_payment";
+    const creditorLabel = item.creditorName || item.name || "دائن";
+    const originExpenseTotal = Number(
+      originExpense?.originalAmount ?? originExpense?.amount ?? item.amount ?? 0
+    );
+    const expenseLiabilityLabel = `${creditorLabel} - تغطية جزء من مصروف ${linkedCategory} مبلغ ${originExpenseTotal.toFixed(2)} ${currencyLabel}`;
 
     return {
       item,
@@ -5510,7 +5666,9 @@ const [liabilityAssetKey, setLiabilityAssetKey] = useState("cash");
         ? item.name || "بطاقة ائتمانية"
         : isEmergencyLiability
           ? `مصروف ${linkedCategory} طارئ`
-          : item.name || "دائن",
+          : isExpenseLiability
+            ? expenseLiabilityLabel
+            : item.name || "دائن",
       subtitle: isCard
         ? `السقف: ${creditLimit.toFixed(2)} · المستخدم: ${Number(
             item.balance || 0
@@ -5535,12 +5693,14 @@ const [liabilityAssetKey, setLiabilityAssetKey] = useState("cash");
   const displayedCurrentTotal = focusDueOnly
     ? currentLiabilityDisplayRows.reduce((sum, row) => sum + Number(row.amount || 0), 0)
     : currentDebtTotal;
-  const displayedCoveredTotal = focusDueOnly
-    ? currentLiabilityDisplayRows.reduce((sum, row) => sum + Number(row.covered || 0), 0)
-    : coveredCurrentTotal;
-  const displayedUncoveredTotal = focusDueOnly
-    ? currentLiabilityDisplayRows.reduce((sum, row) => sum + Number(row.uncovered || 0), 0)
-    : uncoveredCurrentTotal;
+  const cardLiabilityRows = currentLiabilityDisplayRows.filter((row) => row.isCard);
+  const directLiabilityRows = currentLiabilityDisplayRows.filter((row) => !row.isCard);
+  const totalRowsAmount = (rows) =>
+    rows.reduce((sum, row) => sum + Number(row.amount || 0), 0);
+  const totalRowsCovered = (rows) =>
+    rows.reduce((sum, row) => sum + Number(row.covered || 0), 0);
+  const totalRowsUncovered = (rows) =>
+    rows.reduce((sum, row) => sum + Number(row.uncovered || 0), 0);
 
   return (
     <div
@@ -5624,15 +5784,64 @@ const [liabilityAssetKey, setLiabilityAssetKey] = useState("cash");
         />
       )}
 
-<CurrentLiabilitiesCard
-        total={displayedCurrentTotal}
-        coveredTotal={displayedCoveredTotal}
-        uncoveredTotal={displayedUncoveredTotal}
-        rows={currentLiabilityDisplayRows}
-        open={showCurrentDetails}
+      <CurrentLiabilitiesCard
+        title="الالتزامات الجارية"
+        subtitle="ديون ودائنون مستحقون دون بطاقات الائتمان"
+        icon="liability"
+        accentColor={visualIdentity.semantic.warning}
+        showSummary={false}
+        total={totalRowsAmount(directLiabilityRows)}
+        coveredTotal={totalRowsCovered(directLiabilityRows)}
+        uncoveredTotal={totalRowsUncovered(directLiabilityRows)}
+        rows={directLiabilityRows}
+        open={showDirectLiabilityDetails}
         assetKey={liabilityAssetKey}
         assetSources={liabilityAssetSources}
-        onToggleDetails={() => setShowCurrentDetails((value) => !value)}
+        onToggleDetails={() => setShowDirectLiabilityDetails((value) => !value)}
+        onAssetKeyChange={setLiabilityAssetKey}
+        onToggleItem={(itemId) =>
+          setOpenCurrentId(openCurrentId === itemId ? null : itemId)
+        }
+        onPayReserved={payCurrentFromReserved}
+        onPayFromCap={payCurrentFromCap}
+        onToggleAssets={(item) =>
+          updateCurrentPaymentMethod(
+            item,
+            item.paymentMethod === "assets" ? "" : "assets"
+          )
+        }
+        onTogglePostpone={(item) =>
+          updateCurrentPaymentMethod(
+            item,
+            item.paymentMethod === "postpone" ? "" : "postpone"
+          )
+        }
+        onPayFromAsset={payCurrentFromAsset}
+        onPostponePart={setPostponePart}
+        onConfirmPostpone={confirmPostponeDate}
+        inputStyle={G.inp()}
+        iconButtonStyle={G.iconBtn}
+        confirmAssetButtonStyle={G.btn(
+          "rgba(255,209,43,0.14)",
+          visualIdentity.semantic.warning,
+          { width: "100%", padding: "9px" }
+        )}
+      />
+
+      <CurrentLiabilitiesCard
+        title="البطاقات"
+        subtitle="بطاقات ائتمان قائمة ومبالغها المغطاة وغير المغطاة"
+        icon="card"
+        accentColor={visualIdentity.semantic.danger}
+        showSummary={false}
+        total={totalRowsAmount(cardLiabilityRows)}
+        coveredTotal={totalRowsCovered(cardLiabilityRows)}
+        uncoveredTotal={totalRowsUncovered(cardLiabilityRows)}
+        rows={cardLiabilityRows}
+        open={showCardLiabilityDetails}
+        assetKey={liabilityAssetKey}
+        assetSources={liabilityAssetSources}
+        onToggleDetails={() => setShowCardLiabilityDetails((value) => !value)}
         onAssetKeyChange={setLiabilityAssetKey}
         onToggleItem={(itemId) =>
           setOpenCurrentId(openCurrentId === itemId ? null : itemId)
@@ -6417,6 +6626,9 @@ const openingBalanceRows = [
     share: [t("settings.share"), ""],
     about: [t("settings.about"), ""],
   };
+  useEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+  }, [settingsView]);
   const openSettingsView = (view) => {
     if (view === "cards") {
       setSettingsSectionsOpen((prev) => ({ ...prev, cards: true, structural: true }));
@@ -6488,7 +6700,7 @@ const openingBalanceRows = [
   }
 
   return (
-    <div className="settings-screen" style={{ ...G.scr, minHeight: "calc(100vh - 118px)" }}>
+    <div className="settings-screen settings-screen-subpage" style={{ ...G.scr, paddingTop: 20, minHeight: "calc(100vh - 118px)" }}>
       <SettingsSubpageShell
         title={settingsPageMeta[settingsView]?.[0] || t("nav.settings")}
         subtitle={settingsPageMeta[settingsView]?.[1] || ""}
