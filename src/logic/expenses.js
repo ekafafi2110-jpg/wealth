@@ -3,9 +3,13 @@ import { deductFromAsset } from "./assets.js";
 export function recordExpense(state, expenseData) {
   const today = expenseData.date || new Date().toISOString().slice(0, 10);
   const now = expenseData.createdAt || `${today}T12:00:00.000Z`;
+  const recordedAt = new Date().toISOString();
   const operationId = Number(expenseData.operationId ?? Date.now());
   const expenseId = Number(expenseData.id ?? operationId);
   const amount = Number(expenseData.amount || 0);
+  const expenseCategory = expenseData.category || "غير مصنف";
+  const expenseNote = String(expenseData.note || "").trim();
+  const assetExpenseLabel = [expenseCategory, expenseNote].filter(Boolean).join(" - ");
 
   if (amount <= 0) {
     return {
@@ -27,7 +31,7 @@ export function recordExpense(state, expenseData) {
   const emergencyMode = emergencyFunding.mode || "";
   const emergencyRemainderSource = emergencyFunding.remainderSource || "asset";
 
-  let budgetCovered = isAssetPayment ? 0 : Math.min(amount, remainingCap);
+  let budgetCovered = Math.min(amount, remainingCap);
 
   if (isEmergency) {
     if (!["asset", "liability", "mix"].includes(emergencyMode)) {
@@ -59,8 +63,9 @@ export function recordExpense(state, expenseData) {
   }
 
   const fundedOutsideCap = Math.max(0, amount - budgetCovered);
-  const overBudget = isEmergency || isAssetPayment ? 0 : fundedOutsideCap;
+  const overBudget = isEmergency ? 0 : fundedOutsideCap;
   const isOverBudget = overBudget > 0;
+  const assetFundingAmount = isAssetPayment ? amount : 0;
   const emergencyAssetAmount = isEmergency
     ? emergencyMode === "asset"
       ? amount
@@ -79,8 +84,12 @@ export function recordExpense(state, expenseData) {
     ? Math.max(0, amount - emergencyLiabilityAmount)
     : amount;
 
-  if (isAssetPayment) {
-    const deduction = deductFromAsset(next, expenseData.assetKey || "cash", amount);
+  if (isAssetPayment && assetFundingAmount > 0) {
+    const deduction = deductFromAsset(
+      next,
+      expenseData.assetKey || "cash",
+      assetFundingAmount
+    );
 
     if (!deduction.success) {
       return deduction;
@@ -147,9 +156,34 @@ createdAt: new Date().toISOString(),
     (Number(next.session.overBudgetSpent || 0) + overBudget).toFixed(2)
   );
 
+  if (isAssetPayment && budgetCovered > 0) {
+    const originMonth = next.currentMonth || today.slice(0, 7);
+    const [year, month] = String(originMonth).split("-").map(Number);
+    const lastDay = new Date(year, month, 0).getDate();
+    const dueDate = `${originMonth}-${String(lastDay).padStart(2, "0")}`;
+    next.reservedPayments = next.reservedPayments || [];
+    next.reservedPayments.push({
+      id: `${operationId}-reserved-asset`,
+      amount: budgetCovered,
+      balance: budgetCovered,
+      status: "pending",
+      source: "asset_payment",
+      category: expenseData.category || "غير مصنف",
+      note: expenseData.note || "",
+      creditorName: expenseData.assetLabel || "أصل",
+      assetKey: expenseData.assetKey || "cash",
+      dueDate,
+      dueDay: lastDay,
+      originMonth,
+      expenseId: expense.id,
+      date: today,
+      createdAt: now,
+    });
+  }
+
   if (expenseData.paymentMethod === "card") {
     const card = next.currentLiabilities.find(
-      (x) => x.id === Number(expenseData.cardId) && x.type === "card"
+      (x) => String(x.id) === String(expenseData.cardId) && x.type === "card"
     );
 
     if (!card) {
@@ -287,6 +321,23 @@ createdAt: now,
 }
 
   if (isEmergency && emergencyAssetAmount > 0) {
+    next.assetHistory = [
+      ...(next.assetHistory || []),
+      {
+        id: `${operationId}-asset-history-emergency`,
+        date: now,
+        recordedAt,
+        type: "emergency_expense_covered_from_asset",
+        source: "expense",
+        assetKey: emergencyFunding.assetKey || "cash",
+        amount: emergencyAssetAmount,
+        expenseId: expense.id,
+        expenseCategory,
+        expenseNote,
+        displayLabel: `مصروف طارئ - ${assetExpenseLabel}`,
+        note: expenseNote,
+      },
+    ];
     next.transactions.push({
       id: operationId + 3,
       type: "emergency_expense_covered_from_asset",
@@ -297,11 +348,28 @@ createdAt: now,
     });
   }
 
-  if (isAssetPayment) {
+  if (isAssetPayment && assetFundingAmount > 0) {
+    next.assetHistory = [
+      ...(next.assetHistory || []),
+      {
+        id: `${operationId}-asset-history-expense`,
+        date: now,
+        recordedAt,
+        type: "expense_paid_from_asset",
+        source: "expense",
+        assetKey: expenseData.assetKey || "cash",
+        amount: assetFundingAmount,
+        expenseId: expense.id,
+        expenseCategory,
+        expenseNote,
+        displayLabel: assetExpenseLabel,
+        note: expenseNote,
+      },
+    ];
     next.transactions.push({
       id: operationId + 3,
       type: "expense_paid_from_asset",
-      amount,
+      amount: assetFundingAmount,
       assetKey: expenseData.assetKey || "cash",
       expenseId: expense.id,
       date: now,

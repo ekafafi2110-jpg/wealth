@@ -1,11 +1,11 @@
-import { CalendarClock, CheckCircle2, ChevronDown, ChevronUp, WalletCards } from "lucide-react";
+﻿import { CalendarClock, CheckCircle2, ChevronDown, ChevronUp, WalletCards } from "lucide-react";
 import { useState } from "react";
 import { useLocale } from "../../i18n/locale";
 import visualIdentity from "../../theme/visualIdentity";
 
 export default function ReservedPaymentsCard({ rows, onPay, onPostpone }) {
   const { currencyLabel } = useLocale();
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(false);
   const [openId, setOpenId] = useState(null);
   const [postponeDates, setPostponeDates] = useState({});
   const total = rows.reduce((sum, row) => sum + Number(row.amount || 0), 0);
@@ -119,9 +119,9 @@ export default function ReservedPaymentsCard({ rows, onPay, onPostpone }) {
                   }}
                 >
                   <span>
-                    <strong style={{ display: "block", fontSize: 13 }}>{row.category}</strong>
+                    <strong style={{ display: "block", fontSize: 13 }}>{row.sourceLabel || row.category}</strong>
                     <small style={{ color: visualIdentity.colors.textSecondary, fontSize: 9 }}>
-                      {row.note || row.creditorName || "بدون ملاحظة"} · {row.dueText}
+                      {row.category}{row.note ? ` · ${row.note}` : ""} · {row.dueText}
                     </small>
                   </span>
                   <strong style={{ color: accent, fontSize: 15, whiteSpace: "nowrap" }}>
@@ -155,7 +155,7 @@ export default function ReservedPaymentsCard({ rows, onPay, onPostpone }) {
                       </div>
                     ) : (
                       <div style={{ color: visualIdentity.colors.textSecondary, fontSize: 10 }}>
-                        سيُتاح السداد عند حلول شهر الاستحقاق.
+                        سيتاح السداد عند حلول شهر الاستحقاق.
                       </div>
                     )}
 
@@ -213,3 +213,4 @@ export default function ReservedPaymentsCard({ rows, onPay, onPostpone }) {
     </section>
   );
 }
+

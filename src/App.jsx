@@ -135,6 +135,8 @@ const getCategoryTileStyle = (category) =>
 const createOperationId = () => Date.now();
 const getCurrencyLabel = (state) =>
   currencyLabels[state.settings?.locale?.currency || "JOD"] || "JOD";
+const sumExpenseCategoryCaps = (caps = {}) =>
+  Object.values(caps).reduce((sum, value) => sum + Math.max(0, Number(value || 0)), 0);
 
 const SUMMARY_CARD_STYLE = {
   total: {
@@ -784,9 +786,9 @@ const [unusualDueDate, setUnusualDueDate] = useState("");
   const accountingDateTime = `${accountingDate}T12:00:00.000Z`;
   const isGoodsSource = (source) => {
     if (source.type !== "custom") return false;
-    const id = Number(String(source.key).split(":")[1]);
+    const id = String(source.key).split(":")[1];
     return (state.assets.custom || []).some(
-      (item) => item.id === id && item.type === "unit"
+      (item) => String(item.id) === String(id) && item.type === "unit"
     );
   };
   const defaultExpenseCategories = DEFAULT_EXPENSE_CATEGORIES;
@@ -883,8 +885,6 @@ const mainExpenseCategories = pinnedExpenseCategories;
         ].filter((part) => Number(part.amount || 0) > 0)
       : [];
 const hasSpendingCap = Number(budget.remainingCap || 0) > 0;
-const isSpendingCapExhausted =
-  Number(budget.spendingCap || 0) > 0 && Number(budget.remainingCap || 0) <= 0;
 const uncoveredAmount = Math.max(
   0,
   enteredAmount - Number(budget.remainingCap || 0)
@@ -985,10 +985,14 @@ useEffect(() => {
       return `${next}${digit}`;
     });
   };
+  const openPendingSurplusAllocation = () => {
+    const surplus = Number(state.session?.pendingSurplus || 0);
+    if (surplus > 0.01) onAllocateSurplus(surplus);
+  };
 
   const addPendingExpense = () => {
     if (Number(state.session?.pendingSurplus || 0) > 0.01) {
-      alert("وجّه فائض الراتب إلى أحد الأصول قبل تسجيل أي مصروف");
+      openPendingSurplusAllocation();
       return;
     }
     const value = Number(amount || 0);
@@ -1134,15 +1138,17 @@ useEffect(() => {
 
     if (value === "asset") {
       if (enteredAmount <= 0) return alert("أدخل مبلغ المصروف أولاً");
-      openDeficitTransfer("all", "fullAsset", enteredAmount);
+      openDeficitTransfer(
+        "all",
+        "fullAsset",
+        enteredAmount
+      );
     }
   };
 
   const paymentOptions = [
     ...(hasSpendingCap ? [{ value: "cash", label: "كاش", icon: "💵" }] : []),
-    ...(amountExceedsCap || isSpendingCapExhausted
-      ? [{ value: "asset", label: "أصل", icon: "🏦" }]
-      : []),
+    { value: "asset", label: "أصل", icon: "🏦" },
     { value: "card", label: "بطاقة", icon: "💳" },
     { value: "liability", label: "التزام جديد", icon: "🧾" },
     { value: "emergency", label: "مصروف طارئ", icon: "⚡" },
@@ -1239,12 +1245,10 @@ ${inputPlaceholder}
       fundingOverride?.paymentMethod ?? (isMixedPayment ? "cash" : paymentMethod);
     const effectiveOverBudgetSource = fundingOverride?.source ?? overBudgetSource;
     const effectiveOverBudgetAssetKey = fundingOverride?.assetKey ?? overBudgetAssetKey;
-    const effectiveAssetPaymentKey = fundingOverride?.assetKey ?? "";
+    const effectiveAssetPaymentKey = fundingOverride?.assetKey ?? overBudgetAssetKey;
     const effectiveEmergencyAssetKey =
       fundingOverride?.assetKey ?? unusualAssetKey;
-    const effectiveOverBudget = ["emergency", "asset"].includes(
-      effectivePaymentMethod
-    )
+    const effectiveOverBudget = effectivePaymentMethod === "emergency"
       ? 0
       : uncoveredAmount;
     const baseCards = (baseState.currentLiabilities || []).filter(
@@ -1396,6 +1400,12 @@ ${inputPlaceholder}
       liabilityName,
       dueDate,
       assetKey: effectivePaymentMethod === "asset" ? effectiveAssetPaymentKey : "",
+      assetLabel:
+        effectivePaymentMethod === "asset"
+          ? getAssetSources(baseState).find(
+              (source) => source.key === effectiveAssetPaymentKey
+            )?.label || "أصل"
+          : "",
       emergencyFunding:
         effectivePaymentMethod === "emergency"
           ? {
@@ -1418,7 +1428,11 @@ ${inputPlaceholder}
 const lastExpense =
   nextState.expenses[nextState.expenses.length - 1];
 
-if (lastExpense?.overBudget > 0 && effectivePaymentMethod !== "emergency") {
+if (
+  lastExpense?.overBudget > 0 &&
+  effectivePaymentMethod !== "emergency" &&
+  effectivePaymentMethod !== "asset"
+) {
   if (effectivePaymentMethod !== "card" && effectivePaymentMethod !== "liability") {
     if (effectiveOverBudgetSource === "asset") {
       const deduction = deductFromAsset(
@@ -1433,6 +1447,28 @@ if (lastExpense?.overBudget > 0 && effectivePaymentMethod !== "emergency") {
       }
 
       nextState = deduction.nextState;
+      const assetExpenseLabel = [
+        lastExpense.category || "غير مصنف",
+        String(lastExpense.note || "").trim(),
+      ].filter(Boolean).join(" - ");
+
+      nextState.assetHistory = [
+        ...(nextState.assetHistory || []),
+        {
+          id: `${operationId}-asset-history-over-budget`,
+          date: new Date().toISOString(),
+          recordedAt: new Date().toISOString(),
+          type: "over_budget_covered_from_asset",
+          source: "expense",
+          assetKey: effectiveOverBudgetAssetKey,
+          amount: lastExpense.overBudget,
+          expenseId: lastExpense.id,
+          expenseCategory: lastExpense.category || "غير مصنف",
+          expenseNote: String(lastExpense.note || "").trim(),
+          displayLabel: `تجاوز سقف - ${assetExpenseLabel}`,
+          note: String(lastExpense.note || "").trim(),
+        },
+      ];
 
       nextState.transactions.push({
         id: operationId,
@@ -1528,6 +1564,24 @@ if (lastExpense?.overBudget > 0 && effectivePaymentMethod !== "emergency") {
   );
 }
 
+if (lastExpense?.overBudget > 0 && effectivePaymentMethod === "asset") {
+  lastExpense.overBudgetFunding = {
+    type: "asset",
+    assetKey: effectiveAssetPaymentKey,
+    label:
+      getAssetSources(nextState).find(
+        (source) => source.key === effectiveAssetPaymentKey
+      )?.label || "أصل",
+    amount: Number(lastExpense.overBudget || 0),
+  };
+
+  alert(
+    `تنبيه: تجاوزت سقف الصرف بمبلغ ${lastExpense.overBudget.toFixed(
+      2
+    )} ${localeCurrencyLabel} في هذه العملية.`
+  );
+}
+
 setState(nextState);
     resetExpenseDraft();
   };
@@ -1615,7 +1669,7 @@ setState(nextState);
 
   const submitExpense = () => {
     if (Number(state.session?.pendingSurplus || 0) > 0.01) {
-      alert("وجّه فائض الراتب إلى أحد الأصول قبل تسجيل أي مصروف");
+      openPendingSurplusAllocation();
       return;
     }
     return pendingExpenses.length > 0
@@ -1856,7 +1910,7 @@ setState(nextState);
 
     if (expense.paymentMethod === "card") {
       const card = (next.currentLiabilities || []).find(
-        (x) => x.id === Number(expense.cardId) && x.type === "card"
+        (x) => String(x.id) === String(expense.cardId) && x.type === "card"
       );
 
       if (card) {
@@ -1989,24 +2043,35 @@ setState(nextState);
       (item) => String(item.expenseId) !== String(expenseId)
     );
 
-    const assetCoverageTx = (next.transactions || []).find(
+    const assetCoverageTransactions = (next.transactions || []).filter(
       (tx) =>
-        tx.expenseId === expenseId &&
+        String(tx.expenseId) === String(expenseId) &&
         (tx.type === "over_budget_covered_from_asset" ||
           tx.type === "emergency_expense_covered_from_asset" ||
           tx.type === "expense_paid_from_asset")
     );
 
-    if (assetCoverageTx?.assetKey && Number(assetCoverageTx.amount || 0) > 0) {
+    const assetRefunds = assetCoverageTransactions.reduce((groups, tx) => {
+      const assetKey = String(tx.assetKey || "");
+      const value = Number(tx.amount || 0);
+      if (!assetKey || value <= 0) return groups;
+      groups[assetKey] = Number((Number(groups[assetKey] || 0) + value).toFixed(2));
+      return groups;
+    }, {});
+
+    Object.entries(assetRefunds).forEach(([assetKey, refundAmount]) => {
       next = addToAsset(
         next,
-        assetCoverageTx.assetKey,
-        Number(assetCoverageTx.amount || 0)
+        assetKey,
+        refundAmount
       );
-    }
+    });
 
     next.transactions = (next.transactions || []).filter(
-      (tx) => tx.expenseId !== expenseId
+      (tx) => String(tx.expenseId) !== String(expenseId)
+    );
+    next.assetHistory = (next.assetHistory || []).filter(
+      (movement) => String(movement.expenseId || "") !== String(expenseId)
     );
 
     if (!isLiabilityPayment) {
@@ -2645,7 +2710,7 @@ function toggleExpenseCategoryPinned(catId) {
             }
             const net = salary - structuralTotal;
             const selectedCap = Math.min(
-              Math.max(0, Number(state.session?.spendingCap ?? state.settings?.spendingCap ?? 0)),
+              Math.max(0, Number(state.settings?.spendingCap ?? state.session?.spendingCap ?? 0)),
               net
             );
             const salarySurplus = Math.max(0, net - selectedCap);
@@ -3140,6 +3205,10 @@ function ReportsScreen({ state }) {
   const [selectedTrendAssetKey, setSelectedTrendAssetKey] = useState("");
   const [expenseChartMode, setExpenseChartMode] = useState("donut");
   const [selectedExpense, setSelectedExpense] = useState(null);
+  const [selectedHeatmapMonth, setSelectedHeatmapMonth] = useState({
+    baseMonth: state.currentMonth || new Date().toISOString().slice(0, 7),
+    month: state.currentMonth || new Date().toISOString().slice(0, 7),
+  });
   const expenses = [...(state.expenses || [])].reverse();
   const total = expenses.reduce((sum, item) => sum + Number(item.amount || 0), 0);
   const reportBudget = calcBudget(state);
@@ -3330,6 +3399,37 @@ function ReportsScreen({ state }) {
   const expenseTrendPoints = Array.from(expenseTrendMap.values())
     .sort((a, b) => String(a.month).localeCompare(String(b.month)))
     .slice(-6);
+  const heatmapSnapshots = new Map();
+  (state.monthlySnapshots || []).forEach((snapshot) => {
+    if (!snapshot.month) return;
+    heatmapSnapshots.set(snapshot.month, snapshot);
+  });
+  const heatmapMonthOptions = [
+    ...Array.from(heatmapSnapshots.values())
+      .sort((a, b) => String(a.month).localeCompare(String(b.month)))
+      .map((snapshot) => ({
+        value: snapshot.month,
+        label: formatMonthKey(snapshot.month),
+      })),
+    {
+      value: state.currentMonth || new Date().toISOString().slice(0, 7),
+      label: formatMonthKey(state.currentMonth || new Date().toISOString().slice(0, 7)),
+    },
+  ].filter(
+    (option, index, rows) =>
+      rows.findIndex((row) => row.value === option.value) === index
+  );
+  const currentHeatmapMonth = state.currentMonth || new Date().toISOString().slice(0, 7);
+  const activeHeatmapMonth =
+    selectedHeatmapMonth.baseMonth === currentHeatmapMonth
+      ? selectedHeatmapMonth.month
+      : currentHeatmapMonth;
+  const selectedHeatmapSnapshot = heatmapSnapshots.get(activeHeatmapMonth);
+  const heatmapExpenses = selectedHeatmapSnapshot
+    ? selectedHeatmapSnapshot.expenses || []
+    : state.expenses || [];
+  const heatmapDailyTotals =
+    selectedHeatmapSnapshot?.dailySpendingHeatmap?.dailyTotals || null;
   const reportAssetGroups = {
     cash: 0,
     banks: 0,
@@ -3459,8 +3559,13 @@ function ReportsScreen({ state }) {
 
           {expenseReportView === "heatmap" && (
             <DailySpendingHeatmap
-              expenses={state.expenses || []}
-              monthKey={state.currentMonth}
+              expenses={heatmapExpenses}
+              monthKey={activeHeatmapMonth}
+              dailyTotals={heatmapDailyTotals}
+              monthOptions={heatmapMonthOptions}
+              onMonthChange={(month) =>
+                setSelectedHeatmapMonth({ baseMonth: currentHeatmapMonth, month })
+              }
             />
           )}
 
@@ -4484,6 +4589,10 @@ function AssetsScreen({ state, setState, onAddExtraCash, readOnly = false }) {
   ];
   const movementLabels = {
     asset_units_liquidated: "تسييل وحدات من الأصل",
+    expense_paid_from_asset: "خصم مصروف من أصل",
+    over_budget_covered_from_asset: "خصم لتغطية تجاوز السقف",
+    emergency_expense_covered_from_asset: "خصم لمصروف طارئ",
+    reserved_asset_payment_paid: "سداد برسم الدفع للأصل",
     transfer_out: "مناقلة صادرة",
     transfer_to_cash: "مناقلة إلى الكاش الادخاري",
     transfer_to_bank: "مناقلة إلى الحساب البنكي",
@@ -4523,6 +4632,7 @@ function AssetsScreen({ state, setState, onAddExtraCash, readOnly = false }) {
           ["transfer_out", "asset_units_liquidated"].includes(movement.type) &&
             movement.destinationKey !== row.assetKey;
         const date = movement.date ? new Date(movement.date) : null;
+        const sortTime = new Date(movement.recordedAt || movement.createdAt || 0);
         const movementUnits =
           movement.unitsSold ??
           movement.unitsAdded ??
@@ -4536,11 +4646,18 @@ function AssetsScreen({ state, setState, onAddExtraCash, readOnly = false }) {
           Number(movement.unitPrice || 0) > 0
             ? `اليوم ${Number(movement.unitPrice || 0).toFixed(2)}`
             : "";
+        const expenseMovementLabel = movement.displayLabel
+          || [
+            movement.expenseCategory,
+            movement.expenseNote || movement.note,
+          ].filter(Boolean).join(" - ");
         return {
           id: `${movement.id ?? index}-${row.id}`,
           label:
             movement.expensePurpose === "expense_coverage"
               ? movement.note || `تسييل لتغطية مصروف — ${movement.expenseCategory || "غير مصنف"}`
+              : movement.source === "expense" && expenseMovementLabel
+                ? expenseMovementLabel
               : movementLabels[movement.type] || movement.note || "حركة على الأصل",
           amount: Number(movement.amount || 0),
           unitText,
@@ -4550,10 +4667,21 @@ function AssetsScreen({ state, setState, onAddExtraCash, readOnly = false }) {
             date && !Number.isNaN(date.getTime())
               ? date.toLocaleDateString("en-GB")
               : "—",
-          sortDate: date?.getTime() || 0,
+          sortRecordedAt: !Number.isNaN(sortTime.getTime()) ? sortTime.getTime() : 0,
+          sortDate: date && !Number.isNaN(date.getTime()) ? date.getTime() : 0,
+          sortSequence: Number(movement.sortSequence || 0),
+          sortId: Number(String(movement.id || "").match(/\d+/)?.[0] || 0),
+          sortIndex: index,
         };
       })
-      .sort((a, b) => b.sortDate - a.sortDate);
+      .sort(
+        (a, b) =>
+          b.sortRecordedAt - a.sortRecordedAt ||
+          b.sortSequence - a.sortSequence ||
+          b.sortIndex - a.sortIndex ||
+          b.sortDate - a.sortDate ||
+          b.sortId - a.sortId
+      );
   const dashboardRowsWithMovements = dashboardRows.map((row) => ({
     ...row,
     movements: movementRows(row),
@@ -4879,51 +5007,80 @@ const [liabilityAssetKey, setLiabilityAssetKey] = useState("cash");
     const amount = Number(payment.balance ?? payment.amount ?? 0);
     if (amount <= 0 || !isDueThisMonth(payment)) return;
 
-    setState((prev) => ({
-      ...prev,
-      reservedPayments: (prev.reservedPayments || []).map((item) =>
-        String(item.id) === String(payment.id)
-          ? {
-              ...item,
-              balance: 0,
-              status: "paid",
-              paidAt: new Date().toISOString(),
-            }
-          : item
-      ),
-      currentLiabilities: payment.cardId
-        ? (prev.currentLiabilities || []).map((item) => {
-            if (String(item.id) !== String(payment.cardId)) return item;
-            const nextBalance = Math.max(
-              0,
-              Number((Number(item.balance || 0) - amount).toFixed(2))
-            );
-            const nextBuffer = Math.max(
-              0,
-              Number((Number(item.payableBuffer || 0) - amount).toFixed(2))
-            );
-            return {
-              ...item,
-              balance: nextBalance,
-              amount: nextBalance,
-              payableBuffer: nextBuffer,
-              uncoveredDebt: Math.max(0, nextBalance - nextBuffer),
-              status: nextBalance <= 0 ? "paid" : "pending",
-            };
-          })
-        : prev.currentLiabilities,
-      transactions: [
-        ...(prev.transactions || []),
-        {
-          id: Date.now(),
-          type: "reserved_payment_paid",
-          amount,
-          reservedPaymentId: payment.id,
-          expenseId: payment.expenseId,
-          date: new Date().toISOString(),
-        },
-      ],
-    }));
+    setState((prev) => {
+      const now = new Date().toISOString();
+      let next = {
+        ...prev,
+        reservedPayments: (prev.reservedPayments || []).map((item) =>
+          String(item.id) === String(payment.id)
+            ? {
+                ...item,
+                balance: 0,
+                status: "paid",
+                paidAt: now,
+              }
+            : item
+        ),
+        currentLiabilities: payment.cardId
+          ? (prev.currentLiabilities || []).map((item) => {
+              if (String(item.id) !== String(payment.cardId)) return item;
+              const nextBalance = Math.max(
+                0,
+                Number((Number(item.balance || 0) - amount).toFixed(2))
+              );
+              const nextBuffer = Math.max(
+                0,
+                Number((Number(item.payableBuffer || 0) - amount).toFixed(2))
+              );
+              return {
+                ...item,
+                balance: nextBalance,
+                amount: nextBalance,
+                payableBuffer: nextBuffer,
+                uncoveredDebt: Math.max(0, nextBalance - nextBuffer),
+                status: nextBalance <= 0 ? "paid" : "pending",
+              };
+            })
+          : prev.currentLiabilities,
+        transactions: [
+          ...(prev.transactions || []),
+          {
+            id: Date.now(),
+            type: "reserved_payment_paid",
+            amount,
+            reservedPaymentId: payment.id,
+            expenseId: payment.expenseId,
+            assetKey: payment.assetKey || "",
+            date: now,
+          },
+        ],
+      };
+
+      if (payment.assetKey) {
+        next = addToAsset(next, payment.assetKey, amount);
+        next.assetHistory = [
+          ...(next.assetHistory || []),
+          {
+            id: `${Date.now()}-reserved-asset-paid`,
+            date: now,
+            recordedAt: new Date().toISOString(),
+            type: "reserved_asset_payment_paid",
+            source: "reserved_payment",
+            assetKey: payment.assetKey,
+            amount,
+            expenseId: payment.expenseId,
+            expenseCategory: payment.category || "غير مصنف",
+            expenseNote: payment.note || "",
+            displayLabel: `سداد برسم الدفع - ${[
+              payment.category || "غير مصنف",
+              payment.note || "",
+            ].filter(Boolean).join(" - ")}`,
+          },
+        ];
+      }
+
+      return next;
+    });
   };
 
   const postponeReservedPayment = (payment, nextDueDate) => {
@@ -5119,12 +5276,11 @@ const [liabilityAssetKey, setLiabilityAssetKey] = useState("cash");
         Number(prev.session?.spendingCap || 0) -
           Number(prev.session?.coveredSpent || 0)
       );
-      const availableForPayment = remainingCap + covered;
       const capCharge = Math.max(0, amount - covered);
 
       if (amount <= 0) return prev;
 
-      if (availableForPayment < amount) {
+      if (remainingCap < capCharge) {
         alert("سقف الصرف لا يغطي هذا السداد");
         return prev;
       }
@@ -5285,12 +5441,37 @@ const [liabilityAssetKey, setLiabilityAssetKey] = useState("cash");
   const pendingReservedPayments = reservedPaymentList.filter(
     (item) => item.status !== "paid" && Number(item.balance ?? item.amount ?? 0) > 0
   );
+  const reservedAssetSources = getAssetSources(state);
+  const reservedSourceLabel = (item) => {
+    if (item.source === "card_payment" || item.cardId) {
+      const card = currentList.find(
+        (liability) =>
+          liability.type === "card" && String(liability.id) === String(item.cardId)
+      );
+      return `برسم الدفع بطاقة ${card?.name || item.creditorName || "بطاقة"}`;
+    }
+
+    if (item.source === "asset_payment" || item.assetKey) {
+      const asset = reservedAssetSources.find((source) => source.key === item.assetKey);
+      const assetLabel = asset?.label || item.creditorName || "أصل";
+      const assetPrefix =
+        item.assetKey === "cash"
+          ? "أصل حساب الكاش الادخاري"
+          : asset?.type === "bank"
+            ? "أصل حساب"
+            : "أصل";
+      return `برسم الدفع ${assetPrefix} ${assetLabel}`;
+    }
+
+    return `برسم الدفع التزام ${item.creditorName || item.name || "دائن"}`;
+  };
   const reservedPaymentDisplayRows = pendingReservedPayments.map((item) => ({
     item,
     amount: Number(item.balance ?? item.amount ?? 0),
     category: item.category || "غير مصنف",
     note: item.note || "",
     creditorName: item.creditorName || "",
+    sourceLabel: reservedSourceLabel(item),
     dueText: item.dueDate ? formatDate(item.dueDate) : "غير محدد",
     canAct: isDueThisMonth(item),
   }));
@@ -5492,6 +5673,11 @@ function SettingsScreen({ state, setState, authSession, onResetAllData }) {
 const structuralTotal = calcStructuralTotal(state);
 const salary = Number(state.settings?.salary || 0);
 const maxSpendingCap = Math.max(0, salary - structuralTotal);
+const editableSpendingCap = Number(
+  (state.session?.isOpen
+    ? state.session?.spendingCap
+    : state.settings?.spendingCap ?? state.session?.spendingCap) || 0
+);
 const getCoveredSpentFromCap = (sourceState) =>
   Math.max(
     Number(sourceState.session?.coveredSpent || 0),
@@ -5500,7 +5686,31 @@ const getCoveredSpentFromCap = (sourceState) =>
       0
     )
   );
-function applyFinancialSettingGuards(nextState, { blockMessage = true } = {}) {
+function syncOpenMonthPendingSurplus(nextState) {
+  if (!nextState.session?.isOpen) return nextState;
+  if (Number(nextState.session?.pendingSurplus || 0) <= 0.01) return nextState;
+  if (getCoveredSpentFromCap(nextState) > 0.01) return nextState;
+
+  const nextStructuralTotal = calcStructuralTotal(nextState);
+  const nextSalary = Number(nextState.settings?.salary || 0);
+  const nextCap = Number(nextState.session?.spendingCap || nextState.settings?.spendingCap || 0);
+  const pendingSurplus = Math.max(0, nextSalary - nextStructuralTotal - nextCap);
+
+  return {
+    ...nextState,
+    session: {
+      ...nextState.session,
+      salaryNetAfterStructural: Math.max(0, nextSalary - nextStructuralTotal),
+      salaryNetAfterCurrentLiabilities: Math.max(0, nextSalary - nextStructuralTotal),
+      savingsAmount: pendingSurplus,
+      pendingSurplus,
+    },
+  };
+}
+function applyFinancialSettingGuards(
+  nextState,
+  { blockMessage = true, allowCategoryCapOverage = false } = {}
+) {
   const nextStructuralTotal = calcStructuralTotal(nextState);
   const nextSalary = Number(nextState.settings?.salary || 0);
   const nextMaxCap = Math.max(0, nextSalary - nextStructuralTotal);
@@ -5561,7 +5771,7 @@ function applyFinancialSettingGuards(nextState, { blockMessage = true } = {}) {
     0
   );
 
-  if (plannedCapsTotal > guardedCap) {
+  if (!allowCategoryCapOverage && plannedCapsTotal > guardedCap) {
     if (blockMessage) {
       alert(
         `مجموع سقوف بنود المصروفات لا يجوز أن يتجاوز سقف الصرف الجديد. خفّض سقوف البنود أولاً إلى ${guardedCap.toFixed(
@@ -5572,9 +5782,7 @@ function applyFinancialSettingGuards(nextState, { blockMessage = true } = {}) {
     return { ok: false, state: nextState };
   }
 
-  return {
-    ok: true,
-    state: {
+  const guardedState = {
       ...nextState,
       session: {
         ...nextState.session,
@@ -5584,7 +5792,11 @@ function applyFinancialSettingGuards(nextState, { blockMessage = true } = {}) {
         ...nextState.settings,
         spendingCap: guardedCap,
       },
-    },
+    };
+
+  return {
+    ok: true,
+    state: syncOpenMonthPendingSurplus(guardedState),
   };
 }
 function clampSpendingCapAfterStructuralChange(nextState) {
@@ -5641,14 +5853,12 @@ const expenseCapCategories = [
     (saved) => !DEFAULT_EXPENSE_CATEGORIES.some((base) => base.id === saved.id)
   ),
 ];
-const sumExpenseCategoryCaps = (caps = {}) =>
-  Object.values(caps).reduce((sum, value) => sum + Math.max(0, Number(value || 0)), 0);
 const changeExpenseCategoryCap = (label, value) => {
   const currentCaps = state.settings?.expenseCategoryCaps || {};
   const nextCaps = { ...currentCaps, [label]: value };
   const currentTotal = sumExpenseCategoryCaps(currentCaps);
   const nextTotal = sumExpenseCategoryCaps(nextCaps);
-  const mainCap = Number(state.session?.spendingCap || 0);
+  const mainCap = editableSpendingCap;
   const reducesExistingOverage = nextTotal < currentTotal;
 
   if (nextTotal > mainCap && !reducesExistingOverage) {
@@ -5662,6 +5872,21 @@ const changeExpenseCategoryCap = (label, value) => {
   }
 
   updateSetting("settings.expenseCategoryCaps", nextCaps);
+};
+const canLeaveSalarySettings = () => {
+  if (settingsView !== "salary") return true;
+
+  const plannedCapsTotal = sumExpenseCategoryCaps(state.settings?.expenseCategoryCaps || {});
+  if (plannedCapsTotal <= editableSpendingCap) return true;
+
+  alert(
+    `مجموع سقوف البنود (${plannedCapsTotal.toFixed(
+      2
+    )} ${currencyLabel}) أعلى من سقف الصرف (${editableSpendingCap.toFixed(
+      2
+    )} ${currencyLabel}). عدّل سقف الصرف أو خفّض سقوف البنود قبل الخروج.`
+  );
+  return false;
 };
 const addExpenseCategoryFromSettings = () => {
   const label = window.prompt("اكتب اسم بند المصروف الجديد");
@@ -6267,29 +6492,20 @@ const openingBalanceRows = [
       <SettingsSubpageShell
         title={settingsPageMeta[settingsView]?.[0] || t("nav.settings")}
         subtitle={settingsPageMeta[settingsView]?.[1] || ""}
-        onBack={() => setSettingsView("menu")}
+        onBack={() => {
+          if (canLeaveSalarySettings()) setSettingsView("menu");
+        }}
       >
       {["salary", "cards"].includes(settingsView) && <div className="asset-dashboard-card" style={settingsPanelStyle}>
       {settingsView === "salary" && <>
 <SalaryCapSettingsSection
           salary={state.settings.salary}
-          spendingCap={state.session.spendingCap}
+          spendingCap={editableSpendingCap}
           maxSpendingCap={maxSpendingCap}
           onSalaryChange={(value) => updateSetting("settings.salary", value)}
           onSpendingCapChange={(value) => {
             if (value > maxSpendingCap) {
               alert("سقف الصرف لا يجوز أن يتجاوز صافي الراتب بعد الالتزامات الهيكلية");
-              return;
-            }
-            const plannedCapsTotal = sumExpenseCategoryCaps(
-              state.settings?.expenseCategoryCaps || {}
-            );
-            if (value < plannedCapsTotal) {
-              alert(
-                `سقف الصرف لا يجوز أن يقل عن مجموع سقوف البنود (${plannedCapsTotal.toFixed(
-                  2
-                )} ${currencyLabel})`
-              );
               return;
             }
 
@@ -6299,7 +6515,9 @@ const openingBalanceRows = [
                 settings: { ...prev.settings, spendingCap: value },
                 session: { ...prev.session, spendingCap: value },
               };
-              const guarded = applyFinancialSettingGuards(next);
+              const guarded = applyFinancialSettingGuards(next, {
+                allowCategoryCapOverage: true,
+              });
               return guarded.ok ? guarded.state : prev;
             });
           }}
@@ -6308,7 +6526,7 @@ const openingBalanceRows = [
         <ExpenseCategoryCapsSettings
           categories={expenseCapCategories}
           caps={state.settings?.expenseCategoryCaps || {}}
-          spendingCap={Number(state.session?.spendingCap || 0)}
+          spendingCap={editableSpendingCap}
           inputStyle={G.inp()}
           onChange={changeExpenseCategoryCap}
           onAddCategory={addExpenseCategoryFromSettings}
@@ -6543,13 +6761,16 @@ function formatMonthKey(monthKey) {
   const [year, month] = String(monthKey).split("-").map(Number);
   if (!year || !month) return String(monthKey);
 
-  return `${year}/${month}`;
+  return `${year}/${String(month).padStart(2, "0")}`;
 }
 
 function getNextMonthKey(monthKey) {
   const [year, month] = String(monthKey).split("-").map(Number);
-  const d = new Date(year, month, 1);
-  return d.toISOString().slice(0, 7);
+  if (!year || !month) return "";
+
+  const nextMonth = month === 12 ? 1 : month + 1;
+  const nextYear = month === 12 ? year + 1 : year;
+  return `${nextYear}-${String(nextMonth).padStart(2, "0")}`;
 }
 
 function buildExpensesByCategory(expenses = []) {
@@ -6559,6 +6780,16 @@ function buildExpensesByCategory(expenses = []) {
 
     acc[category] = Number(acc[category] || 0) + amount;
 
+  return acc;
+  }, {});
+}
+
+function buildDailySpendingTotals(expenses = [], monthKey = "") {
+  return expenses.reduce((acc, expense) => {
+    if (expense.isIncomeEntry) return acc;
+    const date = getDateKey(expense.date || expense.createdAt);
+    if (monthKey && !date.startsWith(monthKey)) return acc;
+    acc[date] = Number(acc[date] || 0) + Number(expense.amount || 0);
     return acc;
   }, {});
 }
@@ -6620,6 +6851,10 @@ function buildMonthlySnapshot(state) {
     expenses: structuredClone(state.expenses || []),
     reservedPayments: structuredClone(state.reservedPayments || []),
     expensesByCategory: buildExpensesByCategory(state.expenses || []),
+    dailySpendingHeatmap: {
+      month: currentMonth,
+      dailyTotals: buildDailySpendingTotals(state.expenses || [], currentMonth),
+    },
     extraCash: structuredClone(state.extraCash || []),
     transactions: structuredClone(state.transactions || []),
 
@@ -6706,11 +6941,16 @@ function closeMonthState(prev, targetMonth = new Date().toISOString().slice(0, 7
       snapshot,
     ],
     currentMonth: nextMonth,
+    settings: {
+      ...prev.settings,
+      month: nextMonth,
+    },
     expenses: [],
     extraCash: [],
     session: {
       ...prev.session,
       isOpen: false,
+      spendingCap: Number(prev.settings?.spendingCap || 0),
       coveredSpent: 0,
       overBudgetSpent: 0,
       pendingSurplus: 0,
@@ -6953,6 +7193,1276 @@ function hydrateAppState(storedState) {
   };
 }
 
+function OnboardingFlow({ state, setState, onComplete }) {
+  const { currencyLabel } = useLocale();
+  const [step, setStep] = useState(0);
+  const [salary, setSalary] = useState(String(state.settings?.salary || ""));
+  const [spendingCap, setSpendingCap] = useState(String(state.settings?.spendingCap || state.session?.spendingCap || ""));
+  const [caps, setCaps] = useState(state.settings?.expenseCategoryCaps || {});
+  const [hasCategoryCaps, setHasCategoryCaps] = useState(null);
+  const [hasOpeningAssets, setHasOpeningAssets] = useState(null);
+  const [openingAssetKind, setOpeningAssetKind] = useState("cash");
+  const [openingAssetName, setOpeningAssetName] = useState("");
+  const [openingAssetAmount, setOpeningAssetAmount] = useState("");
+  const [openingAssetUnits, setOpeningAssetUnits] = useState("");
+  const [openingAssetPrice, setOpeningAssetPrice] = useState("");
+  const [openingAssetRows, setOpeningAssetRows] = useState([]);
+  const [hasStructuralObligations, setHasStructuralObligations] = useState(null);
+  const [structuralRows, setStructuralRows] = useState([]);
+  const [showStructuralForm, setShowStructuralForm] = useState(false);
+  const [structuralName, setStructuralName] = useState("");
+  const [structuralMonthly, setStructuralMonthly] = useState("");
+  const [liabilityRows, setLiabilityRows] = useState([]);
+  const [hasCurrentObligations, setHasCurrentObligations] = useState(null);
+  const [showLiabilityForm, setShowLiabilityForm] = useState(false);
+  const [liabilityName, setLiabilityName] = useState("");
+  const [liabilityAmount, setLiabilityAmount] = useState("");
+  const [liabilityDueDate, setLiabilityDueDate] = useState("");
+  const [cardRows, setCardRows] = useState([]);
+  const [showCardForm, setShowCardForm] = useState(false);
+  const [cardName, setCardName] = useState("");
+  const [cardLimit, setCardLimit] = useState("");
+  const [cardBalance, setCardBalance] = useState("");
+  const [cardDueDay, setCardDueDay] = useState("");
+
+  const choiceButtonStyle = (active, color = visualIdentity.colors.cyan) => ({
+    minHeight: 30,
+    padding: "5px 10px",
+    borderRadius: 999,
+    border: `1px solid ${active ? color : "rgba(255,255,255,0.18)"}`,
+    background: active ? `${color}22` : "rgba(255,255,255,0.055)",
+    color: active ? color : visualIdentity.colors.textSecondary,
+    fontSize: 10,
+    fontWeight: 900,
+    cursor: "pointer",
+    fontFamily: "inherit",
+  });
+  const assetKindOptions = [
+    ["cash", "كاش ادخار"],
+    ["bank", "حساب بنكي"],
+    ["gold", "ذهب"],
+    ["silver", "فضة"],
+    ["stock", "أسهم"],
+    ["goods", "بضاعة / أصل"],
+  ];
+  const goldKaratOptions = ["ذهب 18", "ذهب 21", "ذهب 22", "ذهب 24"];
+  const totalStructural = structuralRows.reduce((sum, row) => sum + Number(row.monthly || 0), 0);
+  const safeSalary = Number(salary || 0);
+  const safeCap = Number(spendingCap || 0);
+  const maxCap = Math.max(0, safeSalary - totalStructural);
+  const plannedCapsTotal = sumExpenseCategoryCaps(caps);
+  const surplus = Math.max(0, safeSalary - totalStructural - safeCap);
+  const canContinueRequired = safeSalary > 0 && safeCap > 0 && safeCap <= maxCap;
+  const pendingStructuralMonthly = Number(structuralMonthly || 0);
+  const candidateStructuralTotal =
+    showStructuralForm && structuralName.trim() && pendingStructuralMonthly > 0
+      ? totalStructural + pendingStructuralMonthly
+      : totalStructural;
+  const candidateMaxCap = Math.max(0, safeSalary - candidateStructuralTotal);
+  const canContinueWithDraft = safeSalary > 0 && safeCap > 0 && safeCap <= candidateMaxCap;
+
+  const addStructuralRow = () => {
+    const monthly = Number(structuralMonthly || 0);
+    if (!showStructuralForm || (!structuralName.trim() && monthly <= 0)) return true;
+    if (!structuralName.trim() || monthly <= 0) {
+      alert("أكمل اسم الالتزام الهيكلي وقيمته أو اترك الخانة فارغة.");
+      return false;
+    }
+    setStructuralRows((rows) => [...rows, { id: `draft-structural-${rows.length}`, name: structuralName.trim(), monthly }]);
+    setStructuralName("");
+    setStructuralMonthly("");
+    setShowStructuralForm(false);
+    return true;
+  };
+  const addAnotherStructuralRow = () => {
+    if (!addStructuralRow()) return;
+    setShowStructuralForm(true);
+  };
+  const addLiabilityRow = () => {
+    const amount = Number(liabilityAmount || 0);
+    if (!showLiabilityForm || (!liabilityName.trim() && amount <= 0 && !liabilityDueDate)) return true;
+    if (!liabilityName.trim() || amount <= 0 || !liabilityDueDate) {
+      alert("أكمل اسم الالتزام الجاري والمبلغ وتاريخ الاستحقاق أو اترك الخانة فارغة.");
+      return false;
+    }
+    setLiabilityRows((rows) => [...rows, { id: `draft-liability-${rows.length}`, name: liabilityName.trim(), amount, dueDate: liabilityDueDate }]);
+    setLiabilityName("");
+    setLiabilityAmount("");
+    setLiabilityDueDate("");
+    setShowLiabilityForm(false);
+    return true;
+  };
+  const addCardRow = () => {
+    const limit = Number(cardLimit || 0);
+    const balance = Number(cardBalance || 0);
+    const dueDay = Number(cardDueDay || 0);
+    if (!showCardForm || (!cardName.trim() && limit <= 0 && balance <= 0 && dueDay <= 0)) return true;
+    if (!cardName.trim() || limit <= 0 || balance < 0 || balance > limit || dueDay < 1 || dueDay > 31) {
+      alert("أكمل بيانات البطاقة أو اترك الخانة فارغة.");
+      return false;
+    }
+    setCardRows((rows) => [...rows, { id: `draft-card-${rows.length}`, name: cardName.trim(), creditLimit: limit, balance, dueDay }]);
+    setCardName("");
+    setCardLimit("");
+    setCardBalance("");
+    setCardDueDay("");
+    setShowCardForm(false);
+    return true;
+  };
+  const addOpeningAssetRow = () => {
+    const amount = Number(openingAssetAmount || 0);
+    const units = Number(openingAssetUnits || 0);
+    const price = Number(openingAssetPrice || 0);
+    const needsUnits = ["gold", "silver", "stock", "goods"].includes(openingAssetKind);
+    const name = String(openingAssetName || "").trim();
+
+    if (openingAssetKind === "cash") {
+      if (amount <= 0) return alert("أدخل قيمة الكاش");
+    } else if (openingAssetKind === "bank") {
+      if (!name || amount <= 0) return alert("أدخل اسم البنك والرصيد");
+    } else if (needsUnits) {
+      if (!name || units <= 0 || price <= 0) return alert("أدخل الاسم والعدد والسعر");
+    }
+
+    setOpeningAssetRows((rows) => [
+      ...rows,
+      {
+        id: `draft-asset-${rows.length}`,
+        kind: openingAssetKind,
+        name: openingAssetKind === "cash" ? "كاش ادخار" : name,
+        amount,
+        units,
+        price,
+      },
+    ]);
+    setOpeningAssetName("");
+    setOpeningAssetAmount("");
+    setOpeningAssetUnits("");
+    setOpeningAssetPrice("");
+  };
+  const goNext = () => {
+    if (step === 1) {
+      if (!canContinueRequired) return alert("أدخل الراتب وسقف صرف صحيحين أولًا");
+    }
+    if (step === 2) {
+      if (hasStructuralObligations === null) return alert("اختر نعم أو لا للالتزامات الشهرية الثابتة");
+      if (hasCategoryCaps === null) return alert("اختر نعم أو لا لسقوف بنود الصرف");
+      if (!addStructuralRow()) return;
+      if (!canContinueWithDraft) return alert("سقف الصرف لا يجوز أن يتجاوز المتاح بعد الالتزامات الهيكلية");
+      if (hasCategoryCaps === false) setCaps({});
+      if (hasCategoryCaps === true && plannedCapsTotal > safeCap) return alert("مجموع سقوف البنود أعلى من سقف الصرف");
+    }
+    if (step === 3 && hasOpeningAssets === null) return alert("اختر نعم أو لا للمتابعة");
+    if (step === 4) {
+      if (hasCurrentObligations === null) return alert("اختر نعم أو لا للمتابعة");
+      if (!addLiabilityRow()) return;
+      if (!addCardRow()) return;
+    }
+    setStep((value) => value + 1);
+  };
+
+  const finishSetup = () => {
+    if (!canContinueRequired) return;
+    if (plannedCapsTotal > safeCap) {
+      alert("مجموع سقوف البنود أعلى من سقف الصرف. خفّضها أو ارفع السقف قبل البدء.");
+      return;
+    }
+
+    const now = new Date().toISOString();
+    const currentMonth = state.currentMonth || state.settings?.month || now.slice(0, 7);
+    const setupId = now.replace(/\D/g, "");
+    const openingGroups = openingAssetRows.reduce(
+      (groups, row, index) => {
+        if (row.kind === "cash") {
+          groups.cash += Number(row.amount || 0);
+          groups.history.push({
+            id: `setup-opening-cash-${setupId}-${index}`,
+            date: now,
+            type: "opening_balance",
+            source: "setup",
+            assetKind: "cash",
+            assetName: "كاش ادخار",
+            amount: Number(row.amount || 0),
+          });
+        } else if (row.kind === "bank") {
+          const id = `setup-bank-${setupId}-${index}`;
+          groups.banks.push({ id, name: row.name, balance: Number(row.amount || 0) });
+          groups.history.push({ id: `setup-opening-bank-${setupId}-${index}`, date: now, type: "opening_balance", source: "setup", assetKind: "bank", assetId: id, assetName: row.name, amount: Number(row.amount || 0) });
+        } else if (row.kind === "gold") {
+          const id = `setup-gold-${setupId}-${index}`;
+          groups.gold.push({ id, label: row.name, units: Number(row.units || 0), wac: Number(row.price || 0), currentPrice: Number(row.price || 0) });
+          groups.history.push({ id: `setup-opening-gold-${setupId}-${index}`, date: now, type: "opening_balance", source: "setup", assetKind: "gold", assetId: id, assetName: row.name, amount: Number(row.units || 0) * Number(row.price || 0), units: Number(row.units || 0), unitPrice: Number(row.price || 0) });
+        } else if (row.kind === "silver") {
+          const id = `setup-silver-${setupId}-${index}`;
+          groups.silver.push({ id, label: row.name, units: Number(row.units || 0), wac: Number(row.price || 0), currentPrice: Number(row.price || 0) });
+          groups.history.push({ id: `setup-opening-silver-${setupId}-${index}`, date: now, type: "opening_balance", source: "setup", assetKind: "silver", assetId: id, assetName: row.name, amount: Number(row.units || 0) * Number(row.price || 0), units: Number(row.units || 0), unitPrice: Number(row.price || 0) });
+        } else if (row.kind === "stock") {
+          const id = `setup-stock-${setupId}-${index}`;
+          groups.stocks.push({ id, name: row.name, units: Number(row.units || 0), wac: Number(row.price || 0), currentPrice: Number(row.price || 0) });
+          groups.history.push({ id: `setup-opening-stock-${setupId}-${index}`, date: now, type: "opening_balance", source: "setup", assetKind: "stocks", assetId: id, assetName: row.name, amount: Number(row.units || 0) * Number(row.price || 0), units: Number(row.units || 0), unitPrice: Number(row.price || 0) });
+        } else if (row.kind === "goods") {
+          const id = `setup-custom-${setupId}-${index}`;
+          groups.custom.push({ id, name: row.name, type: "unit", units: Number(row.units || 0), price: Number(row.price || 0), wac: Number(row.price || 0), currentPrice: Number(row.price || 0) });
+          groups.history.push({ id: `setup-opening-custom-${setupId}-${index}`, date: now, type: "opening_balance", source: "setup", assetKind: "custom", assetId: id, assetName: row.name, amount: Number(row.units || 0) * Number(row.price || 0), units: Number(row.units || 0), unitPrice: Number(row.price || 0) });
+        }
+        return groups;
+      },
+      { cash: 0, banks: [], gold: [], silver: [], stocks: [], custom: [], history: [] }
+    );
+    const structuralLiabilities = structuralRows.map((row, index) => ({
+      id: `setup-structural-${setupId}-${index}`,
+      name: row.name,
+      monthly: Number(row.monthly || 0),
+      dueDay: 1,
+    }));
+    const manualLiabilities = liabilityRows.map((row, index) => ({
+      id: `setup-liability-${setupId}-${index}`,
+      type: "manual",
+      name: row.name,
+      amount: Number(row.amount || 0),
+      balance: Number(row.amount || 0),
+      payableBuffer: 0,
+      uncoveredDebt: Number(row.amount || 0),
+      dueDate: row.dueDate,
+      dueDay: Number(String(row.dueDate || "").split("-")[2] || 1),
+      status: "pending",
+      source: "setup",
+      creditorName: row.name,
+      createdAt: now,
+      date: now.slice(0, 10),
+    }));
+    const cards = cardRows.map((row, index) => ({
+      id: `setup-card-${setupId}-${index}`,
+      type: "card",
+      name: row.name,
+      creditLimit: Number(row.creditLimit || 0),
+      balance: Number(row.balance || 0),
+      amount: Number(row.balance || 0),
+      payableBuffer: 0,
+      uncoveredDebt: Number(row.balance || 0),
+      dueDate: "",
+      dueDay: Number(row.dueDay || 1),
+      status: "active",
+      source: "manual_card",
+      createdAt: now,
+      date: now.slice(0, 10),
+    }));
+
+    setState((prev) => ({
+      ...prev,
+      settings: {
+        ...prev.settings,
+        setupComplete: true,
+        month: currentMonth,
+        salary: safeSalary,
+        spendingCap: safeCap,
+        expenseCategoryCaps: structuredClone(caps),
+      },
+      assets: {
+        ...prev.assets,
+        cash: hasOpeningAssets ? openingGroups.cash : 0,
+        banks: [...(prev.assets?.banks || []), ...openingGroups.banks],
+        gold: [...(prev.assets?.gold || []), ...openingGroups.gold],
+        silver: [...(prev.assets?.silver || []), ...openingGroups.silver],
+        stocks: [...(prev.assets?.stocks || []), ...openingGroups.stocks],
+        custom: [...(prev.assets?.custom || []), ...openingGroups.custom],
+      },
+      structuralLiabilities,
+      currentLiabilities: [...manualLiabilities, ...cards],
+      assetHistory: [...(prev.assetHistory || []), ...openingGroups.history],
+      currentMonth,
+      session: {
+        ...prev.session,
+        isOpen: true,
+        salaryNetAfterStructural: Math.max(0, safeSalary - totalStructural),
+        salaryNetAfterCurrentLiabilities: Math.max(0, safeSalary - totalStructural),
+        spendingCap: safeCap,
+        coveredSpent: 0,
+        overBudgetSpent: 0,
+        savingsAmount: surplus,
+        pendingSurplus: surplus,
+      },
+      transactions: [
+        ...(prev.transactions || []),
+        {
+          id: `setup-open-${setupId}`,
+          type: "salary_month_opened",
+          cashFlow: "salary",
+          amount: safeSalary,
+          structuralTotal: totalStructural,
+          spendingCap: safeCap,
+          plannedSavings: surplus,
+          date: now,
+        },
+      ],
+    }));
+    onComplete(surplus);
+  };
+
+  const stitch = {
+    background: "#08132a",
+    surface: "#151f37",
+    surfaceLow: "#101b33",
+    surfaceHigh: "#1f2942",
+    surfaceHighest: "#2a344d",
+    outline: "#8f9097",
+    outlineVariant: "#44474d",
+    text: "#d9e2ff",
+    textMuted: "#c5c6cd",
+    secondary: "#e9c349",
+    onSecondary: "#3c2f00",
+    error: "#ffb4ab",
+    errorContainer: "#93000a",
+    font: "'IBM Plex Sans Arabic', sans-serif",
+    numeral: "'Inter', sans-serif",
+  };
+  const stitchPanel = {
+    background: "rgba(21,31,55,0.70)",
+    border: "1px solid rgba(35,53,84,0.50)",
+    borderRadius: 12,
+    boxShadow: "0 16px 36px rgba(0,0,0,0.18)",
+    backdropFilter: "blur(20px)",
+  };
+  const stitchInput = {
+    width: "100%",
+    minHeight: 44,
+    border: `1px solid ${stitch.outlineVariant}`,
+    borderRadius: 10,
+    background: stitch.surfaceLow,
+    color: stitch.text,
+    padding: "10px 12px",
+    fontFamily: stitch.font,
+    fontSize: 14,
+    outline: "none",
+  };
+  const stitchNumberInput = {
+    ...stitchInput,
+    direction: "ltr",
+    textAlign: "left",
+    fontFamily: stitch.numeral,
+    fontWeight: 700,
+  };
+  const stitchChoice = (active) => ({
+    flex: 1,
+    minHeight: 42,
+    borderRadius: 10,
+    border: `1px solid ${active ? stitch.secondary : stitch.outlineVariant}`,
+    background: active ? stitch.secondary : "transparent",
+    color: active ? stitch.onSecondary : stitch.text,
+    fontFamily: stitch.font,
+    fontSize: 14,
+    fontWeight: 700,
+    cursor: "pointer",
+  });
+  const stitchAddButton = {
+    border: 0,
+    background: "transparent",
+    color: stitch.secondary,
+    fontFamily: stitch.font,
+    fontSize: 13,
+    fontWeight: 700,
+    cursor: "pointer",
+    padding: "8px 0",
+  };
+  const openingAssetsTotal = openingAssetRows.reduce((sum, row) => {
+    const value =
+      row.kind === "cash" || row.kind === "bank"
+        ? Number(row.amount || 0)
+        : Number(row.units || 0) * Number(row.price || 0);
+    return sum + value;
+  }, 0);
+  const currentObligationCount = liabilityRows.length + cardRows.length;
+  const flowBase = Math.max(1, safeSalary);
+  const structuralPct = Math.min(100, (totalStructural / flowBase) * 100);
+  const spendingPct = Math.min(100, (safeCap / flowBase) * 100);
+  const savingsPct = Math.min(100, (surplus / flowBase) * 100);
+
+  const progressWidth = `${Math.min(100, Math.max(16, ((step + 1) / 6) * 100))}%`;
+
+  return (
+    <main
+      style={{
+        minHeight: "100vh",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: 12,
+        background: "#eef0f2",
+        fontFamily: stitch.font,
+      }}
+    >
+      <section
+        style={{
+          position: "relative",
+          width: "min(100%, 238px)",
+          height: "min(100vh - 24px, 510px)",
+          minHeight: 500,
+          overflowY: "auto",
+          overflowX: "hidden",
+          borderRadius: 22,
+          background: stitch.background,
+          color: stitch.text,
+          border: "6px solid #9aa4b2",
+          boxShadow: "0 16px 35px rgba(0,0,0,0.28)",
+          padding: "12px 10px 104px",
+        }}
+      >
+        <div
+          aria-hidden="true"
+          style={{
+            position: "absolute",
+            top: 0,
+            left: 58,
+            right: 58,
+            height: 3,
+            background: stitch.secondary,
+            borderRadius: "0 0 999px 999px",
+            zIndex: 2,
+          }}
+        />
+        <div
+          aria-hidden="true"
+          style={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            height: 3,
+            width: progressWidth,
+            background: stitch.secondary,
+            opacity: 0.65,
+            zIndex: 1,
+          }}
+        />
+
+        {step === 0 && (
+          <div
+            style={{
+              position: "relative",
+              minHeight: "min(560px, calc(100vh - 170px))",
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              justifyContent: "center",
+              textAlign: "center",
+              padding: "16px 4px 10px",
+              overflow: "hidden",
+            }}
+          >
+            <div
+              aria-hidden="true"
+              style={{
+                position: "absolute",
+                top: -95,
+                left: -80,
+                width: 240,
+                height: 240,
+                borderRadius: "50%",
+                background: `${stitch.secondary}14`,
+                filter: "blur(72px)",
+              }}
+            />
+            <div
+              aria-hidden="true"
+              style={{
+                position: "absolute",
+                right: -90,
+                bottom: 18,
+                width: 250,
+                height: 250,
+                borderRadius: "50%",
+                background: `${stitch.primary || "#b9c7e4"}12`,
+                filter: "blur(78px)",
+              }}
+            />
+
+            <div
+              style={{
+                position: "absolute",
+                top: 0,
+                left: 0,
+                right: 0,
+                height: 4,
+                borderRadius: 999,
+                background: "rgba(255,255,255,0.10)",
+                overflow: "hidden",
+              }}
+            >
+              <div
+                style={{
+                  width: "20%",
+                  height: "100%",
+                  background: stitch.secondary,
+                  boxShadow: `0 0 18px ${stitch.secondary}88`,
+                }}
+              />
+            </div>
+
+            <div
+              style={{
+                position: "relative",
+                width: 88,
+                height: 88,
+                borderRadius: "50%",
+                display: "grid",
+                placeItems: "center",
+                marginBottom: 20,
+                background: "rgba(21,31,55,0.72)",
+                border: "1px solid rgba(255,255,255,0.13)",
+                boxShadow: `0 22px 55px rgba(0,0,0,0.24), 0 0 42px ${stitch.secondary}18`,
+              }}
+            >
+              <div
+                aria-hidden="true"
+                style={{
+                  position: "absolute",
+                  inset: -9,
+                  borderRadius: "50%",
+                  border: `1px solid ${stitch.secondary}33`,
+                }}
+              />
+              <div
+                aria-hidden="true"
+                style={{
+                  position: "absolute",
+                  top: 4,
+                  right: -4,
+                  width: 28,
+                  height: 28,
+                  borderRadius: "50%",
+                  display: "grid",
+                  placeItems: "center",
+                  background: "rgba(21,31,55,0.88)",
+                  border: `1px solid ${stitch.secondary}55`,
+                  color: stitch.secondary,
+                  fontSize: 15,
+                  fontWeight: 900,
+                }}
+              >
+                ↗
+              </div>
+              <div
+                aria-hidden="true"
+                style={{
+                  width: 50,
+                  height: 40,
+                  borderRadius: 14,
+                  border: `3px solid ${stitch.secondary}`,
+                  position: "relative",
+                  boxShadow: `0 0 22px ${stitch.secondary}33`,
+                }}
+              >
+                <span
+                  style={{
+                    position: "absolute",
+                    left: 8,
+                    top: 14,
+                    width: 10,
+                    height: 10,
+                    borderRadius: "50%",
+                    background: stitch.secondary,
+                  }}
+                />
+              </div>
+            </div>
+
+            <h1
+              style={{
+                position: "relative",
+                margin: "0 0 10px",
+                color: stitch.secondary,
+                fontSize: 24,
+                lineHeight: 1.35,
+                fontWeight: 950,
+                textShadow: `0 0 24px ${stitch.secondary}33`,
+              }}
+            >
+              مرحباً بك في مدير الثروة الذكي
+            </h1>
+            <p
+              style={{
+                position: "relative",
+                margin: "0 auto 22px",
+                maxWidth: 310,
+                color: stitch.textMuted,
+                fontSize: 13,
+                lineHeight: 1.9,
+                fontWeight: 700,
+              }}
+            >
+              لنبدأ بضبط بياناتك الأساسية حتى يعمل التطبيق بشكل صحيح.
+            </p>
+
+            <div style={{ position: "relative", width: "100%", display: "grid", gap: 10 }}>
+              <button
+                type="button"
+                onClick={() => setStep(1)}
+                style={{
+                  width: "100%",
+                  minHeight: 50,
+                  borderRadius: 12,
+                  border: `1px solid ${stitch.secondary}`,
+                  background: stitch.secondary,
+                  color: stitch.onSecondary,
+                  fontFamily: stitch.font,
+                  fontWeight: 700,
+                  cursor: "pointer",
+                  boxShadow: `0 14px 36px ${stitch.secondary}2E`,
+                  fontSize: 16,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: 10,
+                }}
+              >
+                <span>ابدأ الآن</span>
+                <span aria-hidden="true" style={{ fontSize: 22 }}>←</span>
+              </button>
+            </div>
+
+            <div
+              aria-hidden="true"
+              style={{
+                display: "flex",
+                alignItems: "end",
+                justifyContent: "center",
+                gap: 5,
+                height: 42,
+                marginTop: 22,
+                opacity: 0.24,
+              }}
+            >
+              {[16, 25, 36, 22, 31].map((height, index) => (
+                <span
+                  key={index}
+                  style={{
+                    width: 5,
+                    height,
+                    borderRadius: 99,
+                    background: stitch.secondary,
+                  }}
+                />
+              ))}
+            </div>
+
+            <div
+              style={{
+                position: "relative",
+                marginTop: 12,
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 7,
+                padding: "9px 14px",
+                borderRadius: 999,
+                border: "1px solid rgba(255,255,255,0.12)",
+                background: "rgba(21,31,55,0.62)",
+                color: stitch.textMuted,
+                fontSize: 11,
+                fontWeight: 800,
+              }}
+            >
+              <span aria-hidden="true" style={{ color: "#b9c7e4" }}>◇</span>
+              <span>بياناتك محفوظة داخل التطبيق</span>
+            </div>
+          </div>
+        )}
+
+        {step === 1 && (
+          <div style={{ position: "relative", display: "grid", gap: 18 }}>
+            <div
+              aria-hidden="true"
+              style={{
+                position: "absolute",
+                top: -70,
+                left: -85,
+                width: 190,
+                height: 190,
+                borderRadius: "50%",
+                background: `${stitch.secondary}10`,
+                filter: "blur(68px)",
+              }}
+            />
+            <div style={{ position: "relative" }}>
+              <h1 style={{ margin: "0 0 8px", color: stitch.text, fontSize: 22, lineHeight: "30px", fontWeight: 700 }}>
+                الإدارة المالية
+              </h1>
+              <p style={{ margin: 0, color: stitch.textMuted, fontSize: 10, lineHeight: "18px", fontWeight: 500 }}>
+                حدد دخلك وسقف صرفك الشهري لبدء التخطيط الذكي.
+              </p>
+            </div>
+
+            {[
+              {
+                id: "salary",
+                label: "الراتب الشهري",
+                value: salary,
+                setter: setSalary,
+                icon: "¤",
+              },
+              {
+                id: "spendingCap",
+                label: "سقف الصرف الشهري",
+                value: spendingCap,
+                setter: setSpendingCap,
+                icon: "▣",
+              },
+            ].map((field) => (
+              <label key={field.id} style={{ display: "grid", gap: 7 }}>
+                <span style={{ color: stitch.textMuted, fontSize: 9, fontWeight: 700, paddingInline: 2 }}>
+                  {field.label}
+                </span>
+                <span
+                  style={{
+                    minHeight: 48,
+                    display: "grid",
+                    gridTemplateColumns: "22px minmax(0,1fr) auto",
+                    alignItems: "center",
+                    gap: 6,
+                    padding: "8px 10px",
+                    borderRadius: 7,
+                    background: "#112240",
+                    border: "1px solid #233554",
+                    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.06)",
+                  }}
+                >
+                  <span
+                    aria-hidden="true"
+                    style={{
+                      width: 20,
+                      height: 20,
+                      borderRadius: 6,
+                      display: "grid",
+                      placeItems: "center",
+                      color: stitch.outline,
+                      background: "rgba(255,255,255,0.06)",
+                      fontWeight: 950,
+                    }}
+                  >
+                    {field.icon}
+                  </span>
+                  <input
+                    type="number"
+                    value={field.value}
+                    onChange={(event) => field.setter(event.target.value)}
+                    placeholder="0.00"
+                    style={{
+                      width: "100%",
+                      border: 0,
+                      outline: "none",
+                      background: "transparent",
+                      color: "#8f9097",
+                      textAlign: "left",
+                      direction: "ltr",
+                      fontSize: 22,
+                      fontWeight: 700,
+                      fontFamily: stitch.numeral,
+                    }}
+                  />
+                  <span style={{ color: stitch.textMuted, fontSize: 10, fontWeight: 700 }}>
+                    {currencyLabel}
+                  </span>
+                </span>
+              </label>
+            ))}
+
+            <div
+              style={{
+                position: "relative",
+                padding: 12,
+                borderRadius: 7,
+                background: "rgba(21,31,55,0.70)",
+                border: "1px solid rgba(35,53,84,0.50)",
+                boxShadow: "none",
+                display: "grid",
+                gap: 10,
+              }}
+            >
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center" }}>
+                <span style={{ color: stitch.textMuted, fontSize: 10, fontWeight: 700 }}>
+                  المتاح بعد الالتزامات
+                </span>
+                <span
+                  style={{
+                    color: canContinueRequired ? stitch.secondary : stitch.error,
+                    fontSize: 14,
+                    fontWeight: 700,
+                    direction: "ltr",
+                  }}
+                >
+                  {maxCap.toFixed(2)} {currencyLabel}
+                </span>
+              </div>
+              <div style={{ height: 1, background: "rgba(68,71,77,0.45)" }} />
+              <p style={{ margin: 0, color: stitch.textMuted, fontSize: 9, lineHeight: "16px" }}>
+                المتاح بعد الالتزامات الشهرية الثابتة = الراتب - الالتزامات الهيكلية.
+              </p>
+              {!canContinueRequired && (safeSalary > 0 || safeCap > 0) && (
+                <div style={{ color: stitch.error, fontSize: 10, fontWeight: 700 }}>
+                  يجب أن يكون سقف الصرف أقل أو يساوي المتاح.
+                </div>
+              )}
+            </div>
+
+          </div>
+        )}
+
+        {step === 2 && (
+          <div style={{ display: "grid", gap: 34, fontFamily: stitch.font, color: stitch.text, minHeight: 365 }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+              <span style={{ color: stitch.textMuted, fontSize: 20 }}>→</span>
+              <h1 style={{ margin: 0, color: stitch.secondary, fontSize: 18, lineHeight: "28px", fontWeight: 700 }}>
+                مدير الثروة الذكي
+              </h1>
+              <span style={{ width: 20 }} />
+            </div>
+
+            <div style={{ display: "grid", gap: 12 }}>
+              <div style={{ textAlign: "right" }}>
+                <h2 style={{ margin: "0 0 5px", color: stitch.text, fontSize: 16, lineHeight: "26px", fontWeight: 700 }}>
+                  هل لديك التزامات شهرية ثابتة؟
+                </h2>
+                <p style={{ margin: 0, color: stitch.textMuted, fontSize: 12, lineHeight: "20px", fontWeight: 500 }}>
+                  مثل الإيجار، القروض، أو أقساط القروض.
+                </p>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                <button type="button" onClick={() => { setHasStructuralObligations(true); setShowStructuralForm(true); }} style={stitchChoice(hasStructuralObligations === true)}>نعم</button>
+                <button type="button" onClick={() => { setHasStructuralObligations(false); setShowStructuralForm(false); setStructuralName(""); setStructuralMonthly(""); }} style={stitchChoice(hasStructuralObligations === false)}>لا</button>
+              </div>
+              {hasStructuralObligations === true && (
+                <div style={{ ...stitchPanel, padding: 12, display: "grid", gap: 9 }}>
+                  <div style={{ display: "flex", gap: 6, justifyContent: "space-between", alignItems: "center" }}>
+                    <span style={{ color: stitch.textMuted, fontSize: 12, fontWeight: 700 }}>إدخال الالتزامات الشهرية الثابتة</span>
+                    <button type="button" onClick={addAnotherStructuralRow} style={{ ...stitchAddButton, padding: 0 }}>+ إضافة</button>
+                  </div>
+                  {showStructuralForm && (
+                    <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) 105px", gap: 8 }}>
+                      <input value={structuralName} onChange={(event) => setStructuralName(event.target.value)} placeholder="مثال: إيجار" style={stitchInput} />
+                      <input type="number" value={structuralMonthly} onChange={(event) => setStructuralMonthly(event.target.value)} placeholder="القسط" style={stitchNumberInput} />
+                    </div>
+                  )}
+                  {showStructuralForm && (
+                    <button type="button" onClick={addStructuralRow} style={{ ...stitchChoice(true), minHeight: 38 }}>
+                      حفظ الالتزام
+                    </button>
+                  )}
+                  {structuralRows.map((row) => (
+                    <div key={row.id} style={{ color: stitch.textMuted, fontSize: 11 }}>
+                      {row.name}: {Number(row.monthly).toFixed(2)} {currencyLabel}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div style={{ height: 1, background: "rgba(68,71,77,0.45)" }} />
+
+            <div style={{ display: "grid", gap: 12 }}>
+              <div style={{ textAlign: "right" }}>
+                <h2 style={{ margin: "0 0 5px", color: stitch.text, fontSize: 16, lineHeight: "26px", fontWeight: 700 }}>
+                  هل تريد تحديد سقوف لبنود الصرف؟
+                </h2>
+                <p style={{ margin: 0, color: stitch.textMuted, fontSize: 12, lineHeight: "20px", fontWeight: 500 }}>
+                  للتحكم في الصرف الشهري وضبط المصاريف.
+                </p>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                <button type="button" onClick={() => setHasCategoryCaps(true)} style={stitchChoice(hasCategoryCaps === true)}>نعم</button>
+                <button type="button" onClick={() => { setHasCategoryCaps(false); setCaps({}); }} style={stitchChoice(hasCategoryCaps === false)}>لا</button>
+              </div>
+              {hasCategoryCaps === true && (
+                <div style={{ ...stitchPanel, padding: 12, display: "grid", gap: 8 }}>
+                  {DEFAULT_EXPENSE_CATEGORIES.filter((category) => !category.isOther).map((category) => (
+                    <label key={category.id} style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) 104px", gap: 8, alignItems: "center" }}>
+                      <span style={{ color: stitch.text, fontSize: 12, fontWeight: 700 }}>{category.icon} {category.label}</span>
+                      <input type="number" value={caps?.[category.label] || ""} onChange={(event) => setCaps((prev) => ({ ...prev, [category.label]: Math.max(0, Number(event.target.value || 0)) }))} style={stitchNumberInput} />
+                    </label>
+                  ))}
+                  <div style={{ color: plannedCapsTotal > safeCap ? stitch.error : stitch.secondary, fontSize: 11, fontWeight: 700 }}>
+                    مجموع سقوف البنود: {plannedCapsTotal.toFixed(2)} / {safeCap.toFixed(2)} {currencyLabel}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {step === 3 && (
+          <div style={{ display: "grid", gap: 16, fontFamily: stitch.font, color: stitch.text }}>
+            <div style={{ display: "grid", gap: 10 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <span style={{ width: 38, height: 38, borderRadius: 10, display: "grid", placeItems: "center", background: "rgba(233,195,73,0.10)", color: stitch.secondary, fontSize: 19 }}>▣</span>
+                <h2 style={{ margin: 0, color: stitch.secondary, fontSize: 20, lineHeight: "28px", fontWeight: 700 }}>الأصول الحالية</h2>
+              </div>
+              <p style={{ margin: 0, color: stitch.textMuted, fontSize: 14, lineHeight: "24px" }}>
+                لنقم بتحديد ممتلكاتك المالية الحالية لبدء إدارة ثروتك بدقة.
+              </p>
+            </div>
+
+            <div style={{ ...stitchPanel, padding: 16, display: "grid", gap: 14 }}>
+              <label style={{ color: stitch.textMuted, fontSize: 14, fontWeight: 600 }}>هل لديك أصول حالية؟</label>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button type="button" onClick={() => setHasOpeningAssets(true)} style={stitchChoice(hasOpeningAssets === true)}>نعم</button>
+                <button type="button" onClick={() => setHasOpeningAssets(false)} style={stitchChoice(hasOpeningAssets === false)}>لا</button>
+              </div>
+            </div>
+
+            {hasOpeningAssets && (
+              <div style={{ display: "grid", gap: 14 }}>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0,1fr))", gap: 8 }}>
+                  {assetKindOptions.map(([value, label]) => (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => setOpeningAssetKind(value)}
+                      style={{
+                        ...stitchPanel,
+                        minHeight: 44,
+                        padding: "9px 6px",
+                        color: openingAssetKind === value ? stitch.onSecondary : stitch.text,
+                        background: openingAssetKind === value ? stitch.secondary : "rgba(21,31,55,0.70)",
+                        fontFamily: stitch.font,
+                        fontSize: 12,
+                        fontWeight: 700,
+                        cursor: "pointer",
+                      }}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+
+                <div style={{ ...stitchPanel, padding: 16, display: "grid", gap: 10 }}>
+                  {openingAssetKind !== "cash" && (
+                    <>
+                      <label style={{ color: stitch.textMuted, fontSize: 12, fontWeight: 600 }}>
+                        {openingAssetKind === "bank" ? "اسم البنك" : "اسم الأصل"}
+                      </label>
+                      {openingAssetKind === "gold" && (
+                        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                          {goldKaratOptions.map((label) => (
+                            <button key={label} type="button" onClick={() => setOpeningAssetName(label)} style={choiceButtonStyle(openingAssetName === label, stitch.secondary)}>
+                              {label}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                      <input value={openingAssetName} onChange={(event) => setOpeningAssetName(event.target.value)} placeholder={openingAssetKind === "gold" ? "مثال: ذهب 21" : openingAssetKind === "silver" ? "مثال: فضة" : openingAssetKind === "stock" ? "اسم السهم" : openingAssetKind === "goods" ? "اسم البضاعة أو الأصل" : "اسم البنك"} style={stitchInput} />
+                    </>
+                  )}
+                  {openingAssetKind === "cash" || openingAssetKind === "bank" ? (
+                    <>
+                      <label style={{ color: stitch.textMuted, fontSize: 12, fontWeight: 600 }}>{openingAssetKind === "cash" ? "النقد (كاش)" : "الرصيد"}</label>
+                      <div style={{ position: "relative" }}>
+                        <input type="number" value={openingAssetAmount} onChange={(event) => setOpeningAssetAmount(event.target.value)} placeholder="0.00" style={{ ...stitchNumberInput, paddingLeft: 58 }} />
+                        <span style={{ position: "absolute", left: 12, top: 13, color: stitch.textMuted, fontSize: 12, fontWeight: 700 }}>{currencyLabel}</span>
+                      </div>
+                    </>
+                  ) : (
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 8 }}>
+                      <input type="number" value={openingAssetUnits} onChange={(event) => setOpeningAssetUnits(event.target.value)} placeholder="جرام / وحدات" style={stitchNumberInput} />
+                      <input type="number" value={openingAssetPrice} onChange={(event) => setOpeningAssetPrice(event.target.value)} placeholder="السعر" style={stitchNumberInput} />
+                    </div>
+                  )}
+                  <button type="button" onClick={addOpeningAssetRow} style={{ ...stitchAddButton, borderTop: `1px solid ${stitch.outlineVariant}`, marginTop: 4 }}>
+                    + إضافة الأصل
+                  </button>
+                </div>
+
+                {openingAssetRows.map((row) => (
+                  <div key={row.id} style={{ ...stitchPanel, padding: "10px 12px", color: stitch.textMuted, fontSize: 12 }}>
+                    {row.name}: {row.kind === "cash" || row.kind === "bank" ? Number(row.amount || 0).toFixed(2) : `${row.units} × ${row.price}`} {currencyLabel}
+                  </div>
+                ))}
+              </div>
+            )}
+            {hasOpeningAssets === false && (
+              <div style={{ ...stitchPanel, padding: 14, color: stitch.textMuted, fontSize: 13 }}>
+                تم تخطي الأرصدة الافتتاحية. يمكنك إضافتها لاحقًا من الإعدادات.
+              </div>
+            )}
+          </div>
+        )}
+
+        {step === 4 && (
+          <div style={{ display: "grid", gap: 16, fontFamily: stitch.font, color: stitch.text }}>
+            <div style={{ display: "grid", gap: 10 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <span style={{ width: 38, height: 38, borderRadius: 10, display: "grid", placeItems: "center", background: "rgba(147,0,10,0.20)", color: stitch.error, fontSize: 19 }}>▤</span>
+                <h2 style={{ margin: 0, color: stitch.secondary, fontSize: 20, lineHeight: "28px", fontWeight: 700 }}>الالتزامات والبطاقات</h2>
+              </div>
+              <p style={{ margin: 0, color: stitch.textMuted, fontSize: 14, lineHeight: "24px" }}>
+                ساعدنا في تنظيم ديونك والتزاماتك الشهرية لإدارة تدفقاتك النقدية.
+              </p>
+            </div>
+
+            <div style={{ ...stitchPanel, padding: 16, display: "grid", gap: 14 }}>
+              <label style={{ color: stitch.textMuted, fontSize: 14, fontWeight: 600 }}>هل لديك التزامات جارية أو بطاقات ائتمان؟</label>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button type="button" onClick={() => setHasCurrentObligations(true)} style={stitchChoice(hasCurrentObligations === true)}>نعم</button>
+                <button type="button" onClick={() => setHasCurrentObligations(false)} style={stitchChoice(hasCurrentObligations === false)}>لا</button>
+              </div>
+            </div>
+
+            {hasCurrentObligations && (
+              <div style={{ display: "grid", gap: 22 }}>
+                <div style={{ display: "grid", gap: 10 }}>
+                  <h3 style={{ margin: 0, paddingRight: 8, borderRight: `2px solid ${stitch.secondary}`, color: stitch.secondary, fontSize: 14, fontWeight: 700 }}>
+                    الديون والالتزامات
+                  </h3>
+                  {showLiabilityForm && (
+                    <div style={{ ...stitchPanel, padding: 16, display: "grid", gap: 12 }}>
+                      <label style={{ display: "grid", gap: 5 }}>
+                        <span style={{ color: stitch.textMuted, fontSize: 11, fontWeight: 700 }}>اسم الدائن</span>
+                        <input value={liabilityName} onChange={(event) => setLiabilityName(event.target.value)} placeholder="بنك، شخص، جهة..." style={stitchInput} />
+                      </label>
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 8 }}>
+                        <label style={{ display: "grid", gap: 5 }}>
+                          <span style={{ color: stitch.textMuted, fontSize: 11, fontWeight: 700 }}>المبلغ الإجمالي</span>
+                          <input type="number" value={liabilityAmount} onChange={(event) => setLiabilityAmount(event.target.value)} placeholder="0.00" style={stitchNumberInput} />
+                        </label>
+                        <label style={{ display: "grid", gap: 5 }}>
+                          <span style={{ color: stitch.textMuted, fontSize: 11, fontWeight: 700 }}>تاريخ الاستحقاق</span>
+                          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, minHeight: 44, padding: "0 10px", borderRadius: 10, border: `1px solid ${stitch.outlineVariant}`, background: stitch.surfaceLow, color: liabilityDueDate ? stitch.text : stitch.textMuted }}>
+                            <span style={{ fontSize: 11, fontWeight: 700 }}>{liabilityDueDate || "اختر التاريخ"}</span>
+                            <CalendarDatePicker value={liabilityDueDate} onChange={setLiabilityDueDate} label="اختيار تاريخ استحقاق الالتزام" />
+                          </div>
+                        </label>
+                      </div>
+                      <button type="button" onClick={addLiabilityRow} style={{ ...stitchChoice(true), minHeight: 40 }}>
+                        حفظ الالتزام الجاري
+                      </button>
+                    </div>
+                  )}
+                  {liabilityRows.map((row) => (
+                    <div key={row.id} style={{ ...stitchPanel, padding: "10px 12px", color: stitch.textMuted, fontSize: 12 }}>
+                      {row.name}: {row.amount.toFixed(2)} - {row.dueDate}
+                    </div>
+                  ))}
+                  <button type="button" onClick={() => setShowLiabilityForm(true)} style={stitchAddButton}>
+                    + إضافة التزام آخر
+                  </button>
+                </div>
+
+                <div style={{ display: "grid", gap: 10 }}>
+                  <h3 style={{ margin: 0, paddingRight: 8, borderRight: `2px solid ${stitch.secondary}`, color: stitch.secondary, fontSize: 14, fontWeight: 700 }}>
+                    بطاقات الائتمان
+                  </h3>
+                  {showCardForm && (
+                    <div style={{ ...stitchPanel, padding: 16, display: "grid", gap: 12 }}>
+                      <label style={{ display: "grid", gap: 5 }}>
+                        <span style={{ color: stitch.textMuted, fontSize: 11, fontWeight: 700 }}>اسم البطاقة</span>
+                        <input value={cardName} onChange={(event) => setCardName(event.target.value)} placeholder="مثلاً: فيزا العربي" style={stitchInput} />
+                      </label>
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                        <label style={{ display: "grid", gap: 5 }}>
+                          <span style={{ color: stitch.textMuted, fontSize: 11, fontWeight: 700 }}>الحد الائتماني</span>
+                          <input type="number" value={cardLimit} onChange={(event) => setCardLimit(event.target.value)} placeholder="0.00" style={stitchNumberInput} />
+                        </label>
+                        <label style={{ display: "grid", gap: 5 }}>
+                          <span style={{ color: stitch.textMuted, fontSize: 11, fontWeight: 700 }}>الرصيد المستخدم</span>
+                          <input type="number" value={cardBalance} onChange={(event) => setCardBalance(event.target.value)} placeholder="0.00" style={stitchNumberInput} />
+                        </label>
+                      </div>
+                      <label style={{ display: "grid", gap: 5 }}>
+                        <span style={{ color: stitch.textMuted, fontSize: 11, fontWeight: 700 }}>يوم السداد شهرياً (1-31)</span>
+                        <input type="number" min="1" max="31" value={cardDueDay} onChange={(event) => setCardDueDay(event.target.value)} placeholder="مثال: 25" style={stitchNumberInput} />
+                      </label>
+                      <button type="button" onClick={addCardRow} style={{ ...stitchChoice(true), minHeight: 40 }}>
+                        حفظ البطاقة
+                      </button>
+                    </div>
+                  )}
+                  {cardRows.map((row) => (
+                    <div key={row.id} style={{ ...stitchPanel, padding: "10px 12px", color: stitch.textMuted, fontSize: 12 }}>
+                      {row.name}: {row.balance.toFixed(2)} / {row.creditLimit.toFixed(2)}
+                    </div>
+                  ))}
+                  <button type="button" onClick={() => setShowCardForm(true)} style={stitchAddButton}>
+                    + إضافة بطاقة أخرى
+                  </button>
+                </div>
+              </div>
+            )}
+            {hasCurrentObligations === false && (
+              <div style={{ ...stitchPanel, padding: 14, color: stitch.textMuted, fontSize: 13 }}>
+                تم تخطي الالتزامات والبطاقات. يمكنك إضافتها لاحقًا من تبويب الخصوم أو الإعدادات.
+              </div>
+            )}
+          </div>
+        )}
+
+        {step === 5 && (
+          <div style={{ display: "grid", gap: 12, fontFamily: stitch.font, color: stitch.text }}>
+            <header style={{ textAlign: "center", padding: "6px 0 2px" }}>
+              <div
+                style={{
+                  width: 46,
+                  height: 46,
+                  margin: "0 auto 10px",
+                  borderRadius: "50%",
+                  display: "grid",
+                  placeItems: "center",
+                  background: "rgba(233,195,73,0.10)",
+                  color: stitch.secondary,
+                  fontSize: 24,
+                  fontWeight: 900,
+                }}
+              >
+                ✓
+              </div>
+              <h1 style={{ margin: "0 0 5px", color: stitch.secondary, fontSize: 21, lineHeight: "30px", fontWeight: 700 }}>
+                المراجعة النهائية
+              </h1>
+              <p style={{ margin: "0 auto", maxWidth: 190, color: "#ffe088", fontSize: 11, lineHeight: "18px" }}>
+                تأكد من صحة البيانات المدخلة قبل البدء في رحلة إدارة ثروتك.
+              </p>
+            </header>
+
+            <div style={{ ...stitchPanel, padding: 14, display: "grid", gap: 12, textAlign: "center" }}>
+              <span style={{ color: "#ffe088", fontSize: 11, fontWeight: 700 }}>الراتب الشهري</span>
+              <span style={{ color: "#fff", fontFamily: stitch.numeral, fontSize: 31, lineHeight: "36px", fontWeight: 700 }}>
+                {safeSalary.toFixed(2)} <span style={{ fontFamily: stitch.font, fontSize: 13 }}>{currencyLabel}</span>
+              </span>
+              <div style={{ height: 1, background: "rgba(197,198,205,0.30)" }} />
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+                <div style={{ display: "grid", gap: 3, textAlign: "right" }}>
+                  <span style={{ color: "#ffe088", fontSize: 10, fontWeight: 700 }}>سقف الصرف</span>
+                  <span style={{ color: "#fff", fontSize: 14, fontWeight: 700 }}>{safeCap.toFixed(2)} {currencyLabel}</span>
+                </div>
+                <div style={{ display: "grid", gap: 3, textAlign: "left" }}>
+                  <span style={{ color: "#ffe088", fontSize: 10, fontWeight: 700 }}>الالتزامات الثابتة</span>
+                  <span style={{ color: "#fff", fontSize: 14, fontWeight: 700 }}>{totalStructural.toFixed(2)} {currencyLabel}</span>
+                </div>
+              </div>
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+              <div style={{ ...stitchPanel, padding: 12, display: "grid", gap: 5 }}>
+                <span style={{ color: "#e9c349", fontSize: 18 }}>▣</span>
+                <span style={{ color: "#ffe088", fontSize: 10, fontWeight: 700 }}>الأرصدة الحالية</span>
+                <span style={{ color: "#fff", fontSize: 18, fontWeight: 700 }}>{openingAssetsTotal.toFixed(2)}</span>
+                <span style={{ color: "#ffe088", fontSize: 9 }}>{currencyLabel}</span>
+              </div>
+              <div style={{ ...stitchPanel, padding: 12, display: "grid", gap: 5 }}>
+                <span style={{ color: "#e9c349", fontSize: 18 }}>▤</span>
+                <span style={{ color: "#ffe088", fontSize: 10, fontWeight: 700 }}>البطاقات والالتزامات</span>
+                <span style={{ color: "#fff", fontSize: 18, fontWeight: 700 }}>{currentObligationCount}</span>
+                <span style={{ color: "#ffe088", fontSize: 9 }}>عناصر مسجلة</span>
+              </div>
+            </div>
+
+            <div style={{ ...stitchPanel, padding: 12, position: "relative", overflow: "hidden" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                <h3 style={{ margin: 0, color: stitch.text, fontSize: 15, fontWeight: 700 }}>توزيع التدفق المالي</h3>
+                <span style={{ color: "#ffe088", fontSize: 18 }}>⌁</span>
+              </div>
+              {[
+                ["الالتزامات", structuralPct, stitch.error],
+                ["سقف الصرف", spendingPct, stitch.secondary],
+                ["الادخار المتوقع", savingsPct, "#22c55e"],
+              ].map(([label, pct, color]) => (
+                <div key={label} style={{ marginBottom: 11 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", color: "#fff", fontSize: 11, marginBottom: 5 }}>
+                    <span>{label}</span>
+                    <span>{Number(pct).toFixed(0)}%</span>
+                  </div>
+                  <div style={{ height: 8, borderRadius: 999, overflow: "hidden", background: "#d9e2ff" }}>
+                    <div style={{ width: `${Number(pct).toFixed(0)}%`, height: "100%", background: color }} />
+                  </div>
+                </div>
+              ))}
+              <div
+                aria-hidden="true"
+                style={{
+                  position: "absolute",
+                  right: -35,
+                  bottom: -35,
+                  width: 105,
+                  height: 105,
+                  borderRadius: "50%",
+                  background: "rgba(233,195,73,0.10)",
+                  filter: "blur(22px)",
+                }}
+              />
+            </div>
+          </div>
+        )}
+
+        {step > 0 && (
+          <div
+            style={{
+              position: "absolute",
+              left: 10,
+              right: 10,
+              bottom: 0,
+              display: "grid",
+              gridTemplateColumns: "1fr 1fr",
+              gap: 8,
+              padding: "22px 0 12px",
+              background: "linear-gradient(180deg, rgba(8,19,42,0), rgba(8,19,42,0.98) 34%)",
+            }}
+          >
+            <button
+              type="button"
+              onClick={() => setStep((value) => Math.max(0, value - 1))}
+              style={{
+                minHeight: 44,
+                borderRadius: 10,
+                border: `1px solid ${stitch.secondary}`,
+                background: "transparent",
+                color: stitch.secondary,
+                fontFamily: stitch.font,
+                fontWeight: 700,
+                cursor: "pointer",
+              }}
+            >
+              رجوع
+            </button>
+              {step < 5 ? (
+                <button
+                type="button"
+                onClick={goNext}
+                style={{
+                  minHeight: 44,
+                  borderRadius: 10,
+                  border: `1px solid ${stitch.secondary}`,
+                  background: stitch.secondary,
+                  color: stitch.onSecondary,
+                  fontFamily: stitch.font,
+                  fontWeight: 700,
+                  cursor: "pointer",
+                  boxShadow: "0 10px 24px rgba(233,195,73,0.22)",
+                }}
+              >
+                {step === 1 ? "متابعة" : "التالي / تخطي"}
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={finishSetup}
+                style={{
+                  minHeight: 44,
+                  borderRadius: 10,
+                  border: `1px solid ${stitch.secondary}`,
+                  background: stitch.secondary,
+                  color: stitch.onSecondary,
+                  fontFamily: stitch.font,
+                  fontWeight: 700,
+                  cursor: "pointer",
+                  boxShadow: "0 10px 24px rgba(233,195,73,0.22)",
+                }}
+              >
+                بدء استخدام التطبيق
+              </button>
+            )}
+          </div>
+        )}
+      </section>
+    </main>
+  );
+}
+
 export default function App() {
   const [state, setState] = useState(INITIAL_STATE);
   const [storageReady, setStorageReady] = useState(false);
@@ -7141,6 +8651,17 @@ function handleExtraCashSubmit(data) {
 
   setState((prev) => {
     const now = new Date().toISOString();
+    const recordedAt = new Date().toISOString();
+    const movementOrderBase = Date.now();
+    let movementOrderStep = 0;
+    const nextMovementMeta = (suffix) => {
+      movementOrderStep += 1;
+      return {
+        id: `${movementOrderBase}-${movementOrderStep}-${suffix}`,
+        recordedAt,
+        sortSequence: movementOrderBase * 1000 + movementOrderStep,
+      };
+    };
     const allocation = data.allocation || data.direction || "spendingCap";
     const isSalarySurplus = data.source === "salary_surplus";
     const isMonthEndSurplus = data.source === "month_end_surplus";
@@ -7204,7 +8725,7 @@ function handleExtraCashSubmit(data) {
           existing.currentPrice = price;
         }
         next.assetHistory.push({
-          id: `${Date.now()}-${allocation}`,
+          ...nextMovementMeta(allocation),
           date: now,
           type: "buy_units",
           source: "extra_income",
@@ -7255,7 +8776,7 @@ function handleExtraCashSubmit(data) {
           });
         }
         next.assetHistory.push({
-          id: `${Date.now()}-${allocation}`,
+          ...nextMovementMeta(allocation),
           date: now,
           type: "buy_units",
           source: "extra_income",
@@ -7303,7 +8824,7 @@ function handleExtraCashSubmit(data) {
       };
       next = rebalanceExpenseCoverageAfterCapIncrease(next);
       next.assetHistory.push({
-        id: `${Date.now()}-spendingCap`,
+        ...nextMovementMeta("spendingCap"),
         date: now,
         type: "income_to_spending_cap",
         source: "extra_income",
@@ -7321,7 +8842,7 @@ function handleExtraCashSubmit(data) {
         },
       };
       next.assetHistory.push({
-        id: `${Date.now()}-cash`,
+        ...nextMovementMeta("cash"),
         date: now,
         type: "income_to_cash",
         source: "extra_income",
@@ -7346,7 +8867,7 @@ function handleExtraCashSubmit(data) {
       if (existing) {
         existing.balance = Number((Number(existing.balance || 0) + amount).toFixed(2));
         next.assetHistory.push({
-          id: `${Date.now()}-bank`,
+          ...nextMovementMeta("bank"),
           date: now,
           type: "income_to_bank",
           source: "extra_income",
@@ -7365,7 +8886,7 @@ function handleExtraCashSubmit(data) {
           balance: amount,
         });
         next.assetHistory.push({
-          id: `${Date.now()}-bank`,
+          ...nextMovementMeta("bank"),
           date: now,
           type: "income_to_bank",
           source: "extra_income",
@@ -7408,7 +8929,7 @@ function handleExtraCashSubmit(data) {
       if (existing) {
         existing.amount = Number((Number(existing.amount || 0) + amount).toFixed(2));
         next.assetHistory.push({
-          id: `${Date.now()}-fixed`,
+          ...nextMovementMeta("fixed"),
           date: now,
           type: "income_to_fixed_asset",
           source: "extra_income",
@@ -7428,7 +8949,7 @@ function handleExtraCashSubmit(data) {
           amount,
         });
         next.assetHistory.push({
-          id: `${Date.now()}-fixed`,
+          ...nextMovementMeta("fixed"),
           date: now,
           type: "income_to_fixed_asset",
           source: "extra_income",
@@ -7492,9 +9013,23 @@ async function handleClearState() {
     await clearState(authSession);
     const cleanState = structuredClone(INITIAL_STATE);
     cleanState.currentMonth = new Date().toISOString().slice(0, 7);
-    cleanState.settings.month = cleanState.currentMonth;
-    cleanState.assetHistory = [];
+    cleanState.settings = {
+      ...cleanState.settings,
+      month: cleanState.currentMonth,
+      setupComplete: false,
+    };
+    cleanState.assets = structuredClone(INITIAL_STATE.assets);
+    cleanState.extraCash = [];
+    cleanState.expenseCategories = structuredClone(INITIAL_STATE.expenseCategories);
+    cleanState.structuralLiabilities = [];
+    cleanState.currentLiabilities = [];
+    cleanState.reservedPayments = [];
+    cleanState.session = structuredClone(INITIAL_STATE.session);
+    cleanState.expenses = [];
+    cleanState.transactions = [];
     cleanState.monthlySnapshots = [];
+    cleanState.assetDailySnapshots = [];
+    cleanState.assetHistory = [];
     await saveState(cleanState, authSession);
     setState(cleanState);
     window.location.reload();
@@ -7590,24 +9125,34 @@ const handleViewMonthChange = (month) => {
   }
 };
 const handleTestEndDay = () => {
+  const currentDate = getDateKey(state.__testAccountingDate || new Date());
+  const nextDate = new Date(`${currentDate}T12:00:00`);
+  nextDate.setDate(nextDate.getDate() + 1);
+  const nextDateKey = getDateKey(nextDate);
+
+  if (getMonthKey(nextDateKey) !== getMonthKey(currentDate)) {
+    requestMonthClose();
+    return;
+  }
+
   setSelectedViewMonth("current");
   setState((prev) => {
-    const currentDate = getDateKey(prev.__testAccountingDate || new Date());
-    const closedToday = syncAssetDailySnapshot(prev, currentDate);
-    const nextDate = new Date(`${currentDate}T12:00:00`);
-    nextDate.setDate(nextDate.getDate() + 1);
-    const nextDateKey = getDateKey(nextDate);
+    const prevDate = getDateKey(prev.__testAccountingDate || new Date());
+    const closedToday = syncAssetDailySnapshot(prev, prevDate);
+    const nextTestDate = new Date(`${prevDate}T12:00:00`);
+    nextTestDate.setDate(nextTestDate.getDate() + 1);
+    const nextTestDateKey = getDateKey(nextTestDate);
     return syncAssetDailySnapshot(
       {
         ...closedToday,
-        currentMonth: getMonthKey(nextDateKey),
+        currentMonth: getMonthKey(nextTestDateKey),
         settings: {
           ...closedToday.settings,
-          month: getMonthKey(nextDateKey),
+          month: getMonthKey(nextTestDateKey),
         },
-        __testAccountingDate: nextDateKey,
+        __testAccountingDate: nextTestDateKey,
       },
-      nextDateKey
+      nextTestDateKey
     );
   });
 };
@@ -7641,6 +9186,27 @@ const requestMonthClose = () => {
 };
 const handleTestEndMonth = () => {
   requestMonthClose();
+};
+const canLeaveSettingsTab = () => {
+  if (tab !== "settings") return true;
+
+  const plannedCapsTotal = sumExpenseCategoryCaps(state.settings?.expenseCategoryCaps || {});
+  const spendingCap = Number(
+    (state.session?.isOpen
+      ? state.session?.spendingCap
+      : state.settings?.spendingCap ?? state.session?.spendingCap) || 0
+  );
+  if (plannedCapsTotal <= spendingCap) return true;
+
+  const currencyLabel = getCurrencyLabel(state);
+  alert(
+    `مجموع سقوف البنود (${plannedCapsTotal.toFixed(
+      2
+    )} ${currencyLabel}) أعلى من سقف الصرف (${spendingCap.toFixed(
+      2
+    )} ${currencyLabel}). عدّل سقف الصرف أو خفّض سقوف البنود قبل الخروج.`
+  );
+  return false;
 };
 
   if (!authSession) {
@@ -7679,6 +9245,41 @@ const handleTestEndMonth = () => {
         appStyle={G.app}
         cardStyle={G.card()}
       />
+    );
+  }
+
+  const setupComplete = Boolean(
+    state.settings?.setupComplete ||
+      state.session?.isOpen ||
+      (state.monthlySnapshots || []).length
+  );
+
+  if (!setupComplete && !selectedViewSnapshot) {
+    return (
+      <LocaleProvider
+        language={appLanguage}
+        currency={state.settings?.locale?.currency || "JOD"}
+      >
+        <div style={{ direction: appDirection }}>
+          <OnboardingFlow
+            state={state}
+            setState={setState}
+            onComplete={(surplus) => {
+              setTab("overview");
+              if (Number(surplus || 0) > 0.01) {
+                setExtraCashPreset({
+                  amount: Number(surplus),
+                  lockedAmount: true,
+                  lockedNote: true,
+                  note: "فائض راتب",
+                  source: "salary_surplus",
+                });
+                setShowExtraCash(true);
+              }
+            }}
+          />
+        </div>
+      </LocaleProvider>
     );
   }
 
@@ -7865,6 +9466,7 @@ const handleTestEndMonth = () => {
         tabs={visibleTabs}
         activeTab={tab}
         onSelect={(id) => {
+          if (id !== tab && !canLeaveSettingsTab()) return;
           setLiabilitiesFocusDueOnly(false);
           setTab(id);
         }}

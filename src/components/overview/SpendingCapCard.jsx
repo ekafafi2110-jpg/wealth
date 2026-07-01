@@ -305,7 +305,7 @@ export default function SpendingCapCard({
                   position: "relative",
                   flex: `0 1 ${capWidthPercent}%`,
                   minWidth: 0,
-                  height: 24,
+                  height: 28,
                   borderRadius: 999,
                   background: `linear-gradient(90deg, ${colors.green}, ${visualIdentity.semantic.success})`,
                   border: "1px solid rgba(255,255,255,0.58)",
@@ -320,7 +320,11 @@ export default function SpendingCapCard({
                     insetInlineStart: 9,
                     maxWidth: "calc(100% - 18px)",
                     color: colors.white,
-                    textShadow: "0 1px 3px rgba(0,0,0,0.34)",
+                    background: "rgba(5,24,48,0.38)",
+                    border: "1px solid rgba(255,255,255,0.18)",
+                    borderRadius: 999,
+                    padding: "3px 7px",
+                    textShadow: "0 1px 4px rgba(0,0,0,0.46)",
                   }}
                 >
                   من السقف {capSpentLabel}
@@ -351,7 +355,7 @@ export default function SpendingCapCard({
                 <div
                   style={{
                     position: "relative",
-                    height: 24,
+                    height: 28,
                     borderRadius: 999,
                     background: `linear-gradient(90deg, #FF7070, #E53935)`,
                     border: "1px solid rgba(255,255,255,0.50)",
@@ -365,7 +369,11 @@ export default function SpendingCapCard({
                       insetInlineStart: 7,
                       maxWidth: "calc(100% - 28px)",
                       color: colors.white,
-                      textShadow: "0 1px 3px rgba(0,0,0,0.34)",
+                      background: "rgba(5,24,48,0.38)",
+                      border: "1px solid rgba(255,255,255,0.18)",
+                      borderRadius: 999,
+                      padding: "3px 7px",
+                      textShadow: "0 1px 4px rgba(0,0,0,0.46)",
                     }}
                   >
                     {overBudgetLabel}
@@ -409,7 +417,7 @@ export default function SpendingCapCard({
                   position: "relative",
                   flex: 1,
                   minWidth: 0,
-                  height: 24,
+                  height: 28,
                   borderRadius: 999,
                   background: "rgba(245,250,255,0.90)",
                   border: "1px solid rgba(255,255,255,0.66)",
@@ -437,7 +445,11 @@ export default function SpendingCapCard({
                         ...progressValueStyle,
                         insetInlineStart: 8,
                         color: colors.white,
-                        textShadow: "0 1px 3px rgba(0,0,0,0.32)",
+                        background: "rgba(5,24,48,0.40)",
+                        border: "1px solid rgba(255,255,255,0.18)",
+                        borderRadius: 999,
+                        padding: "3px 7px",
+                        textShadow: "0 1px 4px rgba(0,0,0,0.46)",
                       }}
                     >
                       {spentLabel}
@@ -450,8 +462,12 @@ export default function SpendingCapCard({
                     style={{
                       ...progressValueStyle,
                       insetInlineEnd: 8,
-                      color: "#164572",
-                      textShadow: "0 1px 0 rgba(255,255,255,0.55)",
+                      color: "#07345f",
+                      background: "rgba(255,255,255,0.78)",
+                      border: "1px solid rgba(8,52,95,0.16)",
+                      borderRadius: 999,
+                      padding: "3px 7px",
+                      textShadow: "0 1px 0 rgba(255,255,255,0.70)",
                     }}
                   >
                     {remainingLabel}
@@ -537,11 +553,12 @@ export default function SpendingCapCard({
 }
 
 const progressEndLabelStyle = {
-  color: colors.textSecondary,
-  fontSize: 9,
+  color: colors.gold,
+  fontSize: 11,
   fontWeight: 900,
   fontVariantNumeric: "tabular-nums",
   whiteSpace: "nowrap",
+  textShadow: `0 0 8px ${colors.gold}66`,
 };
 
 const progressValueStyle = {
@@ -549,9 +566,9 @@ const progressValueStyle = {
   top: "50%",
   transform: "translateY(-50%)",
   zIndex: 2,
-  maxWidth: "46%",
+  maxWidth: "54%",
   overflow: "hidden",
-  fontSize: 9,
+  fontSize: 11,
   fontWeight: 900,
   fontVariantNumeric: "tabular-nums",
   lineHeight: 1,
@@ -565,7 +582,7 @@ const progressOutsideValueStyle = {
   zIndex: 3,
   maxWidth: "44%",
   overflow: "hidden",
-  fontSize: 8,
+  fontSize: 10,
   fontWeight: 900,
   fontVariantNumeric: "tabular-nums",
   lineHeight: 1,

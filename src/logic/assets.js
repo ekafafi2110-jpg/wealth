@@ -105,16 +105,16 @@ export function addToAsset(state, key, amount) {
   }
 
   const [type, idRaw] = key.split(":");
-  const id = Number(idRaw);
+  const matchesAssetId = (item) => String(item.id) === String(idRaw);
 
   if (type === "bank") {
-    const item = next.assets.banks.find((x) => x.id === id);
+    const item = next.assets.banks.find(matchesAssetId);
     if (item) item.balance = Number(item.balance || 0) + value;
     return next;
   }
 
   if (type === "gold") {
-    const item = next.assets.gold.find((x) => x.id === id);
+    const item = next.assets.gold.find(matchesAssetId);
     const unitPrice = Number(item?.currentPrice || 0) || goldPrice || Number(item?.wac || 0);
     if (item && unitPrice > 0) {
       const addedUnits = value / unitPrice;
@@ -133,7 +133,7 @@ export function addToAsset(state, key, amount) {
   }
 
   if (type === "silver") {
-    const item = next.assets.silver.find((x) => x.id === id);
+    const item = next.assets.silver.find(matchesAssetId);
     const unitPrice = Number(item?.currentPrice || 0) || silverPrice || Number(item?.wac || 0);
     if (item && unitPrice > 0) {
       const addedUnits = value / unitPrice;
@@ -152,7 +152,7 @@ export function addToAsset(state, key, amount) {
   }
 
   if (type === "stock") {
-    const item = next.assets.stocks.find((x) => x.id === id);
+    const item = next.assets.stocks.find(matchesAssetId);
     const price = Number(item?.currentPrice || 0) || Number(item?.wac || 0);
     if (item && price > 0) {
       const addedUnits = value / price;
@@ -171,7 +171,7 @@ export function addToAsset(state, key, amount) {
   }
 
   if (type === "custom") {
-    const item = next.assets.custom.find((x) => x.id === id);
+    const item = next.assets.custom.find(matchesAssetId);
 
     if (item) {
       if (item.type === "fixed") {
@@ -212,16 +212,18 @@ export function deductFromAsset(state, key, amount) {
   }
 
   const [type, idRaw] = key.split(":");
-  const id = Number(idRaw);
+  const matchesAssetId = (item) => String(item.id) === String(idRaw);
 
   if (type === "bank") {
-    const item = next.assets.banks.find((x) => x.id === id);
+    const item = next.assets.banks.find(matchesAssetId);
+    if (!item) return { nextState: state, success: false, message: "لم يتم العثور على الأصل" };
     if (item) item.balance = Number(item.balance || 0) - value;
     return { nextState: next, success: true };
   }
 
   if (type === "gold") {
-    const item = next.assets.gold.find((x) => x.id === id);
+    const item = next.assets.gold.find(matchesAssetId);
+    if (!item) return { nextState: state, success: false, message: "لم يتم العثور على الأصل" };
     const unitPrice = Number(item?.currentPrice || 0) || goldPrice || Number(item?.wac || 0);
     if (item && unitPrice > 0) {
       item.units = Number((Number(item.units || 0) - value / unitPrice).toFixed(4));
@@ -230,7 +232,8 @@ export function deductFromAsset(state, key, amount) {
   }
 
   if (type === "silver") {
-    const item = next.assets.silver.find((x) => x.id === id);
+    const item = next.assets.silver.find(matchesAssetId);
+    if (!item) return { nextState: state, success: false, message: "لم يتم العثور على الأصل" };
     const unitPrice = Number(item?.currentPrice || 0) || silverPrice || Number(item?.wac || 0);
     if (item && unitPrice > 0) {
       item.units = Number((Number(item.units || 0) - value / unitPrice).toFixed(4));
@@ -239,7 +242,8 @@ export function deductFromAsset(state, key, amount) {
   }
 
   if (type === "stock") {
-    const item = next.assets.stocks.find((x) => x.id === id);
+    const item = next.assets.stocks.find(matchesAssetId);
+    if (!item) return { nextState: state, success: false, message: "لم يتم العثور على الأصل" };
     const price = Number(item?.currentPrice || 0) || Number(item?.wac || 0);
     if (item && price > 0) {
       item.units = Number(
@@ -250,7 +254,8 @@ export function deductFromAsset(state, key, amount) {
   }
 
   if (type === "custom") {
-    const item = next.assets.custom.find((x) => x.id === id);
+    const item = next.assets.custom.find(matchesAssetId);
+    if (!item) return { nextState: state, success: false, message: "لم يتم العثور على الأصل" };
 
     if (item) {
       if (item.type === "fixed") {
@@ -329,15 +334,15 @@ export function liquidateAssetUnits(
 
   const next = structuredClone(state);
   const [type, idRaw] = String(fromKey).split(":");
-  const id = Number(idRaw);
+  const matchesAssetId = (item) => String(item.id) === String(idRaw);
   let source;
 
-  if (type === "gold") source = next.assets.gold.find((item) => item.id === id);
-  if (type === "silver") source = next.assets.silver.find((item) => item.id === id);
-  if (type === "stock") source = next.assets.stocks.find((item) => item.id === id);
+  if (type === "gold") source = next.assets.gold.find(matchesAssetId);
+  if (type === "silver") source = next.assets.silver.find(matchesAssetId);
+  if (type === "stock") source = next.assets.stocks.find(matchesAssetId);
   if (type === "custom") {
     source = next.assets.custom.find(
-      (item) => item.id === id && item.type === "unit"
+      (item) => matchesAssetId(item) && item.type === "unit"
     );
   }
 
