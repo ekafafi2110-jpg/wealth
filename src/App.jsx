@@ -763,7 +763,9 @@ const [overBudgetDueDate, setOverBudgetDueDate] = useState("");
   const [unusualDueDate, setUnusualDueDate] = useState("");
   const [aiExpenseBusy, setAiExpenseBusy] = useState(false);
   const [voiceRecording, setVoiceRecording] = useState(false);
+  const [receiptSourceMenuOpen, setReceiptSourceMenuOpen] = useState(false);
   const aiReceiptInputRef = useRef(null);
+  const aiReceiptUploadInputRef = useRef(null);
   const aiRecorderRef = useRef(null);
   const aiAudioChunksRef = useRef([]);
   const aiVoiceStopTimerRef = useRef(null);
@@ -788,8 +790,9 @@ const [overBudgetDueDate, setOverBudgetDueDate] = useState("");
   return dueMonth <= currentMonth;
 });
   const assetSources = getAssetSources(state);
-  const accountingDate = getDateKey(state.__testAccountingDate || new Date());
+  const accountingDate = getDateKey(new Date());
   const accountingDateTime = `${accountingDate}T12:00:00.000Z`;
+  const accountingDateDisplay = accountingDate.split("-").reverse().join("/");
   const isGoodsSource = (source) => {
     if (source.type !== "custom") return false;
     const id = String(source.key).split(":")[1];
@@ -1341,7 +1344,7 @@ useEffect(() => {
       setVoiceRecording(true);
       aiVoiceStopTimerRef.current = setTimeout(() => {
         stopVoiceExpenseRecording();
-      }, 4000);
+      }, 7000);
     } catch {
       setVoiceRecording(false);
       if (aiVoiceStopTimerRef.current) {
@@ -1355,6 +1358,7 @@ useEffect(() => {
   const handleReceiptImageChange = async (event) => {
     const file = event.target.files?.[0];
     event.target.value = "";
+    setReceiptSourceMenuOpen(false);
     if (!file) return;
     if (!file.type.startsWith("image/")) {
       alert("اختر صورة فاتورة أو إيصال");
@@ -2416,6 +2420,21 @@ function toggleExpenseCategoryPinned(catId) {
 
             <div
               style={{
+                minWidth: 78,
+                paddingInline: 2,
+                color: visualIdentity.colors.gold,
+                fontSize: 10,
+                fontWeight: 900,
+                fontVariantNumeric: "tabular-nums",
+                textAlign: "center",
+                flex: "0 0 auto",
+              }}
+            >
+              {accountingDateDisplay}
+            </div>
+
+            <div
+              style={{
                 display: "inline-flex",
                 alignItems: "center",
                 gap: 5,
@@ -2451,37 +2470,113 @@ function toggleExpenseCategoryPinned(catId) {
               >
                 🎙️
               </button>
-              <button
-                type="button"
-                onClick={() => aiReceiptInputRef.current?.click()}
-                disabled={aiExpenseBusy || voiceRecording}
-                title="قراءة الفاتورة بالصورة"
-                aria-label="قراءة الفاتورة بالصورة"
-                style={{
-                  width: 26,
-                  height: 26,
-                  borderRadius: 9,
-                  border: "1px solid rgba(255,255,255,0.16)",
-                  background: "rgba(255,255,255,0.08)",
-                  color: visualIdentity.colors.white,
-                  display: "inline-flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  cursor: aiExpenseBusy || voiceRecording ? "not-allowed" : "pointer",
-                  opacity: aiExpenseBusy || voiceRecording ? 0.6 : 1,
-                  fontSize: 13,
-                  fontWeight: 900,
-                  fontFamily: "inherit",
-                  boxShadow: "inset 0 1px 0 rgba(255,255,255,0.12)",
-                }}
-              >
-                📷
-              </button>
+              <span style={{ position: "relative", display: "inline-flex" }}>
+                <button
+                  type="button"
+                  onClick={() => setReceiptSourceMenuOpen((open) => !open)}
+                  disabled={aiExpenseBusy || voiceRecording}
+                  title="قراءة الفاتورة بالصورة"
+                  aria-label="قراءة الفاتورة بالصورة"
+                  aria-expanded={receiptSourceMenuOpen}
+                  style={{
+                    width: 26,
+                    height: 26,
+                    borderRadius: 9,
+                    border: "1px solid rgba(255,255,255,0.16)",
+                    background: receiptSourceMenuOpen ? "rgba(85,217,255,0.16)" : "rgba(255,255,255,0.08)",
+                    color: visualIdentity.colors.white,
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    cursor: aiExpenseBusy || voiceRecording ? "not-allowed" : "pointer",
+                    opacity: aiExpenseBusy || voiceRecording ? 0.6 : 1,
+                    fontSize: 13,
+                    fontWeight: 900,
+                    fontFamily: "inherit",
+                    boxShadow: receiptSourceMenuOpen
+                      ? `0 0 0 3px ${visualIdentity.colors.cyan}18, inset 0 1px 0 rgba(255,255,255,0.14)`
+                      : "inset 0 1px 0 rgba(255,255,255,0.12)",
+                  }}
+                >
+                  📷
+                </button>
+                {receiptSourceMenuOpen && !aiExpenseBusy && !voiceRecording && (
+                  <span
+                    style={{
+                      position: "absolute",
+                      top: 31,
+                      insetInlineEnd: 0,
+                      zIndex: 20,
+                      minWidth: 132,
+                      padding: 5,
+                      borderRadius: 12,
+                      border: "1px solid rgba(255,255,255,0.18)",
+                      background: "rgba(8,42,85,0.96)",
+                      boxShadow: "0 12px 28px rgba(0,0,0,0.30), inset 0 1px 0 rgba(255,255,255,0.12)",
+                      backdropFilter: "blur(14px)",
+                      display: "grid",
+                      gap: 4,
+                    }}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setReceiptSourceMenuOpen(false);
+                        aiReceiptInputRef.current?.click();
+                      }}
+                      style={{
+                        minHeight: 30,
+                        borderRadius: 9,
+                        border: 0,
+                        background: "rgba(255,255,255,0.08)",
+                        color: visualIdentity.colors.white,
+                        fontFamily: "inherit",
+                        fontSize: 11,
+                        fontWeight: 900,
+                        cursor: "pointer",
+                        textAlign: "right",
+                        padding: "6px 9px",
+                      }}
+                    >
+                      التقاط بالكاميرا
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setReceiptSourceMenuOpen(false);
+                        aiReceiptUploadInputRef.current?.click();
+                      }}
+                      style={{
+                        minHeight: 30,
+                        borderRadius: 9,
+                        border: 0,
+                        background: "rgba(255,255,255,0.08)",
+                        color: visualIdentity.colors.white,
+                        fontFamily: "inherit",
+                        fontSize: 11,
+                        fontWeight: 900,
+                        cursor: "pointer",
+                        textAlign: "right",
+                        padding: "6px 9px",
+                      }}
+                    >
+                      تحميل صورة
+                    </button>
+                  </span>
+                )}
+              </span>
               <input
                 ref={aiReceiptInputRef}
                 type="file"
                 accept="image/*"
                 capture="environment"
+                onChange={handleReceiptImageChange}
+                style={{ display: "none" }}
+              />
+              <input
+                ref={aiReceiptUploadInputRef}
+                type="file"
+                accept="image/*"
                 onChange={handleReceiptImageChange}
                 style={{ display: "none" }}
               />
@@ -3340,6 +3435,50 @@ flexDirection: "column",
   );
 }
 
+const aiReportParagraphStyle = {
+  margin: 0,
+  color: "rgba(255,255,255,0.72)",
+  fontSize: 10,
+  lineHeight: 1.8,
+};
+
+function ReportGlassBlock({ title, children }) {
+  return (
+    <section
+      style={{
+        marginTop: 12,
+        padding: 12,
+        borderRadius: 16,
+        border: "1px solid rgba(255,255,255,0.12)",
+        background: "rgba(255,255,255,0.08)",
+      }}
+    >
+      <h3 style={{ margin: "0 0 8px", color: "#F5C842", fontSize: 13, fontWeight: 900 }}>
+        {title}
+      </h3>
+      {children}
+    </section>
+  );
+}
+
+function AiReportList({ items, color = "rgba(255,255,255,0.72)" }) {
+  const rows = Array.isArray(items) ? items.filter(Boolean) : [];
+  if (!rows.length) {
+    return (
+      <div style={{ color: "rgba(255,255,255,0.48)", fontSize: 10 }}>
+        لا توجد ملاحظات كافية.
+      </div>
+    );
+  }
+  return (
+    <ul style={{ margin: 0, paddingInlineStart: 18, color, fontSize: 10, lineHeight: 1.8 }}>
+      {rows.map((item, index) => (
+        <li key={`${item}-${index}`}>{item}</li>
+      ))}
+    </ul>
+  );
+}
+
 function ReportsScreen({ state }) {
   const [reportView, setReportView] = useState("overview");
   const [expenseReportView, setExpenseReportView] = useState("distribution");
@@ -3351,6 +3490,9 @@ function ReportsScreen({ state }) {
   const [selectedTrendAssetKey, setSelectedTrendAssetKey] = useState("");
   const [expenseChartMode, setExpenseChartMode] = useState("donut");
   const [selectedExpense, setSelectedExpense] = useState(null);
+  const [aiWealthReport, setAiWealthReport] = useState(null);
+  const [aiWealthReportLoading, setAiWealthReportLoading] = useState(false);
+  const [aiWealthReportError, setAiWealthReportError] = useState("");
   const [selectedHeatmapMonth, setSelectedHeatmapMonth] = useState({
     baseMonth: state.currentMonth || new Date().toISOString().slice(0, 7),
     month: state.currentMonth || new Date().toISOString().slice(0, 7),
@@ -3637,6 +3779,73 @@ function ReportsScreen({ state }) {
     { key: "stocks", label: "أسهم", value: reportAssetGroups.stocks, change: reportChange(reportAssetGroups.stocks, reportStockCost), color: visualIdentity.colors.purple },
     { key: "other", label: "أخرى", value: reportAssetGroups.other, change: 0, color: visualIdentity.colors.coral },
   ];
+  const paymentMethodsSummary = expenses.reduce((summary, expense) => {
+    const key = expense.paymentMethod || "غير محدد";
+    const current = summary[key] || { count: 0, total: 0 };
+    current.count += 1;
+    current.total = Number(
+      (Number(current.total || 0) + Number(expense.originalAmount ?? expense.amount ?? 0)).toFixed(2)
+    );
+    summary[key] = current;
+    return summary;
+  }, {});
+  const buildAiWealthPayload = () => ({
+    currency: getCurrencyLabel(state),
+    month: state.currentMonth || new Date().toISOString().slice(0, 7),
+    summary: {
+      salary: Number(state.settings?.salary || 0),
+      monthlyCap: Number(reportBudget.spendingCap || 0),
+      totalExpenses: Number(total || 0),
+      remainingCap: Number(remainingSpendingCap || 0),
+      savingsTotal: Number(state.session?.savingsAmount || 0),
+      assetsTotal: Number(currentAssets.totalAssets || 0),
+      liabilitiesTotal: Number(currentAssets.currentLiabilities || 0),
+      netWorth: Number(currentAssets.netWorth || 0),
+    },
+    expensesByCategory: currentExpensesByCategory,
+    recentExpenses: expenses.slice(0, 20).map((expense) => ({
+      date: expense.date || expense.createdAt || "",
+      category: expense.category || "غير مصنف",
+      amount: Number(expense.originalAmount ?? expense.amount ?? 0),
+      paymentMethod: expense.paymentMethod || "",
+      overBudget: Number(expense.overBudget || 0),
+      note: expense.note || "",
+    })),
+    assetsSummary: reportAssetSummaryItems.map((item) => ({
+      label: item.label,
+      value: Number(item.value || 0),
+      changePct: Number(item.change || 0),
+    })),
+    assetsChanges: assetDetailRows.slice(0, 12).map((item) => ({
+      label: item.label,
+      change: Number(item.change || 0),
+      months: (item.months || []).map((month) => ({
+        month: month.month,
+        change: Number(month.change || 0),
+      })),
+    })),
+    paymentMethodsSummary,
+  });
+  const requestAiWealthReport = async () => {
+    setAiWealthReportLoading(true);
+    setAiWealthReportError("");
+    try {
+      const response = await fetch("/api/ai-wealth-report", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(buildAiWealthPayload()),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(data.error || "تعذر إعداد التقرير الذكي حالياً. حاول مرة أخرى.");
+      }
+      setAiWealthReport(data);
+    } catch (error) {
+      setAiWealthReportError(error.message || "تعذر إعداد التقرير الذكي حالياً. حاول مرة أخرى.");
+    } finally {
+      setAiWealthReportLoading(false);
+    }
+  };
 
   return (
     <div style={G.scr}>
@@ -3744,6 +3953,129 @@ function ReportsScreen({ state }) {
                 عرض تفاصيل المصروفات وطرق الدفع ومصادر التغطية
               </div>
               <ExpenseReportLauncher onOpen={() => setShowExpenseReport(true)} />
+            </section>
+          )}
+        </>
+      )}
+
+      {reportView === "weeklyAi" && (
+        <>
+          <ReportViewHeader
+            title="تقرير AI الأسبوعي"
+            subtitle="تحليل أسبوع أو أكثر من البيانات مع نصائح مالية ذكية"
+            onBack={() => setReportView("overview")}
+          />
+          <section
+            className="asset-dashboard-card"
+            style={{
+              padding: 16,
+              borderRadius: 20,
+              border: `1px solid ${visualIdentity.colors.purple}55`,
+              background: `linear-gradient(145deg, ${visualIdentity.colors.purple}20, rgba(35,84,145,0.92))`,
+              boxShadow: visualIdentity.cards.outer.boxShadow,
+              color: visualIdentity.colors.white,
+            }}
+          >
+            <div style={{ color: visualIdentity.colors.gold, fontSize: 15, fontWeight: 900 }}>
+              تحليل ذكي للمصاريف والأصول
+            </div>
+            <div style={{ marginTop: 6, color: visualIdentity.colors.textSecondary, fontSize: 10, lineHeight: 1.7 }}>
+              يرسل ملخصاً محدوداً من بيانات الشهر الحالي والأصول والحركة إلى الذكاء الاصطناعي لإعداد تقرير مرتب.
+            </div>
+            <button
+              type="button"
+              onClick={requestAiWealthReport}
+              disabled={aiWealthReportLoading}
+              style={{
+                width: "100%",
+                minHeight: 44,
+                marginTop: 14,
+                border: 0,
+                borderRadius: 13,
+                background: "linear-gradient(135deg, #F5C842, #FFB800)",
+                color: visualIdentity.colors.navy,
+                fontFamily: "inherit",
+                fontSize: 13,
+                fontWeight: 900,
+                cursor: aiWealthReportLoading ? "not-allowed" : "pointer",
+                opacity: aiWealthReportLoading ? 0.68 : 1,
+              }}
+            >
+              {aiWealthReportLoading ? "جاري إعداد التقرير الذكي..." : "تحليل ذكي"}
+            </button>
+            {aiWealthReportError && (
+              <div style={{ marginTop: 10, color: "#FF6B6B", fontSize: 10, fontWeight: 800 }}>
+                {aiWealthReportError}
+              </div>
+            )}
+          </section>
+
+          {aiWealthReport && (
+            <section
+              className="asset-dashboard-card"
+              style={{
+                marginTop: 13,
+                padding: 16,
+                borderRadius: 20,
+                border: "1px solid rgba(255,255,255,0.18)",
+                background: "linear-gradient(145deg, #245180, #2E6494 52%, #3A74A6)",
+                boxShadow: visualIdentity.cards.outer.boxShadow,
+                color: visualIdentity.colors.white,
+              }}
+            >
+              <h2 style={{ margin: 0, color: "#F5C842", fontSize: 20, fontWeight: 900 }}>
+                {aiWealthReport.title || "تقرير الثروة الذكي"}
+              </h2>
+              <ReportGlassBlock title="الملخص التنفيذي">
+                <p style={aiReportParagraphStyle}>{aiWealthReport.executiveSummary}</p>
+              </ReportGlassBlock>
+              <ReportGlassBlock title="درجة الصحة المالية">
+                <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                  <strong style={{ color: "#F5C842", fontSize: 28, fontWeight: 900 }}>
+                    {Number(aiWealthReport.healthScore || 0).toFixed(0)}
+                  </strong>
+                  <span style={{ color: visualIdentity.colors.textSecondary, fontSize: 11 }}>
+                    {aiWealthReport.status || "يحتاج انتباه"}
+                  </span>
+                </div>
+              </ReportGlassBlock>
+              <ReportGlassBlock title="أهم الملاحظات">
+                <AiReportList items={aiWealthReport.keyInsights} />
+              </ReportGlassBlock>
+              <ReportGlassBlock title="تحليل المصاريف">
+                <p style={aiReportParagraphStyle}>{aiWealthReport.expenseAnalysis?.summary}</p>
+                <AiReportList items={aiWealthReport.expenseAnalysis?.highestCategories} />
+                <AiReportList items={aiWealthReport.expenseAnalysis?.warnings} color="#FF6B6B" />
+              </ReportGlassBlock>
+              <ReportGlassBlock title="تحليل الأصول">
+                <p style={aiReportParagraphStyle}>{aiWealthReport.assetsAnalysis?.summary}</p>
+                <AiReportList items={aiWealthReport.assetsAnalysis?.positiveMovements} color="#52E5A0" />
+                <AiReportList items={aiWealthReport.assetsAnalysis?.negativeMovements} color="#FF6B6B" />
+              </ReportGlassBlock>
+              <ReportGlassBlock title="التوصيات">
+                {(aiWealthReport.recommendations || []).map((item, index) => {
+                  const priorityColor =
+                    item.priority === "high"
+                      ? "#FF6B6B"
+                      : item.priority === "low"
+                        ? "#52E5A0"
+                        : "#F5C842";
+                  return (
+                    <div key={`${item.title}-${index}`} style={{ marginTop: index ? 10 : 0 }}>
+                      <b style={{ color: priorityColor, fontSize: 12 }}>{item.title}</b>
+                      <div style={{ marginTop: 3, color: visualIdentity.colors.textSecondary, fontSize: 10, lineHeight: 1.7 }}>
+                        {item.description}
+                      </div>
+                    </div>
+                  );
+                })}
+              </ReportGlassBlock>
+              <ReportGlassBlock title="خطوات مقترحة">
+                <AiReportList items={aiWealthReport.nextActions} color="#F5C842" />
+              </ReportGlassBlock>
+              <div style={{ marginTop: 12, color: visualIdentity.colors.textFaint, fontSize: 9, lineHeight: 1.7 }}>
+                {aiWealthReport.disclaimer}
+              </div>
             </section>
           )}
         </>
@@ -4572,11 +4904,8 @@ function AssetsScreen({ state, setState, onAddExtraCash, readOnly = false }) {
     const unitText = formatAssetUnits(units, kind);
     return unitText ? `${name} ${unitText}` : name;
   };
-  const todayKey = getDateKey(state.__testAccountingDate || new Date());
-  const currentMonthKey =
-    state.__testAccountingDate
-      ? getMonthKey(todayKey)
-      : state.currentMonth || new Date().toISOString().slice(0, 7);
+  const todayKey = getDateKey(new Date());
+  const currentMonthKey = state.currentMonth || new Date().toISOString().slice(0, 7);
   const previousMonthSnapshot = [...(state.monthlySnapshots || [])]
     .filter((snapshot) => String(snapshot.month || "") < String(currentMonthKey))
     .sort((a, b) => String(a.month).localeCompare(String(b.month)))
@@ -8849,10 +9178,10 @@ export default function App() {
     useEffect(() => {
     if (!storageReady) return undefined;
     const timer = window.setTimeout(() => {
-      setState((prev) => syncAssetDailySnapshot(prev, prev.__testAccountingDate || new Date()));
+      setState((prev) => syncAssetDailySnapshot(prev, new Date()));
     }, 0);
     return () => window.clearTimeout(timer);
-  }, [storageReady, state.assets, state.settings?.market, state.__testAccountingDate]);
+  }, [storageReady, state.assets, state.settings?.market]);
 function handleExtraCashSubmit(data) {
   const amount = Number(data.amount || 0);
 
@@ -9203,11 +9532,7 @@ function handleExtraCashSubmit(data) {
         pendingSurplus: 0,
       };
       next = closeMonthState(next, next.currentMonth || getMonthKey(now));
-      next = {
-        ...next,
-        __testAccountingDate: `${next.currentMonth}-01`,
-      };
-      next = syncAssetDailySnapshot(next, next.__testAccountingDate);
+      next = syncAssetDailySnapshot(next, new Date());
     }
 
     return next;
@@ -9316,10 +9641,7 @@ async function handlePasswordReset() {
     { id: "liabilities", label: "الخصوم" },
   ];
   const snapshots = state.monthlySnapshots || [];
-  const activeAccountingDate = getDateKey(state.__testAccountingDate || new Date());
-  const activeAccountingMonth = state.__testAccountingDate
-    ? getMonthKey(activeAccountingDate)
-    : state.currentMonth || new Date().toISOString().slice(0, 7);
+  const activeAccountingMonth = state.currentMonth || new Date().toISOString().slice(0, 7);
   const currentMonthLabel = formatMonthKey(activeAccountingMonth);
 
 const selectedViewSnapshot =
@@ -9335,69 +9657,6 @@ const handleViewMonthChange = (month) => {
   if (month !== "current" && !["overview", "reports", "assets"].includes(tab)) {
     setTab("overview");
   }
-};
-const handleTestEndDay = () => {
-  const currentDate = getDateKey(state.__testAccountingDate || new Date());
-  const nextDate = new Date(`${currentDate}T12:00:00`);
-  nextDate.setDate(nextDate.getDate() + 1);
-  const nextDateKey = getDateKey(nextDate);
-
-  if (getMonthKey(nextDateKey) !== getMonthKey(currentDate)) {
-    requestMonthClose();
-    return;
-  }
-
-  setSelectedViewMonth("current");
-  setState((prev) => {
-    const prevDate = getDateKey(prev.__testAccountingDate || new Date());
-    const closedToday = syncAssetDailySnapshot(prev, prevDate);
-    const nextTestDate = new Date(`${prevDate}T12:00:00`);
-    nextTestDate.setDate(nextTestDate.getDate() + 1);
-    const nextTestDateKey = getDateKey(nextTestDate);
-    return syncAssetDailySnapshot(
-      {
-        ...closedToday,
-        currentMonth: getMonthKey(nextTestDateKey),
-        settings: {
-          ...closedToday.settings,
-          month: getMonthKey(nextTestDateKey),
-        },
-        __testAccountingDate: nextTestDateKey,
-      },
-      nextTestDateKey
-    );
-  });
-};
-const requestMonthClose = () => {
-  setSelectedViewMonth("current");
-  const remainingCap = getRemainingSpendingCapAtClose(state);
-  if (remainingCap > 0.01) {
-    setExtraCashPreset({
-      amount: Number(remainingCap.toFixed(2)),
-      lockedAmount: true,
-      lockedNote: true,
-      note: "فائض نهاية الشهر",
-      source: "month_end_surplus",
-    });
-    setShowExtraCash(true);
-    return;
-  }
-  setState((prev) => {
-    const closedMonth = closeMonthState(
-      syncAssetDailySnapshot(prev, prev.__testAccountingDate || new Date())
-    );
-    const nextMonthDate = `${closedMonth.currentMonth}-01`;
-    return syncAssetDailySnapshot(
-      {
-        ...closedMonth,
-        __testAccountingDate: nextMonthDate,
-      },
-      nextMonthDate
-    );
-  });
-};
-const handleTestEndMonth = () => {
-  requestMonthClose();
 };
 const canLeaveSettingsTab = () => {
   if (tab !== "settings") return true;
@@ -9554,69 +9813,6 @@ const canLeaveSettingsTab = () => {
         headerStyle={G.hdr}
         formatMonth={formatMonthKey}
       />
-
-      {!isSnapshotView && (
-        <div
-          style={{
-            margin: "8px auto 0",
-            width: "min(100% - 28px, 470px)",
-            display: "grid",
-            gridTemplateColumns: "1fr 1fr",
-            gap: 8,
-            padding: 8,
-            borderRadius: 14,
-            border: "1px dashed rgba(255,198,45,0.62)",
-            background: "rgba(255,198,45,0.10)",
-            boxShadow: "0 8px 24px rgba(0,0,0,0.16)",
-          }}
-        >
-          <button
-            type="button"
-            onClick={handleTestEndDay}
-            style={{
-              minHeight: 34,
-              border: "1px solid rgba(91,238,212,0.55)",
-              borderRadius: 11,
-              background: "rgba(91,238,212,0.14)",
-              color: "#D9FFF8",
-              fontFamily: "inherit",
-              fontSize: 11,
-              fontWeight: 900,
-              cursor: "pointer",
-            }}
-          >
-            اختبار: إنهاء اليوم
-          </button>
-          <button
-            type="button"
-            onClick={handleTestEndMonth}
-            style={{
-              minHeight: 34,
-              border: "1px solid rgba(255,112,112,0.55)",
-              borderRadius: 11,
-              background: "rgba(255,112,112,0.14)",
-              color: "#FFE2E2",
-              fontFamily: "inherit",
-              fontSize: 11,
-              fontWeight: 900,
-              cursor: "pointer",
-            }}
-          >
-            اختبار: إنهاء الشهر
-          </button>
-          <div
-            style={{
-              gridColumn: "1 / -1",
-              color: visualIdentity.colors.textSecondary,
-              fontSize: 9,
-              textAlign: "center",
-              fontWeight: 800,
-            }}
-          >
-            تاريخ الاختبار: {state.__testAccountingDate || getDateKey()} — أزرار مؤقتة للاختبار فقط
-          </div>
-        </div>
-      )}
 
       <main key={`${tab}-${selectedViewMonth}`} className="tab-page-motion">
         {tab === "overview" && (

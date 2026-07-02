@@ -1,4 +1,4 @@
-import { ArrowLeft, ChartNoAxesCombined, PieChart, WalletCards } from "lucide-react";
+import { ArrowLeft, ChartNoAxesCombined, PieChart, Sparkles, WalletCards } from "lucide-react";
 import visualIdentity from "../../theme/visualIdentity";
 
 const money = (value) =>
@@ -19,6 +19,12 @@ const reportCards = {
     meta: "النمو، التغيرات الشهرية وتفاصيل الأصول",
     icon: ChartNoAxesCombined,
     color: visualIdentity.colors.green,
+  },
+  weeklyAi: {
+    title: "تقرير AI الأسبوعي",
+    meta: "تحليل أسبوع أو أكثر من المصاريف والتغيرات مع نصائح ذكية للمستخدم",
+    icon: Sparkles,
+    color: visualIdentity.colors.purple,
   },
 };
 

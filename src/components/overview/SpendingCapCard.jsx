@@ -178,13 +178,6 @@ export default function SpendingCapCard({
       : safeProgress >= 55
         ? "#FF9F43"
         : colors.green;
-  const statusColorSoft =
-    safeProgress >= 85
-      ? "rgba(255,112,112,0.28)"
-      : safeProgress >= 55
-        ? "rgba(255,159,67,0.26)"
-        : "rgba(76,229,140,0.24)";
-  const spentFitsInside = safeProgress >= 26;
   const remainingFitsInside = 100 - safeProgress >= 30;
   const remainingShowsAtEnd = !remainingFitsInside;
   const exceededCap = Number(overBudgetSpent || 0) > 0;
@@ -305,7 +298,7 @@ export default function SpendingCapCard({
                   position: "relative",
                   flex: `0 1 ${capWidthPercent}%`,
                   minWidth: 0,
-                  height: 28,
+                  height: 22,
                   borderRadius: 999,
                   background: `linear-gradient(90deg, ${colors.green}, ${visualIdentity.semantic.success})`,
                   border: "1px solid rgba(255,255,255,0.58)",
@@ -323,7 +316,7 @@ export default function SpendingCapCard({
                     background: "rgba(5,24,48,0.38)",
                     border: "1px solid rgba(255,255,255,0.18)",
                     borderRadius: 999,
-                    padding: "3px 7px",
+                    padding: "2px 7px",
                     textShadow: "0 1px 4px rgba(0,0,0,0.46)",
                   }}
                 >
@@ -355,7 +348,7 @@ export default function SpendingCapCard({
                 <div
                   style={{
                     position: "relative",
-                    height: 28,
+                    height: 22,
                     borderRadius: 999,
                     background: `linear-gradient(90deg, #FF7070, #E53935)`,
                     border: "1px solid rgba(255,255,255,0.50)",
@@ -372,34 +365,11 @@ export default function SpendingCapCard({
                       background: "rgba(5,24,48,0.38)",
                       border: "1px solid rgba(255,255,255,0.18)",
                       borderRadius: 999,
-                      padding: "3px 7px",
+                      padding: "2px 7px",
                       textShadow: "0 1px 4px rgba(0,0,0,0.46)",
                     }}
                   >
                     {overBudgetLabel}
-                  </span>
-                  <span
-                    aria-hidden="true"
-                    style={{
-                      position: "absolute",
-                      insetInlineEnd: 3,
-                      top: "50%",
-                      width: 20,
-                      height: 20,
-                      borderRadius: "50%",
-                      display: "none",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      background: "linear-gradient(145deg, rgba(255,255,255,0.98), rgba(255,223,223,0.92))",
-                      border: "1px solid rgba(255,255,255,0.74)",
-                      boxShadow: `0 4px 10px rgba(4,24,48,0.22), 0 0 12px ${colors.red}66`,
-                      color: colors.red,
-                      fontSize: 12,
-                      transform: "translateY(-50%)",
-                      animation: "warningPulse 1.8s ease-in-out infinite",
-                    }}
-                  >
-                    ⚠️
                   </span>
                 </div>
               </div>
@@ -417,100 +387,70 @@ export default function SpendingCapCard({
                   position: "relative",
                   flex: 1,
                   minWidth: 0,
-                  height: 28,
+                  height: 22,
                   borderRadius: 999,
-                  background: "rgba(245,250,255,0.90)",
-                  border: "1px solid rgba(255,255,255,0.66)",
-                  boxShadow: "inset 0 1px 4px rgba(0,0,0,0.22), 0 0 12px rgba(85,217,255,0.10)",
+                  background:
+                    "linear-gradient(90deg, rgba(255,255,255,0.28), rgba(255,255,255,0.74))",
+                  border: "1px solid rgba(255,255,255,0.34)",
+                  boxShadow:
+                    "inset 0 1px 4px rgba(255,255,255,0.24), inset 0 -1px 5px rgba(4,24,48,0.14), 0 8px 18px rgba(4,24,48,0.13)",
+                  overflow: "hidden",
+                  backdropFilter: "blur(12px)",
                 }}
               >
                 <div
                   style={{
                     position: "absolute",
-                    insetBlock: 3,
-                    insetInlineStart: 3,
-                    width: `calc(${safeProgress}% - 4px)`,
-                    minWidth: safeProgress > 0 ? 16 : 0,
-                    maxWidth: "calc(100% - 6px)",
+                    insetBlock: 0,
+                    insetInlineStart: 0,
+                    width: `${safeProgress}%`,
+                    minWidth: safeProgress > 0 ? 54 : 0,
+                    maxWidth: "100%",
                     borderRadius: 999,
-                    background: `linear-gradient(90deg, ${statusColor}, ${statusColorSoft})`,
-                    boxShadow: `0 0 10px ${statusColor}66`,
+                    background:
+                      safeProgress >= 85
+                        ? "linear-gradient(135deg, rgba(255,112,112,0.95), rgba(229,57,53,0.84))"
+                        : safeProgress >= 55
+                          ? "linear-gradient(135deg, rgba(255,159,67,0.96), rgba(255,198,45,0.82))"
+                          : "linear-gradient(135deg, rgba(76,229,140,0.96), rgba(4,201,92,0.82))",
+                    boxShadow: `inset 0 1px 0 rgba(255,255,255,0.18), 0 0 13px ${statusColor}35`,
                     overflow: "hidden",
                     transition: "width 420ms ease, background 240ms ease",
                   }}
                 >
-                  {spentFitsInside && (
-                    <span
-                      style={{
-                        ...progressValueStyle,
-                        insetInlineStart: 8,
-                        color: colors.white,
-                        background: "rgba(5,24,48,0.40)",
-                        border: "1px solid rgba(255,255,255,0.18)",
-                        borderRadius: 999,
-                        padding: "3px 7px",
-                        textShadow: "0 1px 4px rgba(0,0,0,0.46)",
-                      }}
-                    >
-                      {spentLabel}
-                    </span>
-                  )}
+                  <span
+                    style={{
+                      ...progressValueStyle,
+                      inset: 0,
+                      top: "auto",
+                      transform: "none",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      maxWidth: "100%",
+                      color: colors.white,
+                      padding: "0 10px",
+                      textShadow: "0 1px 4px rgba(0,0,0,0.38)",
+                    }}
+                  >
+                    {spentLabel}
+                  </span>
                 </div>
 
                 {remainingFitsInside && (
                   <span
                     style={{
                       ...progressValueStyle,
-                      insetInlineEnd: 8,
-                      color: "#07345f",
-                      background: "rgba(255,255,255,0.78)",
-                      border: "1px solid rgba(8,52,95,0.16)",
-                      borderRadius: 999,
-                      padding: "3px 7px",
-                      textShadow: "0 1px 0 rgba(255,255,255,0.70)",
+                      insetInlineEnd: 12,
+                      color: colors.navy,
+                      background: "transparent",
+                      padding: "0 2px",
+                      textShadow: "0 1px 0 rgba(255,255,255,0.68)",
                     }}
                   >
                     {remainingLabel}
                   </span>
                 )}
-
-                {!spentFitsInside && (
-                  <span
-                    style={{
-                      ...progressOutsideValueStyle,
-                      insetInlineStart: 4,
-                      transform: "translateY(calc(-100% - 4px))",
-                      color: statusColor,
-                    }}
-                  >
-                    {spentLabel}
-                  </span>
-                )}
-
-                <span
-                  aria-hidden="true"
-                  style={{
-                    position: "absolute",
-                    insetInlineStart: `calc(${safeProgress}% - 12px)`,
-                    top: -8,
-                    width: 24,
-                    height: 24,
-                    borderRadius: "50%",
-                    display: "inline-flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    background: "linear-gradient(145deg, rgba(255,255,255,0.96), rgba(214,238,255,0.84))",
-                    border: "1px solid rgba(255,255,255,0.72)",
-                    boxShadow: `0 6px 13px rgba(4,24,48,0.22), 0 0 14px ${statusColor}50`,
-                    color: statusColor,
-                    fontSize: 13,
-                    transform: "translateX(50%)",
-                    animation: "cashFloat 2.2s ease-in-out infinite",
-                    transition: "inset-inline-start 420ms ease, color 240ms ease",
-                  }}
-                >
-                  💸
-                </span>
               </div>
               {remainingShowsAtEnd && (
                 <span style={progressEndLabelStyle}>{remainingLabel}</span>
@@ -529,11 +469,6 @@ export default function SpendingCapCard({
 
       <style>
         {`
-          @keyframes cashFloat {
-            0%, 100% { transform: translateX(50%) translateY(0) rotate(-7deg); }
-            50% { transform: translateX(50%) translateY(-4px) rotate(8deg); }
-          }
-
           @keyframes warningPulse {
             0%, 100% { transform: translateY(-50%) scale(1); }
             50% { transform: translateY(-50%) scale(1.08); }
@@ -574,19 +509,4 @@ const progressValueStyle = {
   lineHeight: 1,
   textOverflow: "ellipsis",
   whiteSpace: "nowrap",
-};
-
-const progressOutsideValueStyle = {
-  position: "absolute",
-  top: -2,
-  zIndex: 3,
-  maxWidth: "44%",
-  overflow: "hidden",
-  fontSize: 10,
-  fontWeight: 900,
-  fontVariantNumeric: "tabular-nums",
-  lineHeight: 1,
-  textOverflow: "ellipsis",
-  whiteSpace: "nowrap",
-  textShadow: "0 1px 3px rgba(0,0,0,0.28)",
 };
