@@ -12,6 +12,8 @@ export default function OpeningBalancesTable({
   rows,
   onCashChange,
   onUpdate,
+  onSave,
+  hasChanges,
   inputStyle,
 }) {
   const { currencyLabel } = useLocale();
@@ -76,7 +78,7 @@ export default function OpeningBalancesTable({
           <input
             type="number"
             value={row.price}
-            readOnly={row.kind === "bank"}
+            readOnly={row.kind === "bank" || row.kind === "fixed"}
             onChange={(event) =>
               onUpdate(row.group, row.id, {
                 [row.priceField]: Number(event.target.value || 0),
@@ -85,7 +87,7 @@ export default function OpeningBalancesTable({
             placeholder="السعر"
             style={{
               ...compactInput,
-              color: row.kind === "bank" ? "var(--text-muted)" : undefined,
+              color: row.kind === "bank" || row.kind === "fixed" ? "var(--text-muted)" : undefined,
             }}
           />
           <select value={row.unitLabel} disabled style={{ ...compactInput, opacity: 0.9 }}>
@@ -112,6 +114,29 @@ export default function OpeningBalancesTable({
           />
         </div>
       ))}
+
+      <button
+        type="button"
+        onClick={onSave}
+        disabled={!hasChanges}
+        style={{
+          width: "100%",
+          marginTop: 10,
+          padding: "10px 12px",
+          border: 0,
+          borderRadius: 12,
+          background: hasChanges
+            ? "linear-gradient(135deg,var(--gold-primary),var(--gold-border))"
+            : "rgba(255,255,255,0.10)",
+          color: hasChanges ? "var(--text-heading)" : "var(--text-muted)",
+          cursor: hasChanges ? "pointer" : "default",
+          fontFamily: "inherit",
+          fontSize: 12,
+          fontWeight: 900,
+        }}
+      >
+        حفظ إعادة التعيين
+      </button>
     </>
   );
 }

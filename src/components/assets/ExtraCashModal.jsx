@@ -2,7 +2,11 @@ import { useState } from "react";
 import visualIdentity from "../../theme/visualIdentity";
 
 export default function ExtraCashModal({ state, onSubmit, onClose, preset = null }) {
-  const isRequiredSurplus = ["salary_surplus", "month_end_surplus"].includes(preset?.source);
+  const isRequiredSurplus = [
+    "salary_surplus",
+    "month_end_surplus",
+    "structural_liability_reduction_surplus",
+  ].includes(preset?.source);
   const [amount, setAmount] = useState(preset?.amount ? String(preset.amount) : "");
   const [note, setNote] = useState(preset?.note || "");
   const [allocation, setAllocation] = useState(isRequiredSurplus ? "cash" : "spendingCap");
@@ -119,7 +123,7 @@ export default function ExtraCashModal({ state, onSubmit, onClose, preset = null
           textAlign: "right",
         }}
       >
-        <h3 style={{ marginTop: 0 }}>{preset?.source === "salary_surplus" ? "توجيه فائض الراتب" : "دخل إضافي"}</h3>
+        <h3 style={{ marginTop: 0 }}>{["salary_surplus", "structural_liability_reduction_surplus"].includes(preset?.source) ? "توجيه فائض الراتب" : "دخل إضافي"}</h3>
 
         <label style={{ display: "block", marginBottom: 6 }}>المبلغ الداخل</label>
         <input

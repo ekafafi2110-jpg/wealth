@@ -1,4 +1,37 @@
 import visualIdentity from "../../theme/visualIdentity";
+import {
+  Apple,
+  Beef,
+  Bolt,
+  Car,
+  Droplets,
+  Fuel,
+  Gamepad2,
+  GraduationCap,
+  HeartPulse,
+  Phone,
+  ReceiptText,
+  ShoppingCart,
+  Soup,
+  Wrench,
+} from "lucide-react";
+
+const CATEGORY_ICONS = {
+  apple: Apple,
+  beef: Beef,
+  bolt: Bolt,
+  car: Car,
+  droplets: Droplets,
+  fuel: Fuel,
+  gamepad: Gamepad2,
+  graduation: GraduationCap,
+  health: HeartPulse,
+  phone: Phone,
+  receipt: ReceiptText,
+  shopping: ShoppingCart,
+  soup: Soup,
+  wrench: Wrench,
+};
 
 export default function ExpenseCategoryGrid({
   categories,
@@ -34,6 +67,7 @@ export default function ExpenseCategoryGrid({
           const tile = getTileStyle(category);
           const accent = item.color || tile.icon || visualIdentity.colors.cyan;
           const pendingAmount = Number(pendingByCategory[category] || 0);
+          const Icon = CATEGORY_ICONS[item.iconKey];
 
           return (
             <button
@@ -139,7 +173,7 @@ export default function ExpenseCategoryGrid({
                       : `inset 0 1px 0 ${accent}2A`,
                 }}
               >
-                {item.icon || icons[category] || "📌"}
+                {Icon ? <Icon size={large ? 20 : 15} strokeWidth={2.4} /> : item.icon || icons[category] || "•"}
               </span>
 
               <span

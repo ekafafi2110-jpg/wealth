@@ -1,5 +1,6 @@
 // Test Cline Integration
 import { useEffect, useRef, useState } from "react";
+import { Trash2 } from "lucide-react";
 import { INITIAL_STATE } from "./data/initialState";
 import { recordExpense } from "./logic/expenses";
 import {
@@ -262,15 +263,56 @@ const G = {
 };
 
 const DEFAULT_EXPENSE_CATEGORIES = [
-  { id: "food", label: "طعام", icon: "🍽️", color: "#f59e0b", pinned: true },
-  { id: "transport", label: "مواصلات", icon: "🚗", color: "#3b82f6", pinned: true },
-  { id: "shopping", label: "تسوق", icon: "🛒", color: "#a855f7", pinned: true },
-  { id: "health", label: "صحة", icon: "💚", color: "#22c55e", pinned: true },
-  { id: "entertainment", label: "ترفيه", icon: "🎮", color: "#ec4899", pinned: true },
-  { id: "bills", label: "فواتير", icon: "🧾", color: "#7BBFF5", pinned: true },
-  { id: "fuel", label: "بنزين", icon: "⛽", color: "#f97316", pinned: true },
-  { id: "other", label: "أخرى", icon: "•••", color: "#91A9BF", isOther: true, pinned: true },
+  { id: "food", label: "طعام", iconKey: "soup", color: "#f59e0b", pinned: true },
+  { id: "groceries", label: "مواد غذائية", iconKey: "apple", color: "#52E5A0", pinned: false },
+  { id: "meat-poultry", label: "لحوم ودواجن", iconKey: "beef", color: "#FF8A65", pinned: false },
+  { id: "transport", label: "مواصلات", iconKey: "car", color: "#3b82f6", pinned: true },
+  { id: "car-maintenance", label: "صيانة وإصلاح سيارة", iconKey: "wrench", color: "#F59E0B", pinned: false },
+  { id: "shopping", label: "تسوق", iconKey: "shopping", color: "#a855f7", pinned: true },
+  { id: "health", label: "صحة", iconKey: "health", color: "#22c55e", pinned: true },
+  { id: "entertainment", label: "ترفيه", iconKey: "gamepad", color: "#ec4899", pinned: true },
+  { id: "school-installments", label: "أقساط مدارس وجامعات", iconKey: "graduation", color: "#F5C842", pinned: false },
+  { id: "bills", label: "فواتير", iconKey: "receipt", color: "#7BBFF5", pinned: true },
+  { id: "electricity-bill", label: "فاتورة كهرباء", iconKey: "bolt", color: "#F5C842", pinned: false },
+  { id: "water-bill", label: "فاتورة ماء", iconKey: "droplets", color: "#38BDF8", pinned: false },
+  { id: "mobile-bill", label: "فاتورة خلوي", iconKey: "phone", color: "#A78BF5", pinned: false },
+  { id: "fuel", label: "بنزين", iconKey: "fuel", color: "#f97316", pinned: true },
+  { id: "other", label: "\u0623\u062e\u0631\u0649", icon: "...", color: "#91A9BF", isOther: true, pinned: true },
 ];
+const CATEGORY_ICON_FALLBACKS = {
+  apple: "🥬",
+  beef: "🥩",
+  bolt: "⚡",
+  car: "🚗",
+  droplets: "💧",
+  fuel: "⛽",
+  gamepad: "🎮",
+  graduation: "🎓",
+  health: "💚",
+  phone: "📱",
+  receipt: "🧾",
+  shopping: "🛒",
+  soup: "🍽️",
+  wrench: "🔧",
+};
+const getCategoryDisplayIcon = (category) =>
+  category?.icon || CATEGORY_ICON_FALLBACKS[category?.iconKey] || CAT_ICONS[category?.label] || "•";
+const getExpenseCategoryIconKeyByName = (name) => {
+  const text = String(name || "").trim().toLowerCase();
+  const rules = [
+    { words: ["\u0645\u0648\u0627\u062f", "\u063a\u0630\u0627\u0626\u064a"], iconKey: "apple" },
+    { words: ["\u0644\u062d\u0648\u0645", "\u062f\u0648\u0627\u062c\u0646", "\u062f\u062c\u0627\u062c"], iconKey: "beef" },
+    { words: ["\u0635\u064a\u0627\u0646\u0629", "\u0633\u064a\u0627\u0631\u0629", "\u0643\u0631\u0627\u062c"], iconKey: "wrench" },
+    { words: ["\u0645\u062f\u0627\u0631\u0633", "\u062c\u0627\u0645\u0639\u0627\u062a", "\u0623\u0642\u0633\u0627\u0637", "\u062a\u0639\u0644\u064a\u0645"], iconKey: "graduation" },
+    { words: ["\u0643\u0647\u0631\u0628\u0627\u0621"], iconKey: "bolt" },
+    { words: ["\u0645\u0627\u0621"], iconKey: "droplets" },
+    { words: ["\u062e\u0644\u0648\u064a", "\u062c\u0648\u0627\u0644", "\u0647\u0627\u062a\u0641"], iconKey: "phone" },
+    { words: ["\u0628\u0646\u0632\u064a\u0646", "\u0648\u0642\u0648\u062f"], iconKey: "fuel" },
+    { words: ["\u0641\u0627\u062a\u0648\u0631\u0629", "\u0641\u0648\u0627\u062a\u064a\u0631"], iconKey: "receipt" },
+    { words: ["\u0637\u0639\u0627\u0645", "\u0623\u0643\u0644", "\u0645\u0637\u0639\u0645"], iconKey: "soup" },
+  ];
+  return rules.find((rule) => rule.words.some((word) => text.includes(word)))?.iconKey || "";
+};
 
 const HOME_UI = {
   overlay: {
@@ -818,7 +860,7 @@ const allExpenseCategories = [
     (saved) =>
       !defaultExpenseCategories.some((base) => base.id === saved.id)
   ),
-];
+].filter((category) => !category.hidden);
 
 const pinnedExpenseCategories = allExpenseCategories
   .filter((cat) => cat.pinned && !cat.isOther)
@@ -912,6 +954,27 @@ const isMixedPayment =
   !["", "cash", "emergency"].includes(paymentMethod);
 const showLegacyDeficitPanel =
   amountExceedsCap && (paymentMethod === "cash" || isMixedPayment);
+
+useEffect(() => {
+  const draft = state.pendingStructuralExpenseDraft;
+  if (readOnly || !draft?.amount) return undefined;
+
+  const timer = window.setTimeout(() => {
+    setAmount(String(Number(draft.amount || 0).toFixed(2)));
+    setCategory(draft.category || "فرق التزام هيكلي");
+    setNote(draft.note || "فرق زيادة التزام هيكلي");
+    setPaymentMethod("cash");
+    setSplitWithCash(false);
+    setCashSelectionExplicit(true);
+    setPendingExpenses([]);
+    setState((prev) => ({
+      ...prev,
+      pendingStructuralExpenseDraft: null,
+    }));
+  }, 0);
+
+  return () => window.clearTimeout(timer);
+}, [readOnly, setState, state.pendingStructuralExpenseDraft]);
 
 useEffect(() => {
   const timer = window.setTimeout(() => {
@@ -2226,6 +2289,9 @@ setState(nextState);
   });
 }
 function getExpenseCategoryIconByName(name) {
+  const iconKey = getExpenseCategoryIconKeyByName(name);
+  if (iconKey) return CATEGORY_ICON_FALLBACKS[iconKey] || "•";
+
   const text = String(name || "").trim().toLowerCase();
 
   const rules = [
@@ -2253,7 +2319,7 @@ function getExpenseCategoryIconByName(name) {
     rule.words.some((word) => text.includes(word))
   );
 
-  return matchedRule?.icon || "📌";
+  return matchedRule?.icon || "•";
 }
 
 function addExtraExpenseCategory() {
@@ -2282,6 +2348,7 @@ function addExtraExpenseCategory() {
     const newCategory = {
       id: `extra-${Date.now()}`,
       label: cleanLabel,
+      iconKey: getExpenseCategoryIconKeyByName(cleanLabel),
       icon: getExpenseCategoryIconByName(cleanLabel),
       color: "var(--text-muted)",
       pinned: false,
@@ -2336,6 +2403,61 @@ function toggleExpenseCategoryPinned(catId) {
       },
     };
   });
+}
+function deleteExpenseCategory(catItem) {
+  if (!catItem?.id || catItem.isOther) return;
+
+  const categoryLabel = String(catItem.label || "").trim();
+  const hasRecordedExpense = [
+    ...(state.expenses || []),
+    ...(state.monthlySnapshots || []).flatMap((snapshot) => snapshot.expenses || []),
+  ].some((expense) => String(expense.category || "").trim() === categoryLabel);
+
+  if (hasRecordedExpense) {
+    alert("لا يمكن حذف هذا النوع لأن هناك مصروفات مسجلة عليه. احفظ السجل كما هو حتى لا تختل التقارير.");
+    return;
+  }
+
+  const confirmed = window.confirm(`هل تريد حذف نوع المصروف "${categoryLabel}"؟`);
+  if (!confirmed) return;
+
+  setState((prev) => {
+    const savedItems =
+      prev.expenseCategories?.items ||
+      [
+        ...(prev.expenseCategories?.main || []),
+        ...(prev.expenseCategories?.extra || []),
+      ];
+    const isDefault = defaultExpenseCategories.some((base) => base.id === catItem.id);
+    const cleanedCaps = { ...(prev.settings?.expenseCategoryCaps || {}) };
+    delete cleanedCaps[categoryLabel];
+
+    const nextItems = isDefault
+      ? [
+          ...savedItems.filter((item) => item.id !== catItem.id),
+          { ...catItem, hidden: true, pinned: false },
+        ]
+      : savedItems.filter((item) => item.id !== catItem.id);
+
+    return {
+      ...prev,
+      settings: {
+        ...prev.settings,
+        expenseCategoryCaps: cleanedCaps,
+      },
+      expenseCategories: {
+        ...(prev.expenseCategories || {}),
+        items: nextItems,
+      },
+    };
+  });
+
+  if (category === categoryLabel) {
+    const fallback = allExpenseCategories.find(
+      (category) => category.id !== catItem.id && !category.hidden && !category.isOther
+    );
+    if (fallback?.label) selectExpenseCategory(fallback.label);
+  }
 }
  return (
     <div
@@ -3378,7 +3500,7 @@ flexDirection: "column",
       .map((catItem) => (
         <div key={catItem.id} style={HOME_UI.row}>
   <span>
-    {catItem.icon} {catItem.label}
+    {getCategoryDisplayIcon(catItem)} {catItem.label}
   </span>
 
   <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -3396,6 +3518,28 @@ flexDirection: "column",
       }}
     >
       {catItem.pinned ? "★" : "☆"}
+    </button>
+
+    <button
+      type="button"
+      onClick={() => deleteExpenseCategory(catItem)}
+      title="حذف نوع المصروف"
+      aria-label="حذف نوع المصروف"
+      style={{
+        width: 28,
+        height: 28,
+        borderRadius: 9,
+        border: "1px solid rgba(255,107,107,0.34)",
+        background: "rgba(255,107,107,0.10)",
+        color: "#FF9B9B",
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+        cursor: "pointer",
+        padding: 0,
+      }}
+    >
+      <Trash2 size={14} strokeWidth={2.3} />
     </button>
 
     <button
@@ -3666,15 +3810,20 @@ function ReportsScreen({ state }) {
     ...(state.settings?.expenseCategoryCaps || {}),
   }).forEach((label) => {
     if (!reportCategoryMap.has(label)) {
+      const iconKey = getExpenseCategoryIconKeyByName(label);
       reportCategoryMap.set(label, {
         id: `report-${label}`,
         label,
-        icon: CAT_ICONS[label] || "•",
+        iconKey,
+        icon: CATEGORY_ICON_FALLBACKS[iconKey] || CAT_ICONS[label] || "•",
         color: CC[label] || visualIdentity.colors.cyan,
       });
     }
   });
-  const reportCategories = Array.from(reportCategoryMap.values());
+  const reportCategories = Array.from(reportCategoryMap.values()).map((category) => ({
+    ...category,
+    icon: getCategoryDisplayIcon(category),
+  }));
   const expenseTrendMap = new Map();
   (state.monthlySnapshots || []).forEach((snapshot) => {
     const value = (snapshot.expenses || []).reduce(
@@ -5074,6 +5223,7 @@ function AssetsScreen({ state, setState, onAddExtraCash, readOnly = false }) {
     transfer_in_units: "إضافة وحدات بالمناقلة",
     opening_balance: "رصيد افتتاحي",
     opening_asset: "إضافة أصل افتتاحي",
+    asset_value_reset: "إعادة تعيين قيمة أصل",
     extra_cash: "دخل إضافي",
   };
   const movementRows = (row) =>
@@ -5105,6 +5255,7 @@ function AssetsScreen({ state, setState, onAddExtraCash, readOnly = false }) {
           "reserved_asset_payment_paid",
           "opening_balance",
           "opening_asset",
+          "asset_value_reset",
           "extra_cash",
           "transfer_to_cash",
           "transfer_to_bank",
@@ -6204,7 +6355,14 @@ const [liabilityAssetKey, setLiabilityAssetKey] = useState("cash");
   );
 }
 
-function SettingsScreen({ state, setState, authSession, onResetAllData }) {
+function SettingsScreen({
+  state,
+  setState,
+  authSession,
+  onResetAllData,
+  onAllocateStructuralSurplus,
+  onOpenStructuralExpenseDraft,
+}) {
   const { t } = useLocale();
   const [settingsView, setSettingsView] = useState("menu");
   const currencyLabel = getCurrencyLabel(state);
@@ -6341,6 +6499,127 @@ function clampSpendingCapAfterStructuralChange(nextState) {
   const guarded = applyFinancialSettingGuards(nextState);
   return guarded.ok ? guarded.state : null;
 }
+const getStructuralAmount = (item) =>
+  Number(item?.monthlyAmount ?? item?.monthly ?? item?.amount ?? 0);
+const getSurplusAssetKeyFromHistory = (entry) => {
+  if (!entry) return "";
+  if (entry.assetKey) return entry.assetKey;
+  if (entry.assetKind === "cash") return "cash";
+  if (!entry.assetId) return "";
+  if (entry.assetKind === "bank") return `bank:${entry.assetId}`;
+  if (entry.assetKind === "gold") return `gold:${entry.assetId}`;
+  if (entry.assetKind === "silver") return `silver:${entry.assetId}`;
+  if (entry.assetKind === "stocks") return `stock:${entry.assetId}`;
+  if (entry.assetKind === "fixed" || entry.assetKind === "custom") {
+    return `custom:${entry.assetId}`;
+  }
+  return "";
+};
+const settleStructuralIncreaseFromSurplus = (sourceState, amount, label) => {
+  let next = structuredClone(sourceState);
+  let remaining = Number(amount || 0);
+  const now = new Date().toISOString();
+  const currentMonth = next.currentMonth || now.slice(0, 7);
+  const pendingSurplus = Number(next.session?.pendingSurplus || 0);
+
+  if (pendingSurplus > 0.01 && remaining > 0.01) {
+    const used = Math.min(pendingSurplus, remaining);
+    remaining = Number((remaining - used).toFixed(2));
+    next.session = {
+      ...next.session,
+      pendingSurplus: Number((pendingSurplus - used).toFixed(2)),
+      savingsAmount: Math.max(0, Number(next.session?.savingsAmount || 0) - used),
+    };
+    next.transactions = [
+      ...(next.transactions || []),
+      {
+        id: `${Date.now()}-structural-pending-surplus`,
+        type: "structural_liability_increase_from_pending_surplus",
+        amount: used,
+        label,
+        date: now,
+      },
+    ];
+  }
+
+  const surplusSources = [...(next.assetHistory || [])]
+    .filter((entry) => {
+      const source = entry.originSource || entry.source;
+      const isSurplusSource =
+        ["salary_surplus", "structural_liability_reduction_surplus"].includes(source) ||
+        (source === "extra_income" && String(entry.note || "").includes("فائض راتب"));
+      return (
+        isSurplusSource &&
+        String(entry.date || "").slice(0, 7) === currentMonth &&
+        Number(entry.amount || 0) > 0 &&
+        getSurplusAssetKeyFromHistory(entry)
+      );
+    })
+    .sort((a, b) => {
+      const aOrder = Number(a.sortSequence || 0);
+      const bOrder = Number(b.sortSequence || 0);
+      if (aOrder !== bOrder) return bOrder - aOrder;
+      return String(b.recordedAt || b.date || "").localeCompare(String(a.recordedAt || a.date || ""));
+    });
+
+  surplusSources.forEach((source) => {
+    if (remaining <= 0.01) return;
+    const assetKey = getSurplusAssetKeyFromHistory(source);
+    const available = getAssetAvailable(next, assetKey);
+    const alreadyUsed = (next.assetHistory || [])
+      .filter(
+        (entry) =>
+          entry.type === "structural_liability_increase_from_surplus_asset" &&
+          String(entry.originalSurplusId || "") === String(source.id || "")
+      )
+      .reduce((sum, entry) => sum + Number(entry.amount || 0), 0);
+    const sourceRemaining = Math.max(0, Number(source.amount || 0) - alreadyUsed);
+    const used = Math.min(remaining, sourceRemaining, available);
+    if (used <= 0.01) return;
+
+    const deduction = deductFromAsset(next, assetKey, used);
+    if (!deduction.success) return;
+    next = deduction.nextState;
+    remaining = Number((remaining - used).toFixed(2));
+    next.assetHistory = [
+      ...(next.assetHistory || []),
+      {
+        id: `${Date.now()}-structural-surplus-${source.id || assetKey}`,
+        date: now,
+        recordedAt: now,
+        type: "structural_liability_increase_from_surplus_asset",
+        source: "structural_liability_adjustment",
+        assetKey,
+        originalSurplusId: source.id || null,
+        amount: used,
+        label,
+      },
+    ];
+    next.transactions = [
+      ...(next.transactions || []),
+      {
+        id: `${Date.now()}-structural-surplus-tx-${source.id || assetKey}`,
+        type: "structural_liability_increase_from_surplus_asset",
+        amount: used,
+        assetKey,
+        label,
+        date: now,
+      },
+    ];
+  });
+
+  return { nextState: next, remaining };
+};
+const queueStructuralExpenseDraft = (nextState, amount, label) => ({
+  ...nextState,
+  pendingStructuralExpenseDraft: {
+    id: `${Date.now()}-structural-diff`,
+    amount: Number(amount.toFixed(2)),
+    category: "فرق التزام هيكلي",
+    note: `فرق زيادة التزام هيكلي${label ? ` - ${label}` : ""}`,
+    createdAt: new Date().toISOString(),
+  },
+});
 
   const updateSetting = (path, value) => {
     setState((prev) => {
@@ -6373,6 +6652,7 @@ const [openingAssetName, setOpeningAssetName] = useState("");
 const [openingAssetUnits, setOpeningAssetUnits] = useState("");
 const [openingAssetPrice, setOpeningAssetPrice] = useState("");
 const [showOpeningAssetForm, setShowOpeningAssetForm] = useState(false);
+const [openingBalanceDrafts, setOpeningBalanceDrafts] = useState({});
 const [showStructuralForm, setShowStructuralForm] = useState(false);
 const [settingsSectionsOpen, setSettingsSectionsOpen] = useState({
   cards: false,
@@ -6385,12 +6665,13 @@ const savedSettingsCategories = state.expenseCategories?.items || [];
 const expenseCapCategories = [
   ...DEFAULT_EXPENSE_CATEGORIES.map((base) => {
     const saved = savedSettingsCategories.find((item) => item.id === base.id);
-    return saved ? { ...base, ...saved } : base;
+    const category = saved ? { ...base, ...saved } : base;
+    return { ...category, icon: getCategoryDisplayIcon(category) };
   }),
-  ...savedSettingsCategories.filter(
-    (saved) => !DEFAULT_EXPENSE_CATEGORIES.some((base) => base.id === saved.id)
-  ),
-];
+  ...savedSettingsCategories
+    .filter((saved) => !DEFAULT_EXPENSE_CATEGORIES.some((base) => base.id === saved.id))
+    .map((category) => ({ ...category, icon: getCategoryDisplayIcon(category) })),
+].filter((category) => !category.hidden);
 const changeExpenseCategoryCap = (label, value) => {
   const currentCaps = state.settings?.expenseCategoryCaps || {};
   const nextCaps = { ...currentCaps, [label]: value };
@@ -6439,6 +6720,7 @@ const addExpenseCategoryFromSettings = () => {
     return;
   }
 
+  const iconKey = getExpenseCategoryIconKeyByName(cleanLabel);
   setState((prev) => ({
     ...prev,
     expenseCategories: {
@@ -6448,7 +6730,8 @@ const addExpenseCategoryFromSettings = () => {
         {
           id: `extra-${Date.now()}`,
           label: cleanLabel,
-          icon: "📌",
+          iconKey,
+          icon: CATEGORY_ICON_FALLBACKS[iconKey] || "•",
           color: visualIdentity.colors.cyan,
           pinned: false,
         },
@@ -6494,27 +6777,175 @@ const openNewSettingsCard = () => {
   setSettingsSectionsOpen((prev) => ({ ...prev, cards: true }));
   setSettingsCardMode(settingsCardMode === "add" ? "" : "add");
 };
-const updateAssetItem = (assetGroup, itemId, patch) => {
-  setState((p) => ({
-    ...p,
-    assets: {
-      ...p.assets,
-      [assetGroup]: (p.assets[assetGroup] || []).map((item) =>
-        item.id === itemId
-          ? {
-              ...item,
-              ...patch,
-              ...(["gold", "silver", "stocks"].includes(assetGroup) && patch.wac !== undefined
-                ? { currentPrice: patch.wac }
-                : {}),
-              ...(assetGroup === "custom" && patch.price !== undefined
-                ? { currentPrice: patch.price, wac: item.wac ?? item.price ?? patch.price }
-                : {}),
-            }
-          : item
-      ),
+const updateOpeningBalanceDraft = (key, patch) => {
+  setOpeningBalanceDrafts((prev) => ({
+    ...prev,
+    [key]: {
+      ...(prev[key] || {}),
+      ...patch,
     },
   }));
+};
+const openingResetHistory = ({ now, assetKind, assetKey, assetId, assetName, before, after }) => ({
+  id: `${Date.now()}-${assetKey}-reset`,
+  date: now,
+  type: "asset_value_reset",
+  source: "settings",
+  assetKind,
+  assetKey,
+  assetId,
+  assetName,
+  amount: after.total,
+  valueBefore: before.total,
+  valueAfter: after.total,
+  difference: Number((after.total - before.total).toFixed(2)),
+  before,
+  after,
+  displayLabel: "إعادة تعيين قيمة أصل",
+});
+const saveOpeningBalanceResets = () => {
+  const draftKeys = Object.keys(openingBalanceDrafts);
+  if (!draftKeys.length) return;
+
+  setState((prev) => {
+    const next = structuredClone(prev);
+    const now = new Date().toISOString();
+    const history = [];
+    const changed = (before, after) =>
+      JSON.stringify(before) !== JSON.stringify(after);
+
+    if (openingBalanceDrafts.cash) {
+      const before = {
+        total: Number(prev.assets?.cash || 0),
+        units: Number(prev.assets?.cash || 0),
+        price: 1,
+      };
+      const after = {
+        total: Number(openingBalanceDrafts.cash.cash ?? before.total),
+        units: Number(openingBalanceDrafts.cash.cash ?? before.total),
+        price: 1,
+      };
+      if (changed(before, after)) {
+        next.assets.cash = after.total;
+        history.push(
+          openingResetHistory({
+            now,
+            assetKind: "cash",
+            assetKey: "cash",
+            assetName: "كاش ادخار",
+            before,
+            after,
+          })
+        );
+      }
+    }
+
+    const applyList = (group, assetKind, assetKeyPrefix, getName, readCurrent, writeNext) => {
+      (next.assets[group] || []).forEach((item) => {
+        const key = `${group}-${item.id}`;
+        const draft = openingBalanceDrafts[key];
+        if (!draft) return;
+        const before = readCurrent(item);
+        const after = { ...before, ...draft };
+        after.total = Number((Number(after.units || 0) * Number(after.price || 0)).toFixed(2));
+        if (!changed(before, after)) return;
+        writeNext(item, after);
+        history.push(
+          openingResetHistory({
+            now,
+            assetKind,
+            assetKey: `${assetKeyPrefix}:${item.id}`,
+            assetId: item.id,
+            assetName: getName(item, after),
+            before,
+            after,
+          })
+        );
+      });
+    };
+
+    applyList(
+      "banks",
+      "bank",
+      "bank",
+      (item, after) => after.name || item.name,
+      (item) => ({
+        name: item.name || "",
+        units: Number(item.balance || 0),
+        price: 1,
+        total: Number(item.balance || 0),
+      }),
+      (item, after) => {
+        item.name = after.name;
+        item.balance = Number(after.units || 0);
+      }
+    );
+
+    [
+      ["gold", "gold", "gold", "label", "wac"],
+      ["silver", "silver", "silver", "label", "wac"],
+      ["stocks", "stocks", "stock", "name", "wac"],
+    ].forEach(([group, assetKind, assetKeyPrefix, nameField, priceField]) => {
+      applyList(
+        group,
+        assetKind,
+        assetKeyPrefix,
+        (item, after) => after.name || item[nameField],
+        (item) => ({
+          name: item[nameField] || "",
+          units: Number(item.units || 0),
+          price: Number(item[priceField] || 0),
+          total: Number((Number(item.units || 0) * Number(item[priceField] || 0)).toFixed(2)),
+        }),
+        (item, after) => {
+          item[nameField] = after.name;
+          item.units = Number(after.units || 0);
+          item[priceField] = Number(after.price || 0);
+          item.currentPrice = Number(after.price || 0);
+        }
+      );
+    });
+
+    applyList(
+      "custom",
+      "custom",
+      "custom",
+      (item, after) => after.name || item.name,
+      (item) => {
+        if (item.type === "fixed") {
+          return {
+            name: item.name || "",
+            units: Number(item.amount || 0),
+            price: 1,
+            total: Number(item.amount || 0),
+          };
+        }
+        return {
+          name: item.name || "",
+          units: Number(item.units || 0),
+          price: Number(item.price || 0),
+          total: Number((Number(item.units || 0) * Number(item.price || 0)).toFixed(2)),
+        };
+      },
+      (item, after) => {
+        item.name = after.name;
+        if (item.type === "fixed") {
+          item.amount = Number(after.units || 0);
+        } else {
+          item.units = Number(after.units || 0);
+          item.price = Number(after.price || 0);
+          item.wac = Number(after.price || 0);
+          item.currentPrice = Number(after.price || 0);
+        }
+      }
+    );
+
+    if (!history.length) return prev;
+    next.assetHistory = [...(next.assetHistory || []), ...history];
+    return next;
+  });
+
+  setOpeningBalanceDrafts({});
 };
 const addOpeningAsset = () => {
   const rawName = String(openingAssetName || "").trim();
@@ -6687,65 +7118,128 @@ const addOpeningAsset = () => {
   if (monthly <= 0) return alert("أدخل قيمة القسط الشهري");
 
   const dueDay = 1;
+  const label = structuralName.trim();
+  const list = state.structuralLiabilities || state.structural || [];
+  let queuedExpenseAmount = 0;
 
-  setState((p) => {
-    const list = p.structuralLiabilities || p.structural || [];
+  let next = {
+    ...state,
+    structuralLiabilities: [
+      ...list,
+      {
+        id: Date.now(),
+        name: label,
+        monthly,
+        dueDay,
+      },
+    ],
+  };
 
-    const next = {
-      ...p,
-      structuralLiabilities: [
-        ...list,
-        {
-          id: Date.now(),
-          name: structuralName.trim(),
-          monthly,
-          dueDay,
-        },
-      ],
-    };
+  if (state.session?.isOpen) {
+    const settled = settleStructuralIncreaseFromSurplus(next, monthly, label);
+    next = settled.nextState;
+    if (settled.remaining > 0.01) {
+      queuedExpenseAmount = settled.remaining;
+      next = queueStructuralExpenseDraft(next, settled.remaining, label);
+    }
+  }
 
-    return clampSpendingCapAfterStructuralChange(next) || p;
-  });
+  const guarded = clampSpendingCapAfterStructuralChange(next);
+  if (!guarded) return;
+
+  setState(guarded);
+
+  if (queuedExpenseAmount > 0.01) {
+    window.setTimeout(() => {
+      onOpenStructuralExpenseDraft?.(queuedExpenseAmount);
+      alert("بقي فرق من زيادة الالتزام الهيكلي. تم تجهيزه كمصروف في الرئيسية لاختيار طريقة الدفع.");
+    }, 0);
+  }
 
   setStructuralName("");
   setStructuralMonthly("");
   setShowStructuralForm(false);
 };
 const updateStructuralLiability = (id, field, value) => {
-  setState((p) => {
-    const list = p.structuralLiabilities || p.structural || [];
+  const list = state.structuralLiabilities || state.structural || [];
+  const current = list.find((item) => item.id === id);
+  const beforeAmount = getStructuralAmount(current);
+  const nextValue =
+    field === "monthly" || field === "dueDay" ? Number(value || 0) : value;
+  const afterAmount = field === "monthly" ? Number(nextValue || 0) : beforeAmount;
+  const difference = Number((afterAmount - beforeAmount).toFixed(2));
+  let structuralSurplusAmount = 0;
+  let queuedExpenseAmount = 0;
 
-    const next = {
-      ...p,
-      structuralLiabilities: list.map((item) =>
-        item.id === id
-          ? {
-              ...item,
-              [field]:
-                field === "monthly" || field === "dueDay"
-                  ? Number(value || 0)
-                  : value,
-            }
-          : item
-      ),
-    };
+  let next = {
+    ...state,
+    structuralLiabilities: list.map((item) =>
+      item.id === id
+        ? {
+            ...item,
+            [field]: nextValue,
+          }
+        : item
+    ),
+  };
 
-    return clampSpendingCapAfterStructuralChange(next) || p;
-  });
+  if (state.session?.isOpen && field === "monthly" && Math.abs(difference) > 0.01) {
+    if (difference > 0) {
+      const settled = settleStructuralIncreaseFromSurplus(
+        next,
+        difference,
+        current?.name || ""
+      );
+      next = settled.nextState;
+      if (settled.remaining > 0.01) {
+        queuedExpenseAmount = settled.remaining;
+        next = queueStructuralExpenseDraft(next, settled.remaining, current?.name || "");
+      }
+    } else {
+      structuralSurplusAmount = Math.abs(difference);
+    }
+  }
+
+  const guarded = clampSpendingCapAfterStructuralChange(next);
+  if (!guarded) return;
+
+  setState(guarded);
+
+  if (structuralSurplusAmount > 0.01) {
+    window.setTimeout(() => {
+      onAllocateStructuralSurplus?.(structuralSurplusAmount);
+    }, 0);
+  }
+
+  if (queuedExpenseAmount > 0.01) {
+    window.setTimeout(() => {
+      onOpenStructuralExpenseDraft?.(queuedExpenseAmount);
+      alert("بقي فرق من زيادة الالتزام الهيكلي. تم تجهيزه كمصروف في الرئيسية لاختيار طريقة الدفع.");
+    }, 0);
+  }
 };
 const deleteStructuralLiability = (id) => {
   if (!window.confirm("هل تريد حذف هذا الالتزام الهيكلي؟")) return;
 
-  setState((p) => {
-    const list = p.structuralLiabilities || p.structural || [];
+  const list = state.structuralLiabilities || state.structural || [];
+  const current = list.find((item) => item.id === id);
+  const structuralSurplusAmount = state.session?.isOpen ? getStructuralAmount(current) : 0;
 
-    const next = {
-      ...p,
-      structuralLiabilities: list.filter((item) => item.id !== id),
-    };
+  const next = {
+    ...state,
+    structuralLiabilities: list.filter((item) => item.id !== id),
+  };
 
-    return clampSpendingCapAfterStructuralChange(next) || p;
-  });
+  const guarded = clampSpendingCapAfterStructuralChange(next);
+  if (!guarded) return;
+
+  setState(guarded);
+
+  if (structuralSurplusAmount > 0.01) {
+    window.setTimeout(() => {
+      onAllocateStructuralSurplus?.(structuralSurplusAmount);
+    }, 0);
+  }
 };
 const addSettingsCreditCard = () => {
   if (!settingsCardName.trim()) return alert("أدخل اسم البطاقة");
@@ -6862,21 +7356,26 @@ const saveSettingsCreditCardEdit = () => {
 };
 
 const openingBalanceRows = [
-  ...(state.assets.banks || []).map((bank) => ({
-    key: `bank-${bank.id}`,
-    kind: "bank",
-    group: "banks",
-    id: bank.id,
-    total: Number(bank.balance || 0),
-    price: 1,
-    priceField: "balance",
-    unitLabel: currencyLabel,
-    units: Number(bank.balance || 0),
-    unitsField: "balance",
-    name: bank.name || "",
-    nameField: "name",
-    namePlaceholder: "اسم البنك",
-  })),
+  ...(state.assets.banks || []).map((bank) => {
+    const key = `banks-${bank.id}`;
+    const draft = openingBalanceDrafts[key] || {};
+    const units = Number(draft.units ?? bank.balance ?? 0);
+    return {
+      key,
+      kind: "bank",
+      group: "banks",
+      id: bank.id,
+      total: units,
+      price: 1,
+      priceField: "balance",
+      unitLabel: currencyLabel,
+      units,
+      unitsField: "balance",
+      name: draft.name ?? bank.name ?? "",
+      nameField: "name",
+      namePlaceholder: "??? ?????",
+    };
+  }),
   ...[
     ...(state.assets.gold || []).map((item) => ({
       item,
@@ -6916,26 +7415,46 @@ const openingBalanceRows = [
         priceField: "price",
         namePlaceholder: "الأصل",
       })),
+    ...(state.assets.custom || [])
+      .filter((item) => item.type === "fixed")
+      .map((item) => ({
+        item,
+        keyPrefix: "custom",
+        group: "custom",
+        kind: "fixed",
+        nameField: "name",
+        unitLabel: currencyLabel,
+        priceField: "amount",
+        namePlaceholder: "أصل ثابت",
+      })),
   ].map((row) => {
-    const units = Number(row.item.units || 0);
-    const price = Number(row.item[row.priceField] || 0);
+    const isFixed = row.kind === "fixed";
+    const key = `${row.group}-${row.item.id}`;
+    const units = isFixed ? Number(row.item.amount || 0) : Number(row.item.units || 0);
+    const price = isFixed ? 1 : Number(row.item[row.priceField] || 0);
+    const draft = openingBalanceDrafts[key] || {};
+    const draftUnits = Number(draft.units ?? units);
+    const draftPrice = Number(draft.price ?? price);
     return {
-      key: `${row.keyPrefix}-${row.item.id}`,
-      kind: "unit",
+      key,
+      kind: row.kind || "unit",
       group: row.group,
       id: row.item.id,
-      total: units * price,
-      price,
+      total: draftUnits * draftPrice,
+      price: draftPrice,
       priceField: row.priceField,
       unitLabel: row.unitLabel,
-      units,
+      units: draftUnits,
       unitsField: "units",
-      name: row.item[row.nameField] || "",
+      name: draft.name ?? row.item[row.nameField] ?? "",
       nameField: row.nameField,
       namePlaceholder: row.namePlaceholder,
     };
   }),
 ];
+const openingDraftCash =
+  openingBalanceDrafts.cash?.cash ?? Number(state.assets.cash || 0);
+const hasOpeningBalanceDrafts = Object.keys(openingBalanceDrafts).length > 0;
 
   const currentLiabilitiesTotal = calcAssets(state).currentLiabilities;
   const profileName = state.settings?.profile?.name || "مستخدم التطبيق";
@@ -7193,15 +7712,33 @@ const openingBalanceRows = [
         />
 
         <OpeningBalancesTable
-          cash={Number(state.assets.cash || 0)}
+          cash={Number(openingDraftCash || 0)}
           rows={openingBalanceRows}
           onCashChange={(value) =>
-            setState((prev) => ({
-              ...prev,
-              assets: { ...prev.assets, cash: value },
-            }))
+            updateOpeningBalanceDraft("cash", { cash: Number(value || 0) })
           }
-          onUpdate={updateAssetItem}
+          onUpdate={(group, id, patch) => {
+            const nextPatch = { ...patch };
+            if (patch.balance !== undefined) {
+              nextPatch.units = Number(patch.balance || 0);
+              delete nextPatch.balance;
+            }
+            if (patch.wac !== undefined) {
+              nextPatch.price = Number(patch.wac || 0);
+              delete nextPatch.wac;
+            }
+            if (patch.amount !== undefined) {
+              nextPatch.units = Number(patch.amount || 0);
+              delete nextPatch.amount;
+            }
+            if (patch.label !== undefined) {
+              nextPatch.name = patch.label;
+              delete nextPatch.label;
+            }
+            updateOpeningBalanceDraft(`${group}-${id}`, nextPatch);
+          }}
+          onSave={saveOpeningBalanceResets}
+          hasChanges={hasOpeningBalanceDrafts}
           inputStyle={G.inp()}
         />
       </OpeningBalancesSettingsSection>
@@ -8041,34 +8578,35 @@ function OnboardingFlow({ state, setState, onComplete }) {
   };
 
   const stitch = {
-    background: "#08132a",
-    surface: "#151f37",
-    surfaceLow: "#101b33",
-    surfaceHigh: "#1f2942",
-    surfaceHighest: "#2a344d",
-    outline: "#8f9097",
-    outlineVariant: "#44474d",
-    text: "#d9e2ff",
-    textMuted: "#c5c6cd",
-    secondary: "#e9c349",
-    onSecondary: "#3c2f00",
-    error: "#ffb4ab",
-    errorContainer: "#93000a",
-    font: "'IBM Plex Sans Arabic', sans-serif",
+    background: visualIdentity.gradients.appBackground,
+    surface: "rgba(36,81,128,0.74)",
+    surfaceLow: "rgba(255,255,255,0.085)",
+    surfaceHigh: "rgba(46,100,148,0.72)",
+    surfaceHighest: "rgba(58,116,166,0.72)",
+    outline: "rgba(255,255,255,0.32)",
+    outlineVariant: "rgba(255,255,255,0.16)",
+    text: visualIdentity.colors.white,
+    textMuted: "rgba(255,255,255,0.72)",
+    primary: visualIdentity.colors.cyan,
+    secondary: visualIdentity.colors.gold,
+    onSecondary: visualIdentity.colors.navy,
+    error: "#FFB2B2",
+    errorContainer: "rgba(255,107,107,0.18)",
+    font: "'Tajawal', sans-serif",
     numeral: "'Inter', sans-serif",
   };
   const stitchPanel = {
-    background: "rgba(21,31,55,0.70)",
-    border: "1px solid rgba(35,53,84,0.50)",
-    borderRadius: 12,
-    boxShadow: "0 16px 36px rgba(0,0,0,0.18)",
+    background: visualIdentity.gradients.innerCard,
+    border: visualIdentity.cards.inner.border,
+    borderRadius: visualIdentity.cards.inner.borderRadius,
+    boxShadow: visualIdentity.cards.inner.boxShadow,
     backdropFilter: "blur(20px)",
   };
   const stitchInput = {
     width: "100%",
     minHeight: 44,
     border: `1px solid ${stitch.outlineVariant}`,
-    borderRadius: 10,
+    borderRadius: 12,
     background: stitch.surfaceLow,
     color: stitch.text,
     padding: "10px 12px",
@@ -8086,7 +8624,7 @@ function OnboardingFlow({ state, setState, onComplete }) {
   const stitchChoice = (active) => ({
     flex: 1,
     minHeight: 42,
-    borderRadius: 10,
+    borderRadius: 12,
     border: `1px solid ${active ? stitch.secondary : stitch.outlineVariant}`,
     background: active ? stitch.secondary : "transparent",
     color: active ? stitch.onSecondary : stitch.text,
@@ -8125,27 +8663,26 @@ function OnboardingFlow({ state, setState, onComplete }) {
       style={{
         minHeight: "100vh",
         display: "flex",
-        alignItems: "center",
+        alignItems: "stretch",
         justifyContent: "center",
-        padding: 12,
-        background: "#eef0f2",
+        padding: "0 0 18px",
+        background: visualIdentity.gradients.appBackground,
         fontFamily: stitch.font,
       }}
     >
       <section
         style={{
           position: "relative",
-          width: "min(100%, 238px)",
-          height: "min(100vh - 24px, 510px)",
-          minHeight: 500,
+          width: "min(100%, 440px)",
+          minHeight: "100vh",
           overflowY: "auto",
           overflowX: "hidden",
-          borderRadius: 22,
+          borderRadius: 0,
           background: stitch.background,
           color: stitch.text,
-          border: "6px solid #9aa4b2",
-          boxShadow: "0 16px 35px rgba(0,0,0,0.28)",
-          padding: "12px 10px 104px",
+          border: 0,
+          boxShadow: "0 18px 46px rgba(3,18,37,0.24)",
+          padding: "16px 14px 18px",
         }}
       >
         <div
@@ -8211,7 +8748,7 @@ function OnboardingFlow({ state, setState, onComplete }) {
                 width: 250,
                 height: 250,
                 borderRadius: "50%",
-                background: `${stitch.primary || "#b9c7e4"}12`,
+                background: `${stitch.primary}12`,
                 filter: "blur(78px)",
               }}
             />
@@ -8247,8 +8784,8 @@ function OnboardingFlow({ state, setState, onComplete }) {
                 display: "grid",
                 placeItems: "center",
                 marginBottom: 20,
-                background: "rgba(21,31,55,0.72)",
-                border: "1px solid rgba(255,255,255,0.13)",
+                background: stitch.surfaceHigh,
+                border: `1px solid ${stitch.outlineVariant}`,
                 boxShadow: `0 22px 55px rgba(0,0,0,0.24), 0 0 42px ${stitch.secondary}18`,
               }}
             >
@@ -8272,7 +8809,7 @@ function OnboardingFlow({ state, setState, onComplete }) {
                   borderRadius: "50%",
                   display: "grid",
                   placeItems: "center",
-                  background: "rgba(21,31,55,0.88)",
+                  background: stitch.surfaceHigh,
                   border: `1px solid ${stitch.secondary}55`,
                   color: stitch.secondary,
                   fontSize: 15,
@@ -8396,13 +8933,13 @@ function OnboardingFlow({ state, setState, onComplete }) {
                 padding: "9px 14px",
                 borderRadius: 999,
                 border: "1px solid rgba(255,255,255,0.12)",
-                background: "rgba(21,31,55,0.62)",
+                background: stitch.surfaceLow,
                 color: stitch.textMuted,
                 fontSize: 11,
                 fontWeight: 800,
               }}
             >
-              <span aria-hidden="true" style={{ color: "#b9c7e4" }}>◇</span>
+              <span aria-hidden="true" style={{ color: stitch.primary }}>◇</span>
               <span>بياناتك محفوظة داخل التطبيق</span>
             </div>
           </div>
@@ -8460,9 +8997,9 @@ function OnboardingFlow({ state, setState, onComplete }) {
                     alignItems: "center",
                     gap: 6,
                     padding: "8px 10px",
-                    borderRadius: 7,
-                    background: "#112240",
-                    border: "1px solid #233554",
+                    borderRadius: 12,
+                    background: stitch.surfaceLow,
+                    border: `1px solid ${stitch.outlineVariant}`,
                     boxShadow: "inset 0 1px 0 rgba(255,255,255,0.06)",
                   }}
                 >
@@ -8491,7 +9028,7 @@ function OnboardingFlow({ state, setState, onComplete }) {
                       border: 0,
                       outline: "none",
                       background: "transparent",
-                      color: "#8f9097",
+                      color: stitch.text,
                       textAlign: "left",
                       direction: "ltr",
                       fontSize: 22,
@@ -8510,9 +9047,9 @@ function OnboardingFlow({ state, setState, onComplete }) {
               style={{
                 position: "relative",
                 padding: 12,
-                borderRadius: 7,
-                background: "rgba(21,31,55,0.70)",
-                border: "1px solid rgba(35,53,84,0.50)",
+                borderRadius: 12,
+                background: stitch.surfaceLow,
+                border: `1px solid ${stitch.outlineVariant}`,
                 boxShadow: "none",
                 display: "grid",
                 gap: 10,
@@ -8533,7 +9070,7 @@ function OnboardingFlow({ state, setState, onComplete }) {
                   {maxCap.toFixed(2)} {currencyLabel}
                 </span>
               </div>
-              <div style={{ height: 1, background: "rgba(68,71,77,0.45)" }} />
+              <div style={{ height: 1, background: stitch.outlineVariant }} />
               <p style={{ margin: 0, color: stitch.textMuted, fontSize: 9, lineHeight: "16px" }}>
                 المتاح بعد الالتزامات الشهرية الثابتة = الراتب - الالتزامات الهيكلية.
               </p>
@@ -8596,7 +9133,7 @@ function OnboardingFlow({ state, setState, onComplete }) {
               )}
             </div>
 
-            <div style={{ height: 1, background: "rgba(68,71,77,0.45)" }} />
+            <div style={{ height: 1, background: stitch.outlineVariant }} />
 
             <div style={{ display: "grid", gap: 12 }}>
               <div style={{ textAlign: "right" }}>
@@ -8615,7 +9152,7 @@ function OnboardingFlow({ state, setState, onComplete }) {
                 <div style={{ ...stitchPanel, padding: 12, display: "grid", gap: 8 }}>
                   {DEFAULT_EXPENSE_CATEGORIES.filter((category) => !category.isOther).map((category) => (
                     <label key={category.id} style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) 104px", gap: 8, alignItems: "center" }}>
-                      <span style={{ color: stitch.text, fontSize: 12, fontWeight: 700 }}>{category.icon} {category.label}</span>
+                      <span style={{ color: stitch.text, fontSize: 12, fontWeight: 700 }}>{getCategoryDisplayIcon(category)} {category.label}</span>
                       <input type="number" value={caps?.[category.label] || ""} onChange={(event) => setCaps((prev) => ({ ...prev, [category.label]: Math.max(0, Number(event.target.value || 0)) }))} style={stitchNumberInput} />
                     </label>
                   ))}
@@ -8661,7 +9198,7 @@ function OnboardingFlow({ state, setState, onComplete }) {
                         minHeight: 44,
                         padding: "9px 6px",
                         color: openingAssetKind === value ? stitch.onSecondary : stitch.text,
-                        background: openingAssetKind === value ? stitch.secondary : "rgba(21,31,55,0.70)",
+                        background: openingAssetKind === value ? stitch.secondary : stitch.surfaceLow,
                         fontFamily: stitch.font,
                         fontSize: 12,
                         fontWeight: 700,
@@ -8855,48 +9392,48 @@ function OnboardingFlow({ state, setState, onComplete }) {
               <h1 style={{ margin: "0 0 5px", color: stitch.secondary, fontSize: 21, lineHeight: "30px", fontWeight: 700 }}>
                 المراجعة النهائية
               </h1>
-              <p style={{ margin: "0 auto", maxWidth: 190, color: "#ffe088", fontSize: 11, lineHeight: "18px" }}>
+              <p style={{ margin: "0 auto", maxWidth: 260, color: stitch.textMuted, fontSize: 11, lineHeight: "18px" }}>
                 تأكد من صحة البيانات المدخلة قبل البدء في رحلة إدارة ثروتك.
               </p>
             </header>
 
             <div style={{ ...stitchPanel, padding: 14, display: "grid", gap: 12, textAlign: "center" }}>
-              <span style={{ color: "#ffe088", fontSize: 11, fontWeight: 700 }}>الراتب الشهري</span>
-              <span style={{ color: "#fff", fontFamily: stitch.numeral, fontSize: 31, lineHeight: "36px", fontWeight: 700 }}>
+              <span style={{ color: stitch.secondary, fontSize: 11, fontWeight: 700 }}>الراتب الشهري</span>
+              <span style={{ color: stitch.text, fontFamily: stitch.numeral, fontSize: 31, lineHeight: "36px", fontWeight: 700 }}>
                 {safeSalary.toFixed(2)} <span style={{ fontFamily: stitch.font, fontSize: 13 }}>{currencyLabel}</span>
               </span>
-              <div style={{ height: 1, background: "rgba(197,198,205,0.30)" }} />
+              <div style={{ height: 1, background: stitch.outlineVariant }} />
               <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
                 <div style={{ display: "grid", gap: 3, textAlign: "right" }}>
-                  <span style={{ color: "#ffe088", fontSize: 10, fontWeight: 700 }}>سقف الصرف</span>
-                  <span style={{ color: "#fff", fontSize: 14, fontWeight: 700 }}>{safeCap.toFixed(2)} {currencyLabel}</span>
+                  <span style={{ color: stitch.secondary, fontSize: 10, fontWeight: 700 }}>سقف الصرف</span>
+                  <span style={{ color: stitch.text, fontSize: 14, fontWeight: 700 }}>{safeCap.toFixed(2)} {currencyLabel}</span>
                 </div>
                 <div style={{ display: "grid", gap: 3, textAlign: "left" }}>
-                  <span style={{ color: "#ffe088", fontSize: 10, fontWeight: 700 }}>الالتزامات الثابتة</span>
-                  <span style={{ color: "#fff", fontSize: 14, fontWeight: 700 }}>{totalStructural.toFixed(2)} {currencyLabel}</span>
+                  <span style={{ color: stitch.secondary, fontSize: 10, fontWeight: 700 }}>الالتزامات الثابتة</span>
+                  <span style={{ color: stitch.text, fontSize: 14, fontWeight: 700 }}>{totalStructural.toFixed(2)} {currencyLabel}</span>
                 </div>
               </div>
             </div>
 
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
               <div style={{ ...stitchPanel, padding: 12, display: "grid", gap: 5 }}>
-                <span style={{ color: "#e9c349", fontSize: 18 }}>▣</span>
-                <span style={{ color: "#ffe088", fontSize: 10, fontWeight: 700 }}>الأرصدة الحالية</span>
-                <span style={{ color: "#fff", fontSize: 18, fontWeight: 700 }}>{openingAssetsTotal.toFixed(2)}</span>
-                <span style={{ color: "#ffe088", fontSize: 9 }}>{currencyLabel}</span>
+                <span style={{ color: stitch.secondary, fontSize: 18 }}>▣</span>
+                <span style={{ color: stitch.secondary, fontSize: 10, fontWeight: 700 }}>الأرصدة الحالية</span>
+                <span style={{ color: stitch.text, fontSize: 18, fontWeight: 700 }}>{openingAssetsTotal.toFixed(2)}</span>
+                <span style={{ color: stitch.textMuted, fontSize: 9 }}>{currencyLabel}</span>
               </div>
               <div style={{ ...stitchPanel, padding: 12, display: "grid", gap: 5 }}>
-                <span style={{ color: "#e9c349", fontSize: 18 }}>▤</span>
-                <span style={{ color: "#ffe088", fontSize: 10, fontWeight: 700 }}>البطاقات والالتزامات</span>
-                <span style={{ color: "#fff", fontSize: 18, fontWeight: 700 }}>{currentObligationCount}</span>
-                <span style={{ color: "#ffe088", fontSize: 9 }}>عناصر مسجلة</span>
+                <span style={{ color: stitch.secondary, fontSize: 18 }}>▤</span>
+                <span style={{ color: stitch.secondary, fontSize: 10, fontWeight: 700 }}>البطاقات والالتزامات</span>
+                <span style={{ color: stitch.text, fontSize: 18, fontWeight: 700 }}>{currentObligationCount}</span>
+                <span style={{ color: stitch.textMuted, fontSize: 9 }}>عناصر مسجلة</span>
               </div>
             </div>
 
             <div style={{ ...stitchPanel, padding: 12, position: "relative", overflow: "hidden" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
                 <h3 style={{ margin: 0, color: stitch.text, fontSize: 15, fontWeight: 700 }}>توزيع التدفق المالي</h3>
-                <span style={{ color: "#ffe088", fontSize: 18 }}>⌁</span>
+                <span style={{ color: stitch.secondary, fontSize: 18 }}>⌁</span>
               </div>
               {[
                 ["الالتزامات", structuralPct, stitch.error],
@@ -8904,11 +9441,11 @@ function OnboardingFlow({ state, setState, onComplete }) {
                 ["الادخار المتوقع", savingsPct, "#22c55e"],
               ].map(([label, pct, color]) => (
                 <div key={label} style={{ marginBottom: 11 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", color: "#fff", fontSize: 11, marginBottom: 5 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", color: stitch.text, fontSize: 11, marginBottom: 5 }}>
                     <span>{label}</span>
                     <span>{Number(pct).toFixed(0)}%</span>
                   </div>
-                  <div style={{ height: 8, borderRadius: 999, overflow: "hidden", background: "#d9e2ff" }}>
+                  <div style={{ height: 8, borderRadius: 999, overflow: "hidden", background: "rgba(255,255,255,0.16)" }}>
                     <div style={{ width: `${Number(pct).toFixed(0)}%`, height: "100%", background: color }} />
                   </div>
                 </div>
@@ -8933,15 +9470,17 @@ function OnboardingFlow({ state, setState, onComplete }) {
         {step > 0 && (
           <div
             style={{
-              position: "absolute",
-              left: 10,
-              right: 10,
+              position: "sticky",
+              left: 0,
+              right: 0,
               bottom: 0,
+              zIndex: 8,
               display: "grid",
               gridTemplateColumns: "1fr 1fr",
               gap: 8,
-              padding: "22px 0 12px",
-              background: "linear-gradient(180deg, rgba(8,19,42,0), rgba(8,19,42,0.98) 34%)",
+              marginTop: 18,
+              padding: "18px 0 2px",
+              background: "linear-gradient(180deg, rgba(8,42,85,0), rgba(8,42,85,0.96) 30%)",
             }}
           >
             <button
@@ -9206,7 +9745,9 @@ function handleExtraCashSubmit(data) {
     const allocation = data.allocation || data.direction || "spendingCap";
     const isSalarySurplus = data.source === "salary_surplus";
     const isMonthEndSurplus = data.source === "month_end_surplus";
-    const isRequiredSurplus = isSalarySurplus || isMonthEndSurplus;
+    const isStructuralSurplus = data.source === "structural_liability_reduction_surplus";
+    const isRequiredSurplus = isSalarySurplus || isMonthEndSurplus || isStructuralSurplus;
+    const incomeSource = data.source || "extra_income";
     const targetName = String(data.assetName || data.note || "").trim();
     const units = Number(data.units || 0);
     const price = Number(data.price || 0);
@@ -9269,7 +9810,7 @@ function handleExtraCashSubmit(data) {
           ...nextMovementMeta(allocation),
           date: now,
           type: "buy_units",
-          source: "extra_income",
+          source: incomeSource,
           assetKind: listName,
           assetId: existing.id,
           assetName: existing.name || existing.label,
@@ -9320,7 +9861,7 @@ function handleExtraCashSubmit(data) {
           ...nextMovementMeta(allocation),
           date: now,
           type: "buy_units",
-          source: "extra_income",
+          source: incomeSource,
           assetKind: listName,
           assetId: id,
           assetName: targetName,
@@ -9368,7 +9909,7 @@ function handleExtraCashSubmit(data) {
         ...nextMovementMeta("spendingCap"),
         date: now,
         type: "income_to_spending_cap",
-        source: "extra_income",
+        source: incomeSource,
         amount,
         note: data.note || "",
       });
@@ -9386,7 +9927,7 @@ function handleExtraCashSubmit(data) {
         ...nextMovementMeta("cash"),
         date: now,
         type: "income_to_cash",
-        source: "extra_income",
+        source: incomeSource,
         assetKind: "cash",
         amount,
         balanceAfter: next.assets.cash,
@@ -9411,7 +9952,7 @@ function handleExtraCashSubmit(data) {
           ...nextMovementMeta("bank"),
           date: now,
           type: "income_to_bank",
-          source: "extra_income",
+          source: incomeSource,
           assetKind: "bank",
           assetId: existing.id,
           assetName: existing.name,
@@ -9430,7 +9971,7 @@ function handleExtraCashSubmit(data) {
           ...nextMovementMeta("bank"),
           date: now,
           type: "income_to_bank",
-          source: "extra_income",
+          source: incomeSource,
           assetKind: "bank",
           assetId: id,
           assetName: bankName,
@@ -9473,7 +10014,7 @@ function handleExtraCashSubmit(data) {
           ...nextMovementMeta("fixed"),
           date: now,
           type: "income_to_fixed_asset",
-          source: "extra_income",
+          source: incomeSource,
           assetKind: "fixed",
           assetId: existing.id,
           assetName: existing.name,
@@ -9493,7 +10034,7 @@ function handleExtraCashSubmit(data) {
           ...nextMovementMeta("fixed"),
           date: now,
           type: "income_to_fixed_asset",
-          source: "extra_income",
+          source: incomeSource,
           assetKind: "fixed",
           assetId: id,
           assetName: targetName,
@@ -9866,6 +10407,19 @@ const canLeaveSettingsTab = () => {
             setState={setState}
             authSession={authSession}
             onResetAllData={handleClearState}
+            onAllocateStructuralSurplus={(amount) => {
+              setExtraCashPreset({
+                amount,
+                lockedAmount: true,
+                lockedNote: true,
+                note: "فائض فرق التزام هيكلي",
+                source: "structural_liability_reduction_surplus",
+              });
+              setShowExtraCash(true);
+            }}
+            onOpenStructuralExpenseDraft={() => {
+              setTab("overview");
+            }}
           />
         )}
       </main>
