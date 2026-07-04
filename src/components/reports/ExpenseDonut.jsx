@@ -21,6 +21,32 @@ const FALLBACK_CATEGORY_COLORS = [
   "#B0A080",
 ];
 
+const resolveCategoryColor = (category, index, categoryColors, usedColors) => {
+  const configuredColor = String(categoryColors?.[category] || "").trim();
+  const canUseConfigured =
+    configuredColor &&
+    !configuredColor.startsWith("var(") &&
+    !usedColors.has(configuredColor.toLowerCase());
+
+  if (canUseConfigured) {
+    usedColors.add(configuredColor.toLowerCase());
+    return configuredColor;
+  }
+
+  for (let offset = 0; offset < FALLBACK_CATEGORY_COLORS.length; offset += 1) {
+    const color = FALLBACK_CATEGORY_COLORS[
+      (index + offset) % FALLBACK_CATEGORY_COLORS.length
+    ];
+    const key = color.toLowerCase();
+    if (!usedColors.has(key)) {
+      usedColors.add(key);
+      return color;
+    }
+  }
+
+  return FALLBACK_CATEGORY_COLORS[index % FALLBACK_CATEGORY_COLORS.length];
+};
+
 export default function ExpenseDonut({
   expenses,
   mode = "donut",
@@ -34,12 +60,13 @@ export default function ExpenseDonut({
   new Set((expenses || []).map((e) => e.category).filter(Boolean))
 );
 
+const usedColors = new Set();
 const grouped = expenseCats.map((cat, index) => ({
   name: cat,
   value: (expenses || [])
     .filter((e) => e.category === cat)
     .reduce((sum, e) => sum + Number(e.amount || 0), 0),
-  color: categoryColors[cat] || FALLBACK_CATEGORY_COLORS[index % FALLBACK_CATEGORY_COLORS.length],
+  color: resolveCategoryColor(cat, index, categoryColors, usedColors),
   })).filter((x) => x.value > 0);
   const total = grouped.reduce((sum, x) => sum + x.value, 0);
   const sortedGrouped = [...grouped].sort((a, b) => b.value - a.value);
