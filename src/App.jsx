@@ -139,6 +139,91 @@ const getCurrencyLabel = (state) =>
 const sumExpenseCategoryCaps = (caps = {}) =>
   Object.values(caps).reduce((sum, value) => sum + Math.max(0, Number(value || 0)), 0);
 
+const roundMoney = (value) => Number(Math.max(0, Number(value || 0)).toFixed(2));
+
+function normalizeCategoryCapTotal(caps, spendingCap) {
+  const safeCap = Number(spendingCap || 0);
+  const total = sumExpenseCategoryCaps(caps);
+  if (safeCap <= 0 || total <= safeCap || total <= 0) return caps;
+
+  return Object.fromEntries(
+    Object.entries(caps).map(([label, value]) => [
+      label,
+      roundMoney((Number(value || 0) / total) * safeCap),
+    ])
+  );
+}
+
+function buildSmartExpenseCategoryCaps(state, categories = [], spendingCap = 0) {
+  const safeSpendingCap = Number(spendingCap || 0);
+  if (safeSpendingCap <= 0) return {};
+
+  const currentMonth = state.currentMonth || new Date().toISOString().slice(0, 7);
+  const snapshots = [...(state.monthlySnapshots || [])]
+    .filter((snapshot) => snapshot.month && snapshot.month < currentMonth)
+    .sort((a, b) => String(a.month).localeCompare(String(b.month)))
+    .slice(-6);
+  const monthlyRows = snapshots.map((snapshot) => ({
+    month: snapshot.month,
+    byCategory:
+      snapshot.expensesByCategory ||
+      buildExpensesByCategory(snapshot.expenses || []),
+  }));
+
+  if (!monthlyRows.length && (state.expenses || []).length) {
+    monthlyRows.push({
+      month: currentMonth,
+      byCategory: buildExpensesByCategory(state.expenses || []),
+    });
+  }
+
+  const existingCaps = state.settings?.expenseCategoryCaps || {};
+  const nextCaps = {};
+
+  categories
+    .filter((category) => !category.hidden && !category.isOther)
+    .forEach((category) => {
+      const label = category.label;
+      const values = monthlyRows.map((row) => Number(row.byCategory?.[label] || 0));
+      const nonZero = values.filter((value) => value > 0);
+      const existing = Number(existingCaps[label] || 0);
+
+      if (!values.length) {
+        nextCaps[label] = roundMoney(existing);
+        return;
+      }
+
+      const recent = values.slice(-3);
+      const recentAverage =
+        recent.reduce((sum, value) => sum + value, 0) / Math.max(1, recent.length);
+      const lifetimeAverage =
+        values.reduce((sum, value) => sum + value, 0) / Math.max(1, values.length);
+      const sorted = [...nonZero].sort((a, b) => a - b);
+      const median = sorted.length
+        ? sorted[Math.floor(sorted.length / 2)]
+        : 0;
+      const last = values[values.length - 1] || 0;
+      const previousAverage =
+        values.length > 1
+          ? values.slice(0, -1).reduce((sum, value) => sum + value, 0) /
+            Math.max(1, values.length - 1)
+          : recentAverage;
+      const unusualSpike =
+        last > 0 &&
+        previousAverage > 0 &&
+        last > previousAverage * 2.2 &&
+        nonZero.length <= 2;
+
+      const base = unusualSpike
+        ? Math.max(median, previousAverage * 1.15)
+        : recentAverage * 0.55 + lifetimeAverage * 0.3 + last * 0.15;
+      const blended = existing > 0 ? base * 0.78 + existing * 0.22 : base;
+      nextCaps[label] = roundMoney(blended);
+    });
+
+  return normalizeCategoryCapTotal(nextCaps, safeSpendingCap);
+}
+
 const SUMMARY_CARD_STYLE = {
   total: {
     background: "#FFFBF0",
@@ -3969,6 +4054,12 @@ function ReportsScreen({ state }) {
   const buildAiWealthPayload = () => ({
     currency: getCurrencyLabel(state),
     month: state.currentMonth || new Date().toISOString().slice(0, 7),
+    generatedAt: new Date().toISOString(),
+    analysisWindow: {
+      label: "آخر 7 حركات أو أكثر حسب البيانات المتاحة",
+      recentExpensesCount: Math.min(20, expenses.length),
+      totalExpensesCount: expenses.length,
+    },
     summary: {
       salary: Number(state.settings?.salary || 0),
       monthlyCap: Number(reportBudget.spendingCap || 0),
@@ -3992,6 +4083,15 @@ function ReportsScreen({ state }) {
       label: item.label,
       value: Number(item.value || 0),
       changePct: Number(item.change || 0),
+      sharePct:
+        Number(currentAssets.totalAssets || 0) > 0
+          ? Number(((Number(item.value || 0) / Number(currentAssets.totalAssets || 0)) * 100).toFixed(2))
+          : 0,
+    })),
+    assetDistribution: reportAssetDistribution.map((item) => ({
+      label: item.label,
+      value: Number(item.value || 0),
+      percent: Number(item.percent || 0),
     })),
     assetsChanges: assetDetailRows.slice(0, 12).map((item) => ({
       label: item.label,
@@ -4224,10 +4324,39 @@ function ReportsScreen({ state }) {
                 <AiReportList items={aiWealthReport.expenseAnalysis?.highestCategories} />
                 <AiReportList items={aiWealthReport.expenseAnalysis?.warnings} color="#FF6B6B" />
               </ReportGlassBlock>
+              <ReportGlassBlock title="نصائح توفير المصروفات">
+                <AiReportList items={aiWealthReport.expenseAnalysis?.savingTips} color="#52E5A0" />
+              </ReportGlassBlock>
               <ReportGlassBlock title="تحليل الأصول">
                 <p style={aiReportParagraphStyle}>{aiWealthReport.assetsAnalysis?.summary}</p>
                 <AiReportList items={aiWealthReport.assetsAnalysis?.positiveMovements} color="#52E5A0" />
                 <AiReportList items={aiWealthReport.assetsAnalysis?.negativeMovements} color="#FF6B6B" />
+              </ReportGlassBlock>
+              <ReportGlassBlock title="قراءة الأسواق العالمية">
+                <p style={aiReportParagraphStyle}>{aiWealthReport.marketOutlook?.summary}</p>
+                {aiWealthReport.marketOutlook?.gold && (
+                  <p style={{ ...aiReportParagraphStyle, marginTop: 8 }}>
+                    <b style={{ color: "#F5C842" }}>الذهب: </b>
+                    {aiWealthReport.marketOutlook.gold}
+                  </p>
+                )}
+                {aiWealthReport.marketOutlook?.stocks && (
+                  <p style={{ ...aiReportParagraphStyle, marginTop: 8 }}>
+                    <b style={{ color: "#7BBFF5" }}>الأسهم: </b>
+                    {aiWealthReport.marketOutlook.stocks}
+                  </p>
+                )}
+                {aiWealthReport.marketOutlook?.cashAndDeposits && (
+                  <p style={{ ...aiReportParagraphStyle, marginTop: 8 }}>
+                    <b style={{ color: "#52E5A0" }}>السيولة والودائع: </b>
+                    {aiWealthReport.marketOutlook.cashAndDeposits}
+                  </p>
+                )}
+                <AiReportList items={aiWealthReport.marketOutlook?.opportunities} color="#F5C842" />
+                <AiReportList items={aiWealthReport.marketOutlook?.risks} color="#FF6B6B" />
+              </ReportGlassBlock>
+              <ReportGlassBlock title="اقتراح توزيع الأصول">
+                <AiReportList items={aiWealthReport.assetsAnalysis?.allocationSuggestions} color="#7BBFF5" />
               </ReportGlassBlock>
               <ReportGlassBlock title="التوصيات">
                 {(aiWealthReport.recommendations || []).map((item, index) => {
@@ -4253,6 +4382,12 @@ function ReportsScreen({ state }) {
               <div style={{ marginTop: 12, color: visualIdentity.colors.textFaint, fontSize: 9, lineHeight: 1.7 }}>
                 {aiWealthReport.disclaimer}
               </div>
+              {Array.isArray(aiWealthReport.marketOutlook?.sources) &&
+                aiWealthReport.marketOutlook.sources.length > 0 && (
+                  <div style={{ marginTop: 8, color: visualIdentity.colors.textFaint, fontSize: 8, lineHeight: 1.7 }}>
+                    مصادر السوق: {aiWealthReport.marketOutlook.sources.join(" | ")}
+                  </div>
+                )}
             </section>
           )}
         </>
@@ -6700,6 +6835,58 @@ const expenseCapCategories = [
     .filter((saved) => !DEFAULT_EXPENSE_CATEGORIES.some((base) => base.id === saved.id))
     .map((category) => ({ ...category, icon: getCategoryDisplayIcon(category) })),
 ].filter((category) => !category.hidden);
+const smartExpenseCategoryCaps = buildSmartExpenseCategoryCaps(
+  state,
+  expenseCapCategories,
+  editableSpendingCap
+);
+
+useEffect(() => {
+  if (settingsView !== "salary") return;
+  if (editableSpendingCap <= 0) return;
+
+  const currentMonth = state.currentMonth || new Date().toISOString().slice(0, 7);
+  if (state.settings?.expenseCategoryCapsAutoMonth === currentMonth) return;
+  if (!sumExpenseCategoryCaps(smartExpenseCategoryCaps)) return;
+
+  setState((prev) => {
+    const prevMonth = prev.currentMonth || new Date().toISOString().slice(0, 7);
+    if (prev.settings?.expenseCategoryCapsAutoMonth === prevMonth) return prev;
+    const categories = [
+      ...DEFAULT_EXPENSE_CATEGORIES.map((base) => {
+        const saved = (prev.expenseCategories?.items || []).find((item) => item.id === base.id);
+        const category = saved ? { ...base, ...saved } : base;
+        return { ...category, icon: getCategoryDisplayIcon(category) };
+      }),
+      ...(prev.expenseCategories?.items || [])
+        .filter((saved) => !DEFAULT_EXPENSE_CATEGORIES.some((base) => base.id === saved.id))
+        .map((category) => ({ ...category, icon: getCategoryDisplayIcon(category) })),
+    ].filter((category) => !category.hidden);
+    const cap = Number(
+      (prev.session?.isOpen
+        ? prev.session?.spendingCap
+        : prev.settings?.spendingCap ?? prev.session?.spendingCap) || 0
+    );
+    const nextCaps = buildSmartExpenseCategoryCaps(prev, categories, cap);
+    if (!sumExpenseCategoryCaps(nextCaps)) return prev;
+
+    return {
+      ...prev,
+      settings: {
+        ...prev.settings,
+        expenseCategoryCaps: nextCaps,
+        expenseCategoryCapsAutoMonth: prevMonth,
+      },
+    };
+  });
+}, [
+  editableSpendingCap,
+  setState,
+  settingsView,
+  smartExpenseCategoryCaps,
+  state.currentMonth,
+  state.settings?.expenseCategoryCapsAutoMonth,
+]);
 const changeExpenseCategoryCap = (label, value) => {
   const currentCaps = state.settings?.expenseCategoryCaps || {};
   const nextCaps = { ...currentCaps, [label]: value };
@@ -6718,7 +6905,15 @@ const changeExpenseCategoryCap = (label, value) => {
     return;
   }
 
-  updateSetting("settings.expenseCategoryCaps", nextCaps);
+  setState((prev) => ({
+    ...prev,
+    settings: {
+      ...prev.settings,
+      expenseCategoryCaps: nextCaps,
+      expenseCategoryCapsUserEditedMonth:
+        prev.currentMonth || new Date().toISOString().slice(0, 7),
+    },
+  }));
 };
 const canLeaveSalarySettings = () => {
   if (settingsView !== "salary") return true;

@@ -12,15 +12,27 @@ const defaultReport = {
     summary: "",
     highestCategories: [],
     warnings: [],
+    savingTips: [],
   },
   assetsAnalysis: {
     summary: "",
     positiveMovements: [],
     negativeMovements: [],
+    allocationSuggestions: [],
+  },
+  marketOutlook: {
+    summary: "",
+    gold: "",
+    stocks: "",
+    cashAndDeposits: "",
+    opportunities: [],
+    risks: [],
+    sources: [],
   },
   recommendations: [],
   nextActions: [],
-  disclaimer: "هذا تحليل مساعد وليس نصيحة مالية أو استثمارية ملزمة.",
+  disclaimer:
+    "هذا تحليل مساعد وليس نصيحة مالية أو استثمارية ملزمة. راجع مختصاً قبل أي قرار استثماري.",
 };
 
 function sendJson(res, status, payload) {
@@ -58,7 +70,21 @@ function parseJsonOnly(text) {
 }
 
 function asStringArray(value) {
-  return Array.isArray(value) ? value.map((item) => String(item || "").trim()).filter(Boolean) : [];
+  return Array.isArray(value)
+    ? value.map((item) => String(item || "").trim()).filter(Boolean)
+    : [];
+}
+
+function asRecommendationArray(value) {
+  return Array.isArray(value)
+    ? value.slice(0, 8).map((item) => ({
+        title: String(item?.title || "نصيحة"),
+        description: String(item?.description || ""),
+        priority: ["high", "medium", "low"].includes(item?.priority)
+          ? item.priority
+          : "medium",
+      }))
+    : [];
 }
 
 function normalizeReport(value) {
@@ -70,6 +96,10 @@ function normalizeReport(value) {
   const assetsAnalysis =
     report.assetsAnalysis && typeof report.assetsAnalysis === "object"
       ? report.assetsAnalysis
+      : {};
+  const marketOutlook =
+    report.marketOutlook && typeof report.marketOutlook === "object"
+      ? report.marketOutlook
       : {};
 
   return {
@@ -85,41 +115,77 @@ function normalizeReport(value) {
       summary: String(expenseAnalysis.summary || ""),
       highestCategories: asStringArray(expenseAnalysis.highestCategories).slice(0, 8),
       warnings: asStringArray(expenseAnalysis.warnings).slice(0, 8),
+      savingTips: asStringArray(expenseAnalysis.savingTips).slice(0, 8),
     },
     assetsAnalysis: {
       summary: String(assetsAnalysis.summary || ""),
       positiveMovements: asStringArray(assetsAnalysis.positiveMovements).slice(0, 8),
       negativeMovements: asStringArray(assetsAnalysis.negativeMovements).slice(0, 8),
+      allocationSuggestions: asStringArray(assetsAnalysis.allocationSuggestions).slice(0, 8),
     },
-    recommendations: Array.isArray(report.recommendations)
-      ? report.recommendations.slice(0, 8).map((item) => ({
-          title: String(item?.title || "نصيحة"),
-          description: String(item?.description || ""),
-          priority: ["high", "medium", "low"].includes(item?.priority)
-            ? item.priority
-            : "medium",
-        }))
-      : [],
+    marketOutlook: {
+      summary: String(marketOutlook.summary || ""),
+      gold: String(marketOutlook.gold || ""),
+      stocks: String(marketOutlook.stocks || ""),
+      cashAndDeposits: String(marketOutlook.cashAndDeposits || ""),
+      opportunities: asStringArray(marketOutlook.opportunities).slice(0, 8),
+      risks: asStringArray(marketOutlook.risks).slice(0, 8),
+      sources: asStringArray(marketOutlook.sources).slice(0, 6),
+    },
+    recommendations: asRecommendationArray(report.recommendations),
     nextActions: asStringArray(report.nextActions).slice(0, 8),
     disclaimer: String(report.disclaimer || defaultReport.disclaimer),
   };
 }
 
-function buildPrompt(payload) {
+function buildPrompt(payload, { allowCurrentMarketSearch }) {
   return [
     "أنت محلل مالي شخصي داخل تطبيق إدارة ثروة ومصاريف.",
-    "حلّل البيانات المجمعة التالية فقط، ولا تفترض أو تخترع أرقاماً غير موجودة.",
-    "اكتب بالعربية بالكامل وبأسلوب واضح ومباشر ومفيد للمستخدم.",
-    "لا توصِ بشراء سهم أو أصل محدد، ولا تعطِ نصيحة مالية أو استثمارية ملزمة.",
-    "ركّز على إدارة المصروف، السيولة، سقف الصرف، الادخار، توزيع الأصول، الالتزامات، والمخاطر.",
+    "اكتب بالعربية بالكامل وبأسلوب مباشر ومفيد للمستخدم.",
+    "حلّل بيانات المستخدم المرسلة فقط عند الحديث عن مصروفاته وأصوله. لا تخترع أرقاماً غير موجودة.",
+    "قدّم نصائح توفير مصروفات عملية مبنية على أكبر بنود الصرف، تكرار الصرف، تجاوز السقف، وطريقة الدفع.",
+    allowCurrentMarketSearch
+      ? "استخدم البحث على الويب للاطلاع على أحدث الاتجاهات الاقتصادية العالمية المؤثرة على الذهب، الأسهم، السيولة، الفائدة، التضخم، والدولار. اذكر السياق العام بدون جزم."
+      : "إذا لم يتوفر بحث ويب مباشر، قدّم قراءة سوقية عامة ومتحفظة واذكر أن السياق العالمي غير محدث لحظياً.",
+    "اقترح توزيع أصول عام كنطاقات أو اتجاهات فقط، مثل زيادة السيولة أو تخفيف المخاطر أو تنويع الذهب والأسهم، ولا توصِ بشراء سهم أو أصل محدد.",
+    "اذكر الفرص الاستثمارية كأفكار عامة للمراقبة لا كأوامر شراء: سيولة احتياطية، ذهب كتحوط، أسهم عريضة التنويع، ودائع/صناديق نقدية، أو انتظار هبوط مخاطر.",
+    "ميّز بوضوح بين: نصائح توفير المصروفات، قراءة الأسواق، اقتراح توزيع الأصول، وخطوات الأسبوع القادم.",
     "إذا كانت البيانات ناقصة أو الفترة قصيرة، اذكر ذلك بوضوح.",
     "لا تغيّر أي بيانات في التطبيق. المطلوب تقرير تحليلي فقط.",
     "أعد JSON صالحاً فقط، بدون Markdown وبدون شرح خارج JSON.",
     "الشكل المطلوب بالضبط:",
     JSON.stringify(defaultReport),
-    "البيانات المجمعة:",
+    "بيانات المستخدم:",
     JSON.stringify(payload),
   ].join("\n");
+}
+
+async function requestOpenAiReport({ model, payload, allowCurrentMarketSearch }) {
+  const requestBody = {
+    model,
+    input: buildPrompt(payload, { allowCurrentMarketSearch }),
+    temperature: 0.2,
+  };
+
+  if (allowCurrentMarketSearch) {
+    requestBody.tools = [{ type: "web_search" }];
+  }
+
+  const response = await fetch("https://api.openai.com/v1/responses", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(requestBody),
+  });
+
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(data.error?.message || `OpenAI request failed: ${response.status}`);
+  }
+
+  return normalizeReport(parseJsonOnly(extractText(data)));
 }
 
 export default async function handler(req, res) {
@@ -129,7 +195,7 @@ export default async function handler(req, res) {
   }
 
   if (!process.env.OPENAI_API_KEY) {
-    sendJson(res, 500, { error: "مفتاح الذكاء الاصطناعي غير مفعّل على السيرفر." });
+    sendJson(res, 500, { error: "مفتاح الذكاء الاصطناعي غير مفعل على السيرفر." });
     return;
   }
 
@@ -138,27 +204,32 @@ export default async function handler(req, res) {
     const raw = await collectBody(req);
     const body = JSON.parse(raw || "{}");
     const model = process.env.OPENAI_REPORT_MODEL || "gpt-4o-mini";
+    const allowWebSearch = process.env.OPENAI_REPORT_WEB_SEARCH !== "false";
 
-    const response = await fetch("https://api.openai.com/v1/responses", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
+    try {
+      const report = await requestOpenAiReport({
         model,
-        input: buildPrompt(body),
-        temperature: 0.2,
-      }),
-    });
-
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      throw new Error(data.error?.message || `OpenAI request failed: ${response.status}`);
+        payload: body,
+        allowCurrentMarketSearch: allowWebSearch,
+      });
+      sendJson(res, 200, report);
+    } catch (error) {
+      if (!allowWebSearch) throw error;
+      const fallbackReport = await requestOpenAiReport({
+        model,
+        payload: body,
+        allowCurrentMarketSearch: false,
+      });
+      sendJson(res, 200, {
+        ...fallbackReport,
+        marketOutlook: {
+          ...fallbackReport.marketOutlook,
+          summary:
+            fallbackReport.marketOutlook.summary ||
+            "تعذر استخدام البحث الاقتصادي الحي في هذه المحاولة، لذلك جاءت قراءة الأسواق عامة ومتحفظة.",
+        },
+      });
     }
-
-    const parsed = parseJsonOnly(extractText(data));
-    sendJson(res, 200, normalizeReport(parsed));
   } catch {
     sendJson(res, 500, { error: "تعذر إعداد التقرير الذكي حالياً. حاول مرة أخرى." });
   } finally {

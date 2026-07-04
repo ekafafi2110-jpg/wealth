@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { Search, SlidersHorizontal, X } from "lucide-react";
 import visualIdentity from "../../theme/visualIdentity";
 import ReportModalShell from "./ReportModalShell";
 import { useLocale } from "../../i18n/locale";
@@ -45,14 +46,17 @@ export default function ExpenseReportModal({
   const [entryType, setEntryType] = useState("all");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
+  const [filtersOpen, setFiltersOpen] = useState(false);
+
   const selectedFunding = selectedExpense?.overBudgetFunding || null;
   const selectedFundingLabel = selectedFunding
     ? selectedFunding.type === "card"
-      ? `بطاقة — ${selectedFunding.label || "بطاقة"}`
+      ? `بطاقة - ${selectedFunding.label || "بطاقة"}`
       : selectedFunding.type === "liability"
-        ? `التزام — ${selectedFunding.label || "دائن"}`
-        : `أصل — ${selectedFunding.label || "أصل"}`
+        ? `التزام - ${selectedFunding.label || "دائن"}`
+        : `أصل - ${selectedFunding.label || "أصل"}`
     : "";
+
   const categories = useMemo(
     () => Array.from(new Set(rows.map((row) => row.category).filter(Boolean))),
     [rows]
@@ -61,6 +65,7 @@ export default function ExpenseReportModal({
     () => Array.from(new Set(rows.map((row) => row.paymentMethod).filter(Boolean))),
     [rows]
   );
+
   const filteredRows = useMemo(() => {
     const normalizedSearch = search.trim().toLowerCase();
     return rows.filter((row) => {
@@ -80,9 +85,38 @@ export default function ExpenseReportModal({
       return matchesSearch && matchesCategory && matchesPayment && matchesType && matchesFrom && matchesTo;
     });
   }, [category, dateFrom, dateTo, entryType, paymentMethod, rows, search]);
+
   const hasFilters = Boolean(
     search || category !== "all" || paymentMethod !== "all" || entryType !== "all" || dateFrom || dateTo
   );
+  const activeFilters = [
+    category !== "all" && {
+      id: "category",
+      label: category,
+      onClear: () => setCategory("all"),
+    },
+    paymentMethod !== "all" && {
+      id: "paymentMethod",
+      label: paymentMethod,
+      onClear: () => setPaymentMethod("all"),
+    },
+    entryType !== "all" && {
+      id: "entryType",
+      label: entryType === "income" ? "إيرادات" : "مصروفات",
+      onClear: () => setEntryType("all"),
+    },
+    dateFrom && {
+      id: "dateFrom",
+      label: `من ${dateFrom}`,
+      onClear: () => setDateFrom(""),
+    },
+    dateTo && {
+      id: "dateTo",
+      label: `إلى ${dateTo}`,
+      onClear: () => setDateTo(""),
+    },
+  ].filter(Boolean);
+
   const controlStyle = {
     width: "100%",
     minHeight: 38,
@@ -95,6 +129,7 @@ export default function ExpenseReportModal({
     fontSize: 10,
     outline: "none",
   };
+
   const resetFilters = () => {
     setSearch("");
     setCategory("all");
@@ -102,7 +137,9 @@ export default function ExpenseReportModal({
     setEntryType("all");
     setDateFrom("");
     setDateTo("");
+    setFiltersOpen(false);
   };
+
   return (
     <>
       <ReportModalShell
@@ -121,78 +158,164 @@ export default function ExpenseReportModal({
             background: "rgba(255,255,255,0.055)",
           }}
         >
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginBottom: 8 }}>
-            <b style={{ color: visualIdentity.colors.gold, fontSize: 11 }}>تصفية الكشف</b>
-            {hasFilters && (
+          <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) 42px 34px", gap: 7, alignItems: "center" }}>
+            <label style={{ position: "relative", display: "block" }}>
+              <Search
+                size={15}
+                style={{
+                  position: "absolute",
+                  right: 10,
+                  top: "50%",
+                  transform: "translateY(-50%)",
+                  color: visualIdentity.colors.textSecondary,
+                  pointerEvents: "none",
+                }}
+              />
+              <input
+                type="search"
+                value={search}
+                placeholder="بحث"
+                onChange={(event) => setSearch(event.target.value)}
+                style={{ ...controlStyle, paddingRight: 32 }}
+              />
+            </label>
+
+            <button
+              type="button"
+              title="الفلاتر"
+              aria-label="الفلاتر"
+              onClick={() => setFiltersOpen((current) => !current)}
+              style={{
+                width: 42,
+                height: 38,
+                borderRadius: 10,
+                border: filtersOpen || activeFilters.length
+                  ? `1px solid ${visualIdentity.colors.cyan}88`
+                  : "1px solid rgba(255,255,255,0.15)",
+                background: filtersOpen || activeFilters.length
+                  ? "rgba(85,217,255,0.16)"
+                  : "rgba(255,255,255,0.08)",
+                color: filtersOpen || activeFilters.length
+                  ? visualIdentity.colors.cyan
+                  : visualIdentity.colors.white,
+                display: "grid",
+                placeItems: "center",
+                cursor: "pointer",
+              }}
+            >
+              <SlidersHorizontal size={17} />
+            </button>
+
+            {hasFilters ? (
               <button
                 type="button"
+                title="مسح الفلاتر"
+                aria-label="مسح الفلاتر"
                 onClick={resetFilters}
-                style={{ border: 0, background: "transparent", color: visualIdentity.colors.cyan, fontFamily: "inherit", fontSize: 9, cursor: "pointer" }}
+                style={{
+                  width: 34,
+                  height: 38,
+                  borderRadius: 10,
+                  border: "1px solid rgba(255,255,255,0.12)",
+                  background: "rgba(255,255,255,0.06)",
+                  color: visualIdentity.colors.gold,
+                  display: "grid",
+                  placeItems: "center",
+                  cursor: "pointer",
+                }}
               >
-                مسح الفلاتر
+                <X size={16} />
               </button>
+            ) : (
+              <span />
             )}
           </div>
 
-          <input
-            type="search"
-            value={search}
-            placeholder="بحث بالتصنيف أو الملاحظة أو طريقة الدفع"
-            onChange={(event) => setSearch(event.target.value)}
-            style={{ ...controlStyle, marginBottom: 7 }}
-          />
-
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 7, marginBottom: 7 }}>
-            <select value={category} onChange={(event) => setCategory(event.target.value)} style={controlStyle}>
-              <option value="all">كل التصنيفات</option>
-              {categories.map((item) => <option key={item} value={item}>{item}</option>)}
-            </select>
-            <select value={paymentMethod} onChange={(event) => setPaymentMethod(event.target.value)} style={controlStyle}>
-              <option value="all">كل طرق الدفع</option>
-              {paymentMethods.map((item) => <option key={item} value={item}>{item}</option>)}
-            </select>
-          </div>
-
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 7, marginBottom: 8 }}>
-            <label style={{ color: visualIdentity.colors.textSecondary, fontSize: 8 }}>
-              من تاريخ
-              <input type="date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} style={{ ...controlStyle, marginTop: 3 }} />
-            </label>
-            <label style={{ color: visualIdentity.colors.textSecondary, fontSize: 8 }}>
-              إلى تاريخ
-              <input type="date" value={dateTo} onChange={(event) => setDateTo(event.target.value)} style={{ ...controlStyle, marginTop: 3 }} />
-            </label>
-          </div>
-
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 6 }}>
-            {[
-              ["all", "الكل"],
-              ["expense", "مصروفات"],
-              ["income", "إيرادات"],
-            ].map(([id, label]) => {
-              const active = entryType === id;
-              return (
+          {activeFilters.length > 0 && (
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginTop: 8 }}>
+              {activeFilters.map((filter) => (
                 <button
-                  key={id}
+                  key={filter.id}
                   type="button"
-                  onClick={() => setEntryType(id)}
+                  onClick={filter.onClear}
                   style={{
-                    minHeight: 32,
-                    borderRadius: 9,
-                    border: active ? `1px solid ${visualIdentity.colors.cyan}77` : "1px solid rgba(255,255,255,0.12)",
-                    background: active ? "rgba(85,217,255,0.18)" : "rgba(255,255,255,0.05)",
-                    color: active ? visualIdentity.colors.cyan : visualIdentity.colors.textSecondary,
+                    minHeight: 24,
+                    borderRadius: 999,
+                    border: `1px solid ${visualIdentity.colors.cyan}55`,
+                    background: "rgba(85,217,255,0.12)",
+                    color: visualIdentity.colors.cyan,
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 4,
+                    padding: "3px 7px",
                     fontFamily: "inherit",
-                    fontSize: 9,
+                    fontSize: 8,
                     fontWeight: 800,
                     cursor: "pointer",
                   }}
                 >
-                  {label}
+                  <X size={10} />
+                  {filter.label}
                 </button>
-              );
-            })}
-          </div>
+              ))}
+            </div>
+          )}
+
+          {filtersOpen && (
+            <div style={{ marginTop: 9, display: "grid", gap: 8 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 7 }}>
+                <select value={category} onChange={(event) => setCategory(event.target.value)} style={controlStyle}>
+                  <option value="all">كل التصنيفات</option>
+                  {categories.map((item) => <option key={item} value={item}>{item}</option>)}
+                </select>
+                <select value={paymentMethod} onChange={(event) => setPaymentMethod(event.target.value)} style={controlStyle}>
+                  <option value="all">كل طرق الدفع</option>
+                  {paymentMethods.map((item) => <option key={item} value={item}>{item}</option>)}
+                </select>
+              </div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 7 }}>
+                <label style={{ color: visualIdentity.colors.textSecondary, fontSize: 8 }}>
+                  من تاريخ
+                  <input type="date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} style={{ ...controlStyle, marginTop: 3 }} />
+                </label>
+                <label style={{ color: visualIdentity.colors.textSecondary, fontSize: 8 }}>
+                  إلى تاريخ
+                  <input type="date" value={dateTo} onChange={(event) => setDateTo(event.target.value)} style={{ ...controlStyle, marginTop: 3 }} />
+                </label>
+              </div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 6 }}>
+                {[
+                  ["all", "الكل"],
+                  ["expense", "مصروفات"],
+                  ["income", "إيرادات"],
+                ].map(([id, label]) => {
+                  const active = entryType === id;
+                  return (
+                    <button
+                      key={id}
+                      type="button"
+                      onClick={() => setEntryType(id)}
+                      style={{
+                        minHeight: 32,
+                        borderRadius: 9,
+                        border: active ? `1px solid ${visualIdentity.colors.cyan}77` : "1px solid rgba(255,255,255,0.12)",
+                        background: active ? "rgba(85,217,255,0.18)" : "rgba(255,255,255,0.05)",
+                        color: active ? visualIdentity.colors.cyan : visualIdentity.colors.textSecondary,
+                        fontFamily: "inherit",
+                        fontSize: 9,
+                        fontWeight: 800,
+                        cursor: "pointer",
+                      }}
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </section>
 
         {filteredRows.map((row, index) => (
@@ -228,7 +351,7 @@ export default function ExpenseReportModal({
                     fontSize: 13,
                   }}
                 >
-                  ✎
+                  i
                 </button>
                 <div
                   style={{
@@ -312,7 +435,7 @@ export default function ExpenseReportModal({
                 )}
                 {selectedAsset > 0 && (
                   <DetailRow
-                    label="ممّول من أصل"
+                    label="ممول من أصل"
                     value={`${selectedAsset.toFixed(2)} ${currencyLabel}`}
                     valueColor={visualIdentity.colors.gold}
                     last
@@ -334,7 +457,7 @@ export default function ExpenseReportModal({
               />
               <DetailRow label="التصنيف" value={selectedExpense.category} />
               <DetailRow
-                label="اسلوب الدفع"
+                label="أسلوب الدفع"
                 value={selectedFundingLabel ? `كاش + ${selectedFundingLabel}` : selectedExpense.paymentMethod}
               />
               <DetailRow
@@ -358,7 +481,7 @@ export default function ExpenseReportModal({
               {selectedFundingLabel && (
                 <DetailRow
                   label="تغطية مبلغ التجاوز"
-                  value={`${selectedFundingLabel} · ${Number(
+                  value={`${selectedFundingLabel} - ${Number(
                     selectedFunding.amount || selectedExpense.overBudget || 0
                   ).toFixed(2)} ${currencyLabel}`}
                   valueColor={visualIdentity.colors.cyan}
