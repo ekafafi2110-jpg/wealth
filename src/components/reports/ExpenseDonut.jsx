@@ -8,10 +8,23 @@ import {
 import { useLocale } from "../../i18n/locale";
 import visualIdentity from "../../theme/visualIdentity";
 
+const FALLBACK_CATEGORY_COLORS = [
+  "#E8A44A",
+  "#7BBFF5",
+  "#60C698",
+  "#A78BF5",
+  "#F07A7A",
+  "#F5C96A",
+  "#38BDF8",
+  "#FF8A65",
+  "#EC4899",
+  "#B0A080",
+];
+
 export default function ExpenseDonut({
   expenses,
   mode = "donut",
-  categoryColors,
+  categoryColors = {},
   centerValue,
   centerLabel,
   centerColor = "var(--text-heading)",
@@ -21,12 +34,12 @@ export default function ExpenseDonut({
   new Set((expenses || []).map((e) => e.category).filter(Boolean))
 );
 
-const grouped = expenseCats.map((cat) => ({
+const grouped = expenseCats.map((cat, index) => ({
   name: cat,
   value: (expenses || [])
     .filter((e) => e.category === cat)
     .reduce((sum, e) => sum + Number(e.amount || 0), 0),
-  color: categoryColors[cat] || "var(--text-muted)",
+  color: categoryColors[cat] || FALLBACK_CATEGORY_COLORS[index % FALLBACK_CATEGORY_COLORS.length],
   })).filter((x) => x.value > 0);
   const total = grouped.reduce((sum, x) => sum + x.value, 0);
   const sortedGrouped = [...grouped].sort((a, b) => b.value - a.value);

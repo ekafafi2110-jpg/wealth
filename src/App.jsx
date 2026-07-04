@@ -265,6 +265,9 @@ const G = {
 const DEFAULT_EXPENSE_CATEGORIES = [
   { id: "food", label: "طعام", iconKey: "soup", color: "#f59e0b", pinned: true },
   { id: "groceries", label: "مواد غذائية", iconKey: "apple", color: "#52E5A0", pinned: false },
+  { id: "cleaning-supplies", label: "منظفات", icon: "🧴", color: "#38BDF8", pinned: false },
+  { id: "vegetables-fruits", label: "خضار وفواكه", iconKey: "apple", color: "#52E5A0", pinned: false },
+  { id: "bakery", label: "مخبوزات", icon: "🥐", color: "#F59E0B", pinned: false },
   { id: "meat-poultry", label: "لحوم ودواجن", iconKey: "beef", color: "#FF8A65", pinned: false },
   { id: "transport", label: "مواصلات", iconKey: "car", color: "#3b82f6", pinned: true },
   { id: "car-maintenance", label: "صيانة وإصلاح سيارة", iconKey: "wrench", color: "#F59E0B", pinned: false },
@@ -279,6 +282,7 @@ const DEFAULT_EXPENSE_CATEGORIES = [
   { id: "fuel", label: "بنزين", iconKey: "fuel", color: "#f97316", pinned: true },
   { id: "other", label: "\u0623\u062e\u0631\u0649", icon: "...", color: "#91A9BF", isOther: true, pinned: true },
 ];
+const MAX_MAIN_EXPENSE_CATEGORIES = 8;
 const CATEGORY_ICON_FALLBACKS = {
   apple: "🥬",
   beef: "🥩",
@@ -295,11 +299,26 @@ const CATEGORY_ICON_FALLBACKS = {
   soup: "🍽️",
   wrench: "🔧",
 };
+const limitMainExpenseCategoryPins = (categories = []) => {
+  let pinnedCount = 0;
+
+  return categories.map((category) => {
+    if (!category?.pinned || category.isOther) return category;
+
+    pinnedCount += 1;
+    return pinnedCount <= MAX_MAIN_EXPENSE_CATEGORIES
+      ? category
+      : { ...category, pinned: false };
+  });
+};
 const getCategoryDisplayIcon = (category) =>
   category?.icon || CATEGORY_ICON_FALLBACKS[category?.iconKey] || CAT_ICONS[category?.label] || "•";
 const getExpenseCategoryIconKeyByName = (name) => {
   const text = String(name || "").trim().toLowerCase();
   const rules = [
+    { words: ["\u0645\u0646\u0638\u0641", "\u0645\u0646\u0638\u0641\u0627\u062a", "\u062a\u0646\u0638\u064a\u0641"], iconKey: "droplets" },
+    { words: ["\u062e\u0636\u0627\u0631", "\u0641\u0648\u0627\u0643\u0647", "\u0641\u0627\u0643\u0647\u0629"], iconKey: "apple" },
+    { words: ["\u0645\u062e\u0628\u0648\u0632", "\u0645\u062e\u0628\u0648\u0632\u0627\u062a", "\u062e\u0628\u0632", "\u0645\u0639\u062c\u0646\u0627\u062a"], iconKey: "soup" },
     { words: ["\u0645\u0648\u0627\u062f", "\u063a\u0630\u0627\u0626\u064a"], iconKey: "apple" },
     { words: ["\u0644\u062d\u0648\u0645", "\u062f\u0648\u0627\u062c\u0646", "\u062f\u062c\u0627\u062c"], iconKey: "beef" },
     { words: ["\u0635\u064a\u0627\u0646\u0629", "\u0633\u064a\u0627\u0631\u0629", "\u0643\u0631\u0627\u062c"], iconKey: "wrench" },
@@ -851,20 +870,22 @@ const savedExpenseCategories =
     ...(state.expenseCategories?.extra || []),
   ];
 
-const allExpenseCategories = [
-  ...defaultExpenseCategories.map((base) => {
-    const saved = savedExpenseCategories.find((item) => item.id === base.id);
-    return saved ? { ...base, ...saved } : base;
-  }),
-  ...savedExpenseCategories.filter(
-    (saved) =>
-      !defaultExpenseCategories.some((base) => base.id === saved.id)
-  ),
-].filter((category) => !category.hidden);
+const allExpenseCategories = limitMainExpenseCategoryPins(
+  [
+    ...defaultExpenseCategories.map((base) => {
+      const saved = savedExpenseCategories.find((item) => item.id === base.id);
+      return saved ? { ...base, ...saved } : base;
+    }),
+    ...savedExpenseCategories.filter(
+      (saved) =>
+        !defaultExpenseCategories.some((base) => base.id === saved.id)
+    ),
+  ].filter((category) => !category.hidden)
+);
 
 const pinnedExpenseCategories = allExpenseCategories
   .filter((cat) => cat.pinned && !cat.isOther)
-  .slice(0, 9);
+  .slice(0, MAX_MAIN_EXPENSE_CATEGORIES);
 
 const mainExpenseCategories = pinnedExpenseCategories;
   const enteredAmount = Number(amount || 0);
@@ -2371,7 +2392,7 @@ function toggleExpenseCategoryPinned(catId) {
         ...(prev.expenseCategories?.extra || []),
       ];
 
-    const mergedItems = [
+    const mergedItems = limitMainExpenseCategoryPins([
       ...defaultExpenseCategories.map((base) => {
         const saved = savedItems.find((item) => item.id === base.id);
         return saved ? { ...base, ...saved } : base;
@@ -2380,7 +2401,7 @@ function toggleExpenseCategoryPinned(catId) {
         (saved) =>
           !defaultExpenseCategories.some((base) => base.id === saved.id)
       ),
-    ];
+    ]);
 
     const target = mergedItems.find((cat) => cat.id === catId);
     if (!target) return prev;
@@ -2389,7 +2410,7 @@ function toggleExpenseCategoryPinned(catId) {
       (cat) => cat.pinned && !cat.isOther
     ).length;
 
-    if (!target.pinned && pinnedCount >= 9) {
+    if (!target.pinned && pinnedCount >= MAX_MAIN_EXPENSE_CATEGORIES) {
       alert("اكتمل العدد في قائمة المصاريف الرئيسية. قم بإلغاء تثبيت أحد المصاريف أولاً لإضافة مصروف جديد.");
       return prev;
     }
@@ -3824,6 +3845,13 @@ function ReportsScreen({ state }) {
     ...category,
     icon: getCategoryDisplayIcon(category),
   }));
+  const expenseCategoryColors = reportCategories.reduce(
+    (colors, category) => ({
+      ...colors,
+      [category.label]: category.color || CC[category.label],
+    }),
+    { ...CC }
+  );
   const expenseTrendMap = new Map();
   (state.monthlySnapshots || []).forEach((snapshot) => {
     const value = (snapshot.expenses || []).reduce(
@@ -4035,7 +4063,7 @@ function ReportsScreen({ state }) {
                 <ExpenseDonut
                   expenses={state.expenses}
                   mode={expenseChartMode}
-                  categoryColors={CC}
+                  categoryColors={expenseCategoryColors}
                   centerValue={remainingSpendingCap}
                   centerLabel="المتبقي من السقف"
                   centerColor={
