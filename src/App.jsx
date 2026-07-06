@@ -1,6 +1,6 @@
 // Test Cline Integration
 import { useEffect, useRef, useState } from "react";
-import { MessageSquare, StickyNote, Trash2 } from "lucide-react";
+import { Copy, MessageCircle, MessageSquare, Send, Share2, StickyNote, Trash2 } from "lucide-react";
 import { INITIAL_STATE } from "./data/initialState";
 import { recordExpense } from "./logic/expenses";
 import {
@@ -664,8 +664,16 @@ function rebalanceCurrentLiabilityCoverage(state) {
     return Number(item.dueDay || 31);
   };
 
+  const isOpeningBalanceLiability = (item) =>
+    item.source === "setup" || item.source === "manual_card";
+
   const ordered = [...currentLiabilities]
-    .filter((item) => item.status !== "paid" && item.source !== "expense_payment")
+    .filter(
+      (item) =>
+        item.status !== "paid" &&
+        item.source !== "expense_payment" &&
+        !isOpeningBalanceLiability(item)
+    )
     .sort((a, b) => dueValue(a) - dueValue(b));
 
   for (const item of ordered) {
@@ -888,6 +896,7 @@ function Overview({
   const [amount, setAmount] = useState("");
   const [category, setCategory] = useState("طعام");
   const [paymentMethod, setPaymentMethod] = useState("cash");
+  const [categoryTouched, setCategoryTouched] = useState(false);
   const [splitWithCash, setSplitWithCash] = useState(false);
   const [cashSelectionExplicit, setCashSelectionExplicit] = useState(false);
   const [cardId, setCardId] = useState("");
@@ -917,6 +926,7 @@ const [overBudgetDueDate, setOverBudgetDueDate] = useState("");
   const aiVoiceStopTimerRef = useRef(null);
   const selectExpenseCategory = (nextCategory) => {
     setCategory(nextCategory);
+    setCategoryTouched(true);
     window.requestAnimationFrame(() => {
       amountInputRef.current?.focus();
       });
@@ -973,6 +983,12 @@ const pinnedExpenseCategories = allExpenseCategories
   .slice(0, MAX_MAIN_EXPENSE_CATEGORIES);
 
 const mainExpenseCategories = pinnedExpenseCategories;
+  const firstVisibleExpenseCategory = mainExpenseCategories[0]?.label || "";
+  const activeExpenseCategory =
+    categoryTouched &&
+    mainExpenseCategories.some((item) => item.label === category)
+      ? category
+      : firstVisibleExpenseCategory;
   const enteredAmount = Number(amount || 0);
   const pendingTotal = pendingExpenses.reduce(
     (sum, item) => sum + Number(item.amount || 0),
@@ -1068,6 +1084,7 @@ useEffect(() => {
   const timer = window.setTimeout(() => {
     setAmount(String(Number(draft.amount || 0).toFixed(2)));
     setCategory(draft.category || "فرق التزام هيكلي");
+    setCategoryTouched(true);
     setNote(draft.note || "فرق زيادة التزام هيكلي");
     setPaymentMethod("cash");
     setSplitWithCash(false);
@@ -1127,7 +1144,8 @@ useEffect(() => {
 
   const resetExpenseDraft = () => {
     setAmount("");
-    setCategory("طعام");
+    setCategory("");
+    setCategoryTouched(false);
     setPaymentMethod("cash");
     setSplitWithCash(false);
     setCashSelectionExplicit(false);
@@ -1186,7 +1204,7 @@ useEffect(() => {
       alert("أدخل مبلغاً أكبر من صفر");
       return;
     }
-    if (!String(category || "").trim()) {
+    if (!String(activeExpenseCategory || "").trim()) {
       alert("اختر تصنيف المصروف");
       return;
     }
@@ -1211,7 +1229,7 @@ useEffect(() => {
       ...prev,
       {
         id: `${Date.now()}-${prev.length}`,
-        category,
+        category: activeExpenseCategory,
         amount: value,
         note,
         date: accountingDate,
@@ -1223,7 +1241,8 @@ useEffect(() => {
     ]);
     setAmount("");
     setNote("");
-    setCategory("طعام");
+    setCategory("");
+    setCategoryTouched(false);
   };
 
   const removePendingExpense = (id) => {
@@ -1391,6 +1410,80 @@ useEffect(() => {
       image.src = URL.createObjectURL(file);
     });
 
+  const revealExpenseCategoryInMain = (categoryToReveal) => {
+    const cleanLabel = String(categoryToReveal?.label || categoryToReveal || "").trim();
+    if (!cleanLabel) return cleanLabel;
+
+    setState((prev) => {
+      const savedItems =
+        prev.expenseCategories?.items ||
+        [
+          ...(prev.expenseCategories?.main || []),
+          ...(prev.expenseCategories?.extra || []),
+        ];
+      const mergedItems = [
+        ...defaultExpenseCategories.map((base) => {
+          const saved = savedItems.find((item) => item.id === base.id);
+          return saved ? { ...base, ...saved } : base;
+        }),
+        ...savedItems.filter(
+          (saved) =>
+            !defaultExpenseCategories.some((base) => base.id === saved.id)
+        ),
+      ];
+
+      let target = mergedItems.find(
+        (item) =>
+          String(item.label || "").trim() === cleanLabel ||
+          String(item.id || "").trim() === cleanLabel
+      );
+
+      if (!target) {
+        target = {
+          id: `ai-category-${Date.now()}`,
+          label: cleanLabel,
+          iconKey: getExpenseCategoryIconKeyByName(cleanLabel),
+          icon: getExpenseCategoryIconByName(cleanLabel),
+          color: visualIdentity.colors.cyan,
+          pinned: false,
+        };
+        mergedItems.push(target);
+      }
+
+      const visiblePinned = mergedItems.filter(
+        (item) => item.pinned && !item.hidden && !item.isOther
+      );
+      const targetIsVisible = visiblePinned.some(
+        (item) => item.id === target.id
+      );
+
+      if (targetIsVisible) return prev;
+
+      const lastVisible = visiblePinned[visiblePinned.length - 1];
+      const nextItems = mergedItems.map((item) => {
+        if (item.id === target.id) return { ...item, pinned: true, hidden: false };
+        if (
+          lastVisible &&
+          item.id === lastVisible.id &&
+          visiblePinned.length >= MAX_MAIN_EXPENSE_CATEGORIES
+        ) {
+          return { ...item, pinned: false };
+        }
+        return item;
+      });
+
+      return {
+        ...prev,
+        expenseCategories: {
+          ...(prev.expenseCategories || {}),
+          items: limitMainExpenseCategoryPins(nextItems),
+        },
+      };
+    });
+
+    return categoryToReveal?.label || cleanLabel;
+  };
+
   const applyAiExpenseSuggestion = (suggestion) => {
     const nextAmount = Number(suggestion?.amount || 0);
     if (nextAmount > 0) setAmount(String(nextAmount));
@@ -1401,8 +1494,15 @@ useEffect(() => {
         String(item.label || "").trim() === suggestedCategory ||
         String(item.id || "").trim() === suggestedCategory
     );
-    if (matchedCategory?.label) setCategory(matchedCategory.label);
-    else if (suggestedCategory) setCategory(suggestedCategory);
+    if (matchedCategory?.label) {
+      const visibleCategory = revealExpenseCategoryInMain(matchedCategory);
+      setCategory(visibleCategory);
+      setCategoryTouched(true);
+    } else if (suggestedCategory) {
+      const visibleCategory = revealExpenseCategoryInMain(suggestedCategory);
+      setCategory(visibleCategory);
+      setCategoryTouched(true);
+    }
 
     const nextNote = [suggestion?.note, suggestion?.summary]
       .filter(Boolean)
@@ -1750,7 +1850,7 @@ useEffect(() => {
     const operationId = createOperationId();
     const result = recordExpense(baseState, {
       amount: Number(amount || 0),
-      category,
+      category: activeExpenseCategory,
       paymentMethod: effectivePaymentMethod,
       cardId,
       note,
@@ -1915,12 +2015,6 @@ if (
     }
 
   }
-
-  alert(
-    `تنبيه: تجاوزت سقف الصرف بمبلغ ${lastExpense.overBudget.toFixed(
-      2
-    )} ${localeCurrencyLabel} في هذه العملية.`
-  );
 }
 
 if (lastExpense?.overBudget > 0 && effectivePaymentMethod === "asset") {
@@ -1933,12 +2027,6 @@ if (lastExpense?.overBudget > 0 && effectivePaymentMethod === "asset") {
       )?.label || "أصل",
     amount: Number(lastExpense.overBudget || 0),
   };
-
-  alert(
-    `تنبيه: تجاوزت سقف الصرف بمبلغ ${lastExpense.overBudget.toFixed(
-      2
-    )} ${localeCurrencyLabel} في هذه العملية.`
-  );
 }
 
 setState(nextState);
@@ -2213,8 +2301,8 @@ setState(nextState);
       taggedAssetHistory[movementToTagIndex] = {
         ...taggedAssetHistory[movementToTagIndex],
         expensePurpose: "expense_coverage",
-        expenseCategory: category || "غير مصنف",
-        note: `تسييل لتغطية مصروف — ${category || "غير مصنف"}`,
+        expenseCategory: activeExpenseCategory || "غير مصنف",
+        note: `تسييل لتغطية مصروف — ${activeExpenseCategory || "غير مصنف"}`,
       };
     }
 
@@ -2904,7 +2992,7 @@ function deleteExpenseCategory(catItem) {
 
 <ExpenseCategoryGrid
             categories={mainExpenseCategories}
-            selectedCategory={category}
+            selectedCategory={activeExpenseCategory}
             onSelect={selectExpenseCategory}
             getTileStyle={getCategoryTileStyle}
             icons={CAT_ICONS}
@@ -3161,7 +3249,7 @@ function deleteExpenseCategory(catItem) {
                         label="اختيار تاريخ استحقاق الالتزام الطارئ"
                       />
                       <input
-                        value={`مصروف ${category || "غير مصنف"} طارئ`}
+                        value={`مصروف ${activeExpenseCategory || "غير مصنف"} طارئ`}
                         readOnly
                         aria-label="اسم الالتزام الطارئ"
                         style={{ ...G.inp(), marginBottom: 0, direction: "rtl" }}
@@ -6632,6 +6720,8 @@ function SettingsScreen({
 }) {
   const { t } = useLocale();
   const [settingsView, setSettingsView] = useState("menu");
+  const [shareMenuOpen, setShareMenuOpen] = useState(false);
+  const [shareMenuIndex, setShareMenuIndex] = useState(0);
   const currencyLabel = getCurrencyLabel(state);
 const structuralTotal = calcStructuralTotal(state);
 const salary = Number(state.settings?.salary || 0);
@@ -7824,14 +7914,36 @@ const hasOpeningBalanceDrafts = Object.keys(openingBalanceDrafts).length > 0;
     link.click();
     URL.revokeObjectURL(url);
   };
+  const appShareTitle = "مدير الثروة الذكي";
+  const appShareText = "جرّب تطبيق مدير الثروة الذكي لمتابعة الدخل والمصروفات والأصول والالتزامات في مكان واحد.";
+  const getApplicationShareUrl = () => window.location.href;
   const shareApplication = async () => {
-    const shareData = { title: "مدير الثروة الذكي", url: window.location.href };
+    const shareData = {
+      title: appShareTitle,
+      text: appShareText,
+      url: getApplicationShareUrl(),
+    };
     if (navigator.share) {
       await navigator.share(shareData);
       return;
     }
-    await navigator.clipboard.writeText(window.location.href);
+    await copyApplicationLink();
+  };
+  const copyApplicationLink = async () => {
+    await navigator.clipboard.writeText(getApplicationShareUrl());
     alert("تم نسخ رابط التطبيق");
+  };
+  const openApplicationShareTarget = (target) => {
+    const url = encodeURIComponent(getApplicationShareUrl());
+    const text = encodeURIComponent(`${appShareText}\n${getApplicationShareUrl()}`);
+    const title = encodeURIComponent(appShareTitle);
+    const targets = {
+      whatsapp: `https://wa.me/?text=${text}`,
+      telegram: `https://t.me/share/url?url=${url}&text=${encodeURIComponent(appShareText)}`,
+      email: `mailto:?subject=${title}&body=${text}`,
+    };
+    const targetUrl = targets[target];
+    if (targetUrl) window.open(targetUrl, "_blank", "noopener,noreferrer");
   };
   const changeAccountPassword = async ({ currentPassword, newPassword }) => {
     const email = authSession?.user?.email;
@@ -8108,7 +8220,205 @@ const hasOpeningBalanceDrafts = Object.keys(openingBalanceDrafts).length > 0;
       )}
 
       {settingsView === "share" && (
-        <button type="button" onClick={() => shareApplication().catch(() => alert("تعذرت مشاركة الرابط"))} style={G.btn(visualIdentity.gradients.gold, visualIdentity.colors.navy, { width: "100%", minHeight: 48 })}>مشاركة التطبيق</button>
+        <div className="asset-dashboard-card" style={{ ...settingsPanelStyle, padding: 16, direction: "rtl" }}>
+          {(() => {
+            const shareOptions = [
+              {
+                label: "خيارات الهاتف",
+                icon: Share2,
+                color: visualIdentity.colors.gold,
+                angle: -90,
+                x: 0,
+                y: -62,
+                onClick: () => shareApplication().catch(() => copyApplicationLink()),
+              },
+              {
+                label: "واتساب",
+                icon: MessageCircle,
+                color: visualIdentity.semantic.success,
+                angle: 0,
+                x: 62,
+                y: 0,
+                onClick: () => openApplicationShareTarget("whatsapp"),
+              },
+              {
+                label: "نسخ الرابط",
+                icon: Copy,
+                color: visualIdentity.colors.cyan,
+                angle: 90,
+                x: 0,
+                y: 62,
+                onClick: () => copyApplicationLink().catch(() => alert("تعذر نسخ الرابط")),
+              },
+              {
+                label: "تلغرام",
+                icon: Send,
+                color: "#7BBFF5",
+                angle: 180,
+                x: -62,
+                y: 0,
+                onClick: () => openApplicationShareTarget("telegram"),
+              },
+            ];
+            const activeOption = shareOptions[shareMenuIndex] || shareOptions[0];
+            const runActiveShareOption = () => activeOption?.onClick?.();
+            const moveSharePointer = (step) => {
+              setShareMenuOpen(true);
+              setShareMenuIndex((index) => (index + step + shareOptions.length) % shareOptions.length);
+            };
+
+            return (
+              <>
+                <div style={{ marginBottom: 14, textAlign: "right" }}>
+                  <b style={{ display: "block", color: visualIdentity.colors.gold, fontSize: 15 }}>
+                    مشاركة التطبيق
+                  </b>
+                  <span style={{ display: "block", marginTop: 4, color: visualIdentity.colors.textSecondary, fontSize: 11 }}>
+                    اضغط الدائرة لفتح خيارات المشاركة
+                  </span>
+                </div>
+
+                <div
+                  style={{
+                    position: "relative",
+                    width: 190,
+                    height: 190,
+                    margin: "10px auto 14px",
+                    borderRadius: "50%",
+                    background: shareMenuOpen
+                      ? "radial-gradient(circle, rgba(255,255,255,0.04) 0 28%, rgba(4,13,23,0.92) 29% 58%, rgba(0,0,0,0.18) 59% 100%)"
+                      : "transparent",
+                    border: shareMenuOpen ? "1px solid rgba(255,255,255,0.12)" : "1px solid transparent",
+                    boxShadow: shareMenuOpen
+                      ? "inset 0 1px 0 rgba(255,255,255,0.08), 0 18px 42px rgba(0,15,36,0.25)"
+                      : "none",
+                    overflow: "visible",
+                    transition: "background 180ms ease, border-color 180ms ease, box-shadow 180ms ease",
+                  }}
+                >
+                  <span
+                    style={{
+                      position: "absolute",
+                      left: "50%",
+                      top: "50%",
+                      width: shareMenuOpen ? 40 : 0,
+                      height: 4,
+                      transformOrigin: "0 50%",
+                      transform: `rotate(${activeOption.angle}deg) translateX(38px)`,
+                      background: visualIdentity.colors.gold,
+                      borderRadius: 99,
+                      boxShadow: `0 0 18px ${visualIdentity.colors.gold}88`,
+                      opacity: shareMenuOpen ? 1 : 0,
+                      transition: "transform 180ms ease, opacity 160ms ease, width 160ms ease",
+                      pointerEvents: "none",
+                    }}
+                  />
+
+                  {shareOptions.map((option, index) => {
+                    const Icon = option.icon;
+                    const active = shareMenuOpen && index === shareMenuIndex;
+                    return (
+                      <button
+                        key={option.label}
+                        type="button"
+                        title={option.label}
+                        onClick={() => {
+                          setShareMenuOpen(true);
+                          setShareMenuIndex(index);
+                          option.onClick();
+                        }}
+                        style={{
+                          position: "absolute",
+                          left: "50%",
+                          top: "50%",
+                          width: 36,
+                          height: 36,
+                          transform: shareMenuOpen
+                            ? `translate(calc(-50% + ${option.x}px), calc(-50% + ${option.y}px)) scale(1)`
+                            : "translate(-50%, -50%) scale(0.15)",
+                          opacity: shareMenuOpen ? 1 : 0,
+                          pointerEvents: shareMenuOpen ? "auto" : "none",
+                          border: active
+                            ? `1.5px solid ${visualIdentity.colors.gold}`
+                            : "1px solid rgba(255,255,255,0.16)",
+                          borderRadius: "50%",
+                          background: active ? "rgba(255,198,45,0.16)" : "rgba(255,255,255,0.055)",
+                          color: visualIdentity.colors.white,
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          padding: 0,
+                          cursor: "pointer",
+                          fontFamily: "inherit",
+                          transition: "transform 180ms ease, opacity 160ms ease, border-color 160ms ease",
+                        }}
+                      >
+                        <span
+                          style={{
+                            width: 28,
+                            height: 28,
+                            borderRadius: "50%",
+                            background: active ? `${option.color}24` : "transparent",
+                            color: option.color,
+                            display: "inline-flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                          }}
+                        >
+                          <Icon size={16} strokeWidth={2.5} />
+                        </span>
+                      </button>
+                    );
+                  })}
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!shareMenuOpen) {
+                        setShareMenuOpen(true);
+                        return;
+                      }
+                      runActiveShareOption();
+                    }}
+                    style={{
+                      position: "absolute",
+                      left: "50%",
+                      top: "50%",
+                      width: 66,
+                      height: 66,
+                      transform: "translate(-50%, -50%)",
+                      borderRadius: "50%",
+                      border: `2px solid ${shareMenuOpen ? visualIdentity.colors.gold : "rgba(255,255,255,0.22)"}`,
+                      background: "radial-gradient(circle at 35% 28%, rgba(255,255,255,0.26), rgba(20,57,108,0.96) 55%, rgba(0,12,28,0.98))",
+                      color: shareMenuOpen ? visualIdentity.colors.gold : visualIdentity.colors.white,
+                      cursor: "pointer",
+                      fontFamily: "inherit",
+                      fontWeight: 900,
+                      boxShadow: shareMenuOpen
+                        ? `0 0 0 8px rgba(255,198,45,0.08), 0 0 24px ${visualIdentity.colors.gold}44`
+                        : "0 12px 28px rgba(0,0,0,0.28)",
+                    }}
+                    aria-label={shareMenuOpen ? `تنفيذ ${activeOption.label}` : "فتح خيارات المشاركة"}
+                  >
+                    <Share2 size={23} strokeWidth={2.6} />
+                  </button>
+                </div>
+
+                <div style={{ display: "grid", gridTemplateColumns: "42px minmax(0, 1fr) 42px", alignItems: "center", gap: 8 }}>
+                  <button type="button" onClick={() => moveSharePointer(-1)} style={G.iconBtn(visualIdentity.colors.gold)}>
+                    ‹
+                  </button>
+                  <div style={{ textAlign: "center", color: visualIdentity.colors.textSecondary, fontSize: 11 }}>
+                    الخيار الحالي: <b style={{ color: visualIdentity.colors.white }}>{activeOption.label}</b>
+                  </div>
+                  <button type="button" onClick={() => moveSharePointer(1)} style={G.iconBtn(visualIdentity.colors.gold)}>
+                    ›
+                  </button>
+                </div>
+              </>
+            );
+          })()}
+        </div>
       )}
 
       {settingsView === "account" && (
@@ -8123,8 +8433,28 @@ const hasOpeningBalanceDrafts = Object.keys(openingBalanceDrafts).length > 0;
       )}
 
       {settingsView === "about" && (
-        <div className="asset-dashboard-card" style={{ ...settingsPanelStyle, textAlign: "center", padding: 24 }}>
-          <b style={{ display: "block", color: visualIdentity.colors.gold }}>{t("settings.comingSoon")}</b>
+        <div className="asset-dashboard-card" style={{ ...settingsPanelStyle, padding: 18, direction: "rtl", textAlign: "right" }}>
+          <h3 style={{ margin: "0 0 12px", color: visualIdentity.colors.gold, fontSize: 16, fontWeight: 900 }}>
+            مدير الثروة الذكي
+          </h3>
+          {[
+            "مدير الثروة الذكي هو تطبيق يساعدك على متابعة دخلك، مصروفاتك، أصولك، والتزاماتك في مكان واحد.",
+            "يعرض لك حركة المال بوضوح: من أين أتى، أين ذهب، وكم بقي لديك، مع متابعة سقف الصرف الشهري، قيمة الأصول، والرصيد الادخاري.",
+            "كما يضم التطبيق مساعد ذكاء اصطناعي يحلل المصاريف والأصول وحركتها، ويقدم تقريراً مرتباً مع ملاحظات ونصائح تساعدك على اتخاذ قرارات مالية أوضح.",
+            "الهدف من التطبيق هو مساعدتك على فهم وضعك المالي وتنظيمه بطريقة بسيطة وعملية.",
+          ].map((paragraph) => (
+            <p
+              key={paragraph}
+              style={{
+                margin: "0 0 10px",
+                color: visualIdentity.colors.textSecondary,
+                fontSize: 12,
+                lineHeight: 1.8,
+              }}
+            >
+              {paragraph}
+            </p>
+          ))}
         </div>
       )}
       </SettingsSubpageShell>
@@ -8415,6 +8745,30 @@ function rollStateToCurrentMonth(state) {
   return next;
 }
 
+function normalizeSessionUsageFromExpenses(session = {}, expenses = []) {
+  const coveredSpent = (expenses || []).reduce(
+    (sum, expense) => sum + Number(expense.budgetCovered || 0),
+    0
+  );
+  const overBudgetTotal = (expenses || []).reduce(
+    (sum, expense) => sum + Number(expense.overBudget || 0),
+    0
+  );
+  const overBudgetRelief = (expenses || []).reduce(
+    (sum, expense) =>
+      sum + Number(expense.liabilityPayment?.overBudgetRelief || 0),
+    0
+  );
+
+  return {
+    ...session,
+    coveredSpent: Number(coveredSpent.toFixed(2)),
+    overBudgetSpent: Number(
+      Math.max(0, overBudgetTotal - overBudgetRelief).toFixed(2)
+    ),
+  };
+}
+
 function hydrateAppState(storedState) {
   if (!storedState || typeof storedState !== "object" || Array.isArray(storedState)) {
     return INITIAL_STATE;
@@ -8606,10 +8960,13 @@ function hydrateAppState(storedState) {
         ? storedState.expenseCategories.items
         : [],
     },
-    session: {
-      ...INITIAL_STATE.session,
-      ...(storedState.session || {}),
-    },
+    session: normalizeSessionUsageFromExpenses(
+      {
+        ...INITIAL_STATE.session,
+        ...(storedState.session || {}),
+      },
+      storedExpenses
+    ),
     extraCash: Array.isArray(storedState.extraCash) ? storedState.extraCash : [],
     structuralLiabilities: Array.isArray(storedState.structuralLiabilities)
       ? storedState.structuralLiabilities
