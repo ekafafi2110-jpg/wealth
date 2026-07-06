@@ -23,6 +23,15 @@ const recurringDueDate = (dueDay, now) => {
   return due;
 };
 
+const weekKey = (value) => {
+  const date = localDay(value);
+  if (!date) return "";
+  const firstDayOfYear = new Date(date.getFullYear(), 0, 1);
+  const dayOfYear = Math.floor((date.getTime() - firstDayOfYear.getTime()) / DAY_MS) + 1;
+  const week = Math.ceil((dayOfYear + firstDayOfYear.getDay()) / 7);
+  return `${date.getFullYear()}-W${String(week).padStart(2, "0")}`;
+};
+
 export function notificationPermission() {
   if (typeof window === "undefined" || !("Notification" in window)) return "unsupported";
   return window.Notification.permission;
@@ -102,6 +111,19 @@ export function buildNotificationPlan(state, now = new Date()) {
         markKeys: [key],
       });
     });
+  }
+
+  if (notifications.reports) {
+    const key = `report:${weekKey(now)}`;
+    if (!sent[key]) {
+      alerts.push({
+        key,
+        title: "التقرير الأسبوعي جاهز",
+        body: "افتح تقرير AI الأسبوعي لتحليل آخر 7 أيام من المصروفات.",
+        tag: key,
+        markKeys: [key],
+      });
+    }
   }
 
   return alerts;

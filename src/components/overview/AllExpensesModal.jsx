@@ -1,3 +1,4 @@
+import { StickyNote } from "lucide-react";
 import visualIdentity from "../../theme/visualIdentity";
 
 const { colors, gradients, cards } = visualIdentity;
@@ -7,6 +8,7 @@ export default function AllExpensesModal({
   items,
   onClose,
   onSelect,
+  onEditNote,
   incomeAmount,
 }) {
   if (!open) return null;
@@ -46,9 +48,18 @@ export default function AllExpensesModal({
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
+            gap: 10,
             paddingBottom: 12,
           }}
         >
+          <div style={{ textAlign: "right" }}>
+            <strong style={{ display: "block", color: colors.white, fontSize: 17, fontWeight: 900 }}>
+              كل المصاريف
+            </strong>
+            <span style={{ color: colors.textSecondary, fontSize: 10, fontWeight: 700 }}>
+              {items.length} عملية مسجلة
+            </span>
+          </div>
           <button
             type="button"
             onClick={onClose}
@@ -63,18 +74,11 @@ export default function AllExpensesModal({
               color: colors.white,
               fontSize: 20,
               cursor: "pointer",
+              flex: "0 0 auto",
             }}
           >
-            ×
+            x
           </button>
-          <div style={{ textAlign: "right" }}>
-            <strong style={{ display: "block", color: colors.white, fontSize: 17, fontWeight: 900 }}>
-              كل المصاريف
-            </strong>
-            <span style={{ color: colors.textSecondary, fontSize: 10, fontWeight: 700 }}>
-              {items.length} عملية مسجلة
-            </span>
-          </div>
         </header>
 
         <div
@@ -89,44 +93,42 @@ export default function AllExpensesModal({
         >
           {items.map((expense, index) => {
             const income = Boolean(expense.isIncomeEntry);
+            const amountColor = income ? colors.green : colors.red;
+            const hasNote = Boolean(String(expense.note || "").trim());
+
             return (
-              <button
-                key={expense.id}
-                type="button"
-                onClick={() => {
-                  onSelect(expense);
-                  onClose();
-                }}
+              <div
+                key={expense.id || `${expense.date}-${index}`}
                 style={{
-                  width: "100%",
                   minHeight: 62,
                   display: "grid",
-                  gridTemplateColumns: "70px minmax(0, 1fr) 24px",
+                  gridTemplateColumns: "minmax(0, 1fr) 76px 32px 20px",
                   alignItems: "center",
                   gap: 8,
                   padding: "9px 11px",
-                  border: "none",
                   borderBottom:
                     index < items.length - 1 ? "1px solid rgba(255,255,255,0.11)" : "none",
-                  background: "transparent",
-                  color: colors.white,
-                  fontFamily: "inherit",
-                  cursor: "pointer",
-                  direction: "ltr",
+                  direction: "rtl",
                 }}
               >
-                <strong
+                <button
+                  type="button"
+                  onClick={() => {
+                    onSelect(expense);
+                    onClose();
+                  }}
                   style={{
-                    color: income ? colors.green : colors.red,
-                    fontSize: 12,
-                    fontWeight: 900,
-                    textAlign: "left",
-                    fontVariantNumeric: "tabular-nums",
+                    minWidth: 0,
+                    padding: 0,
+                    border: "none",
+                    background: "transparent",
+                    color: colors.white,
+                    fontFamily: "inherit",
+                    cursor: "pointer",
+                    textAlign: "right",
+                    direction: "rtl",
                   }}
                 >
-                  {income ? "+" : "-"}{incomeAmount(expense).toFixed(2)}
-                </strong>
-                <span style={{ minWidth: 0, textAlign: "right", direction: "rtl" }}>
                   <strong
                     style={{
                       display: "block",
@@ -143,16 +145,67 @@ export default function AllExpensesModal({
                     style={{
                       display: "block",
                       marginTop: 3,
+                      overflow: "hidden",
                       color: colors.textSecondary,
                       fontSize: 9,
                       fontWeight: 700,
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
                     }}
                   >
                     {expense.note || "بدون ملاحظة"} · {expense.paymentMethod}
                   </small>
-                </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onSelect(expense);
+                    onClose();
+                  }}
+                  style={{
+                    minHeight: 30,
+                    padding: "4px 6px",
+                    borderRadius: 9,
+                    border: `1px solid ${amountColor}44`,
+                    background: income ? `${colors.green}18` : `${colors.red}1f`,
+                    color: amountColor,
+                    fontFamily: "inherit",
+                    fontSize: 12,
+                    fontWeight: 950,
+                    textAlign: "center",
+                    direction: "ltr",
+                    fontVariantNumeric: "tabular-nums",
+                    whiteSpace: "nowrap",
+                    textShadow: `0 0 8px ${amountColor}66`,
+                    cursor: "pointer",
+                  }}
+                >
+                  {income ? "+" : "-"}{incomeAmount(expense).toFixed(2)}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onEditNote?.(expense)}
+                  title={hasNote ? "تعديل الملاحظة" : "إضافة ملاحظة"}
+                  aria-label={hasNote ? "تعديل ملاحظة المصروف" : "إضافة ملاحظة للمصروف"}
+                  style={{
+                    width: 30,
+                    height: 30,
+                    borderRadius: 10,
+                    border: hasNote
+                      ? `1px solid ${colors.cyan}88`
+                      : "1px solid rgba(255,255,255,0.16)",
+                    background: hasNote ? `${colors.cyan}22` : "rgba(255,255,255,0.08)",
+                    color: hasNote ? colors.cyan : colors.textSecondary,
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    cursor: "pointer",
+                  }}
+                >
+                  <StickyNote size={15} strokeWidth={2.3} />
+                </button>
                 <span style={{ color: colors.gold, fontSize: 18 }}>‹</span>
-              </button>
+              </div>
             );
           })}
 

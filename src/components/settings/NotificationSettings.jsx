@@ -1,4 +1,4 @@
-import { BellRing, Clock3, Gauge, LockKeyhole } from "lucide-react";
+import { BellRing, Clock3, FileText, Gauge } from "lucide-react";
 import { useState } from "react";
 import visualIdentity from "../../theme/visualIdentity";
 import {
@@ -10,7 +10,7 @@ const rows = [
   { key: "budget", label: "تنبيهات سقف الصرف", meta: "عند 50% و70% و90% و100%", icon: Gauge, active: true },
   { key: "liabilities", label: "تذكير الالتزامات", meta: "قبل الاستحقاق بـ3 أيام وفي يومه", icon: Clock3, active: true },
   { key: "expenses", label: "تنبيهات المصروفات", meta: "قيد التجهيز", icon: BellRing, active: false },
-  { key: "reports", label: "التقارير الأسبوعية", meta: "قيد التجهيز", icon: LockKeyhole, active: false },
+  { key: "reports", label: "التقارير الأسبوعية", meta: "تذكير أسبوعي بتحليل آخر 7 أيام", icon: FileText, active: true },
 ];
 
 export default function NotificationSettings({ values, onChange }) {

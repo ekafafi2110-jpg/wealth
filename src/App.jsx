@@ -1,6 +1,6 @@
 // Test Cline Integration
 import { useEffect, useRef, useState } from "react";
-import { Trash2 } from "lucide-react";
+import { MessageSquare, StickyNote, Trash2 } from "lucide-react";
 import { INITIAL_STATE } from "./data/initialState";
 import { recordExpense } from "./logic/expenses";
 import {
@@ -28,10 +28,10 @@ import BottomNavigation from "./components/common/BottomNavigation";
 import ExpenseSubmitButton from "./components/expenses/ExpenseSubmitButton";
 import PaymentMethodSelector from "./components/expenses/PaymentMethodSelector";
 import ExpenseCategoryGrid from "./components/expenses/ExpenseCategoryGrid";
-import ExpenseEntryPad from "./components/expenses/ExpenseEntryPad";
 import PendingExpensesReview from "./components/expenses/PendingExpensesReview";
 import PendingSurplusCard from "./components/overview/PendingSurplusCard";
 import SpendingCapCard from "./components/overview/SpendingCapCard";
+import RecentExpensesPreview from "./components/overview/RecentExpensesPreview";
 import AllExpensesModal from "./components/overview/AllExpensesModal";
 import AssetsToolbar from "./components/assets/AssetsToolbar";
 import AssetsSummaryCard from "./components/assets/AssetsSummaryCard";
@@ -926,7 +926,7 @@ const [overBudgetDueDate, setOverBudgetDueDate] = useState("");
     (card) =>
       Number(card.creditLimit || 0) - Number(card.balance || 0) > 0.001
   );
-  const recent = [...state.expenses].slice(-3).reverse();
+  const recent = [...state.expenses].slice(-5).reverse();
   const allExpenses = [...state.expenses].reverse();
   const dueCurrentLiabilities = (state.currentLiabilities || []).filter((l) => {
   if (!l.dueDate || l.status === "paid") return false;
@@ -1149,15 +1149,6 @@ useEffect(() => {
     setUnusualDueDate("");
   };
 
-  const appendAmountDigit = (digit) => {
-    setAmount((prev) => {
-      const next = String(prev || "");
-      if (digit === "." && next.includes(".")) return next;
-      if (digit === "." && !next) return "0.";
-      if (next === "0" && digit !== ".") return String(digit);
-      return `${next}${digit}`;
-    });
-  };
   const openPendingSurplusAllocation = () => {
     const surplus = Number(state.session?.pendingSurplus || 0);
     if (surplus > 0.01) onAllocateSurplus(surplus);
@@ -1244,6 +1235,20 @@ useEffect(() => {
     if (nextNote !== null) {
       setNote(nextNote);
     }
+  };
+  const editRecordedExpenseNote = (expense) => {
+    if (!expense?.id) return;
+    const nextNote = window.prompt("اكتب ملاحظة المصروف", expense.note || "");
+    if (nextNote === null) return;
+    setState((prev) => ({
+      ...prev,
+      expenses: (prev.expenses || []).map((item) =>
+        item.id === expense.id ? { ...item, note: nextNote } : item
+      ),
+    }));
+    setSelectedExpense((current) =>
+      current?.id === expense.id ? { ...current, note: nextNote } : current
+    );
   };
 
   const changePaymentMethod = (value) => {
@@ -1445,6 +1450,56 @@ useEffect(() => {
       applyAiExpenseSuggestion(data);
     } catch (error) {
       alert(error.message || "تعذر تحليل المصروف بالذكاء الاصطناعي");
+    } finally {
+      setAiExpenseBusy(false);
+    }
+  };
+
+  const analyzeBankMessage = async () => {
+    if (aiExpenseBusy || voiceRecording) return;
+    const message = window.prompt("الصق رسالة البنك أو البطاقة هنا");
+    if (!message || !message.trim()) return;
+
+    const context = {
+      currency: localeCurrencyLabel,
+      categories: allExpenseCategories.map((item) => item.label).filter(Boolean),
+      paymentMethods: paymentOptions.map((option) => ({
+        value: option.value,
+        label: option.label,
+      })),
+    };
+
+    setAiExpenseBusy(true);
+    try {
+      const response = await fetch("/api/ai-bank-message", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message, context }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(data.error || "تعذر تحليل رسالة البنك");
+      }
+
+      if (data.type !== "expense") {
+        alert(data.summary || "هذه الرسالة لا تبدو كمصروف قابل للتسجيل.");
+        return;
+      }
+
+      applyAiExpenseSuggestion({
+        amount: data.amount,
+        category: data.category,
+        note: data.note || data.merchant || message,
+        summary: data.confidence < 0.75 ? "راجع البيانات قبل التسجيل" : "",
+        paymentMethodSuggestion: data.paymentMethodSuggestion,
+      });
+
+      const warnings = Array.isArray(data.warnings) ? data.warnings.filter(Boolean) : [];
+      if (data.confidence < 0.75 || warnings.length) {
+        alert(["تم تجهيز المصروف للمراجعة قبل التسجيل.", ...warnings].join("\n"));
+      }
+    } catch (error) {
+      alert(error.message || "تعذر تحليل رسالة البنك");
     } finally {
       setAiExpenseBusy(false);
     }
@@ -2582,6 +2637,7 @@ function deleteExpenseCategory(catItem) {
         overBudgetSpent={budget.overBudgetSpent}
         dueLiabilitiesCount={dueCurrentLiabilities.length}
         onOpenDueLiabilities={onOpenDueLiabilities}
+        accountingDateDisplay={accountingDateDisplay}
         recentExpenses={recent}
         onSelectExpense={setSelectedExpense}
         onShowAllExpenses={() => setShowAllExpenses(true)}
@@ -2648,27 +2704,62 @@ function deleteExpenseCategory(catItem) {
 
             <div
               style={{
-                minWidth: 78,
-                paddingInline: 2,
-                color: visualIdentity.colors.gold,
-                fontSize: 10,
-                fontWeight: 900,
-                fontVariantNumeric: "tabular-nums",
-                textAlign: "center",
-                flex: "0 0 auto",
-              }}
-            >
-              {accountingDateDisplay}
-            </div>
-
-            <div
-              style={{
                 display: "inline-flex",
                 alignItems: "center",
                 gap: 5,
                 flex: "0 0 auto",
               }}
             >
+              <button
+                type="button"
+                onClick={editExpenseNote}
+                title={note ? `الملاحظة: ${note}` : "إضافة ملاحظة"}
+                aria-label={note ? "تعديل ملاحظة المصروف" : "إضافة ملاحظة للمصروف"}
+                style={{
+                  width: 26,
+                  height: 26,
+                  borderRadius: 9,
+                  border: note
+                    ? `1px solid ${visualIdentity.colors.cyan}88`
+                    : "1px solid rgba(255,255,255,0.16)",
+                  background: note ? `${visualIdentity.colors.cyan}22` : "rgba(255,255,255,0.08)",
+                  color: note ? visualIdentity.colors.cyan : visualIdentity.colors.white,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  cursor: "pointer",
+                  fontFamily: "inherit",
+                  boxShadow: note
+                    ? `0 0 0 3px ${visualIdentity.colors.cyan}18, inset 0 1px 0 rgba(255,255,255,0.14)`
+                    : "inset 0 1px 0 rgba(255,255,255,0.12)",
+                }}
+              >
+                <StickyNote size={15} strokeWidth={2.4} />
+              </button>
+              <button
+                type="button"
+                onClick={analyzeBankMessage}
+                disabled={aiExpenseBusy || voiceRecording}
+                title="تحليل رسالة بنك أو بطاقة"
+                aria-label="تحليل رسالة بنك أو بطاقة"
+                style={{
+                  width: 26,
+                  height: 26,
+                  borderRadius: 9,
+                  border: "1px solid rgba(111,234,255,0.32)",
+                  background: "rgba(111,234,255,0.10)",
+                  color: visualIdentity.colors.cyan,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  cursor: aiExpenseBusy || voiceRecording ? "not-allowed" : "pointer",
+                  opacity: aiExpenseBusy || voiceRecording ? 0.6 : 1,
+                  fontFamily: "inherit",
+                  boxShadow: "inset 0 1px 0 rgba(255,255,255,0.12)",
+                }}
+              >
+                <MessageSquare size={15} strokeWidth={2.4} />
+              </button>
               <button
                 type="button"
                 className={voiceRecording ? "voice-recording-pulse" : ""}
@@ -3135,15 +3226,13 @@ function deleteExpenseCategory(catItem) {
             </div>
           )}
 
-<ExpenseEntryPad
-            onDigit={appendAmountDigit}
-            onBackspace={() =>
-              setAmount((prev) => String(prev || "").slice(0, -1))
-            }
-            note={note}
-            onEditNote={editExpenseNote}
-            onAdd={addPendingExpense}
-            buttonStyle={G.btn}
+          <RecentExpensesPreview
+            items={recent}
+            onSelect={setSelectedExpense}
+            onShowAll={() => setShowAllExpenses(true)}
+            onEditNote={editRecordedExpenseNote}
+            incomeAmount={incomeEntryAmount}
+            currencyLabel={localeCurrencyLabel}
           />
 
           <PendingExpensesReview
@@ -3338,6 +3427,7 @@ function deleteExpenseCategory(catItem) {
         items={allExpenses}
         onClose={() => setShowAllExpenses(false)}
         onSelect={setSelectedExpense}
+        onEditNote={editRecordedExpenseNote}
         incomeAmount={incomeEntryAmount}
       />
 
@@ -4041,7 +4131,16 @@ function ReportsScreen({ state }) {
     { key: "stocks", label: "أسهم", value: reportAssetGroups.stocks, change: reportChange(reportAssetGroups.stocks, reportStockCost), color: visualIdentity.colors.purple },
     { key: "other", label: "أخرى", value: reportAssetGroups.other, change: 0, color: visualIdentity.colors.coral },
   ];
-  const paymentMethodsSummary = expenses.reduce((summary, expense) => {
+  const weeklyExpenseWindow = buildRollingExpenseWindow(state.expenses || []);
+  const weeklyExpenses = [...weeklyExpenseWindow.rows].sort((a, b) =>
+    String(b.date || b.createdAt || "").localeCompare(String(a.date || a.createdAt || ""))
+  );
+  const weeklyExpensesByCategory = buildExpensesByCategory(weeklyExpenses);
+  const weeklyExpensesTotal = weeklyExpenses.reduce(
+    (sum, item) => sum + Number(item.amount || 0),
+    0
+  );
+  const paymentMethodsSummary = weeklyExpenses.reduce((summary, expense) => {
     const key = expense.paymentMethod || "غير محدد";
     const current = summary[key] || { count: 0, total: 0 };
     current.count += 1;
@@ -4056,22 +4155,27 @@ function ReportsScreen({ state }) {
     month: state.currentMonth || new Date().toISOString().slice(0, 7),
     generatedAt: new Date().toISOString(),
     analysisWindow: {
-      label: "آخر 7 حركات أو أكثر حسب البيانات المتاحة",
-      recentExpensesCount: Math.min(20, expenses.length),
+      label: "آخر 7 أيام",
+      type: "rolling-last-7-days",
+      startDate: weeklyExpenseWindow.startDate,
+      endDate: weeklyExpenseWindow.endDate,
+      days: 7,
+      recentExpensesCount: Math.min(20, weeklyExpenses.length),
       totalExpensesCount: expenses.length,
+      windowExpensesCount: weeklyExpenses.length,
     },
     summary: {
       salary: Number(state.settings?.salary || 0),
       monthlyCap: Number(reportBudget.spendingCap || 0),
-      totalExpenses: Number(total || 0),
+      totalExpenses: Number(weeklyExpensesTotal || 0),
       remainingCap: Number(remainingSpendingCap || 0),
       savingsTotal: Number(state.session?.savingsAmount || 0),
       assetsTotal: Number(currentAssets.totalAssets || 0),
       liabilitiesTotal: Number(currentAssets.currentLiabilities || 0),
       netWorth: Number(currentAssets.netWorth || 0),
     },
-    expensesByCategory: currentExpensesByCategory,
-    recentExpenses: expenses.slice(0, 20).map((expense) => ({
+    expensesByCategory: weeklyExpensesByCategory,
+    recentExpenses: weeklyExpenses.slice(0, 20).map((expense) => ({
       date: expense.date || expense.createdAt || "",
       category: expense.category || "غير مصنف",
       amount: Number(expense.originalAmount ?? expense.amount ?? 0),
@@ -8038,6 +8142,37 @@ function getDateKey(dateValue = new Date()) {
   if (!dateValue) return new Date().toISOString().slice(0, 10);
   if (typeof dateValue === "string") return dateValue.slice(0, 10);
   return dateValue.toISOString().slice(0, 10);
+}
+
+function getLocalDateTime(dateValue) {
+  if (!dateValue) return null;
+  if (typeof dateValue === "string" && /^\d{4}-\d{2}-\d{2}/.test(dateValue)) {
+    const [year, month, day] = dateValue.slice(0, 10).split("-").map(Number);
+    return new Date(year, month - 1, day, 12);
+  }
+  const date = dateValue instanceof Date ? dateValue : new Date(dateValue);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function buildRollingExpenseWindow(expenses = [], now = new Date()) {
+  const end = new Date(now);
+  const start = new Date(now);
+  start.setDate(start.getDate() - 6);
+  start.setHours(0, 0, 0, 0);
+
+  const rows = expenses.filter((expense) => {
+    const expenseDate = getLocalDateTime(expense.date || expense.createdAt);
+    if (!expenseDate) return false;
+    return expenseDate >= start && expenseDate <= end;
+  });
+
+  return {
+    start,
+    end,
+    rows,
+    startDate: getDateKey(start),
+    endDate: getDateKey(end),
+  };
 }
 
 function getCoveredSpentFromCap(state) {

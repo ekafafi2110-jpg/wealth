@@ -6,8 +6,6 @@ export default function ExpenseEntryPad({
   spendingProgress,
   onDigit,
   onBackspace,
-  note,
-  onEditNote,
   onAdd,
   buttonStyle,
 }) {
@@ -64,8 +62,6 @@ export default function ExpenseEntryPad({
         />
 
         <ExpenseKeypadActions
-          note={note}
-          onEditNote={onEditNote}
           onAdd={onAdd}
           buttonStyle={buttonStyle}
         />
