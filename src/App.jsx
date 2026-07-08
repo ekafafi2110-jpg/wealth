@@ -368,6 +368,36 @@ const DEFAULT_EXPENSE_CATEGORIES = [
   { id: "other", label: "\u0623\u062e\u0631\u0649", icon: "...", color: "#91A9BF", isOther: true, pinned: true },
 ];
 const MAX_MAIN_EXPENSE_CATEGORIES = 8;
+
+const SHARE_TARGET_PARAM_KEYS = ["share-target", "title", "text", "url"];
+
+function readSharedExpenseMessageFromUrl() {
+  if (typeof window === "undefined") return "";
+
+  const url = new URL(window.location.href);
+  const params = url.searchParams;
+  const isShareTarget = params.get("share-target") === "expense";
+  const sharedParts = [
+    params.get("title"),
+    params.get("text"),
+    params.get("url"),
+  ]
+    .map((value) => String(value || "").trim())
+    .filter(Boolean);
+
+  if (!isShareTarget && !sharedParts.length) return "";
+
+  const uniqueParts = Array.from(new Set(sharedParts));
+  SHARE_TARGET_PARAM_KEYS.forEach((key) => params.delete(key));
+  const nextSearch = params.toString();
+  window.history.replaceState(
+    {},
+    document.title,
+    `${url.pathname}${nextSearch ? `?${nextSearch}` : ""}${url.hash}`
+  );
+
+  return uniqueParts.join("\n").trim();
+}
 const CATEGORY_ICON_FALLBACKS = {
   apple: "🥬",
   beef: "🥩",
@@ -901,6 +931,8 @@ function Overview({
   onOpenDueLiabilities,
   onOpenReceivables,
   onAllocateSurplus,
+  sharedExpenseMessage = "",
+  onSharedExpenseMessageConsumed,
   readOnly = false,
 }) {
   const { currencyLabel: localeCurrencyLabel, t } = useLocale();
@@ -1586,9 +1618,9 @@ useEffect(() => {
     }
   };
 
-  const analyzeBankMessage = async () => {
+  const analyzeBankMessage = async (sharedMessage = "") => {
     if (aiExpenseBusy || voiceRecording) return;
-    const message = window.prompt("الصق رسالة البنك أو البطاقة هنا");
+    const message = sharedMessage || window.prompt("الصق رسالة البنك أو البطاقة هنا");
     if (!message || !message.trim()) return;
 
     const context = {
@@ -1635,6 +1667,22 @@ useEffect(() => {
       setAiExpenseBusy(false);
     }
   };
+
+  useEffect(() => {
+    if (readOnly || !sharedExpenseMessage || aiExpenseBusy || voiceRecording) return;
+
+    const message = sharedExpenseMessage;
+    onSharedExpenseMessageConsumed?.();
+    window.setTimeout(() => {
+      analyzeBankMessage(message);
+    }, 0);
+  }, [
+    aiExpenseBusy,
+    onSharedExpenseMessageConsumed,
+    readOnly,
+    sharedExpenseMessage,
+    voiceRecording,
+  ]);
 
   const stopVoiceExpenseRecording = () => {
     if (aiVoiceStopTimerRef.current) {
@@ -10848,6 +10896,7 @@ export default function App() {
   const [authError, setAuthError] = useState("");
   const [authNotice, setAuthNotice] = useState("");
   const [authLoading, setAuthLoading] = useState(false);
+  const [sharedExpenseMessage, setSharedExpenseMessage] = useState("");
   const appLanguage = state.settings?.locale?.language || "ar";
   const appDirection = appLanguage === "ar" ? "rtl" : "ltr";
 
@@ -10863,6 +10912,13 @@ export default function App() {
     const [showExtraCash, setShowExtraCash] = useState(false);
     const [extraCashPreset, setExtraCashPreset] = useState(null);
     const [selectedViewMonth, setSelectedViewMonth] = useState("current");
+    useEffect(() => {
+      const sharedMessage = readSharedExpenseMessageFromUrl();
+      if (!sharedMessage) return;
+      setSharedExpenseMessage(sharedMessage);
+      setSelectedViewMonth("current");
+      setTab("overview");
+    }, []);
     useEffect(() => {
     let active = true;
 
@@ -11675,6 +11731,8 @@ const canLeaveSettingsTab = () => {
               });
               setShowExtraCash(true);
             }}
+            sharedExpenseMessage={!isSnapshotView ? sharedExpenseMessage : ""}
+            onSharedExpenseMessageConsumed={() => setSharedExpenseMessage("")}
           />
         )}
         {tab === "reports" && <ReportsScreen state={viewState} />}
