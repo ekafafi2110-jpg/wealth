@@ -504,7 +504,7 @@ const incomeEntryMeta = (entry) =>
         entry?.overBudget || 0
       ).toFixed(2)}`;
 
-function assetBreakdownFromAssets(assets = {}, market = {}) {
+function assetBreakdownFromAssets(assets = {}, market = {}, accountsReceivable = []) {
   const goldPrice = Number(market.goldGramPrice || 0);
   const silverPrice = Number(market.silverGramPrice || 0);
   const unitPrice = (item, fallback = 0, referenceField = "wac") =>
@@ -566,6 +566,19 @@ function assetBreakdownFromAssets(assets = {}, market = {}) {
     })
   );
 
+  const receivables = (accountsReceivable || []).reduce((sum, item) => {
+    if (item.status === "paid") return sum;
+    return sum + Number(item.balance ?? item.amount ?? 0);
+  }, 0);
+
+  if (receivables > 0) {
+    rows.push({
+      key: "receivables",
+      label: "الذمم المدينة",
+      value: receivables,
+    });
+  }
+
   return rows;
 }
 
@@ -582,6 +595,9 @@ function summarizeAssetReasons(state, month) {
     transfer_to_cash: "مناقلة بين الأصول",
     transfer_to_bank: "مناقلة بين الأصول",
     transfer_in_units: "مناقلة بين الأصول",
+    transfer_to_receivable: "مناقلة إلى ذمة مدينة",
+    receivable_paid_to_asset: "سداد ذمة إلى أصل",
+    receivable_paid_to_spending_cap: "سداد ذمة إلى سقف الصرف",
   };
   const totals = {};
   const transfers = {};
@@ -883,6 +899,7 @@ function Overview({
   state,
   setState,
   onOpenDueLiabilities,
+  onOpenReceivables,
   onAllocateSurplus,
   readOnly = false,
 }) {
@@ -945,10 +962,15 @@ const [overBudgetDueDate, setOverBudgetDueDate] = useState("");
   const currentMonth = state.currentMonth || new Date().toISOString().slice(0, 7);
   return dueMonth <= currentMonth;
 });
-  const assetSources = getAssetSources(state);
   const accountingDate = getDateKey(new Date());
   const accountingDateTime = `${accountingDate}T12:00:00.000Z`;
   const accountingDateDisplay = accountingDate.split("-").reverse().join("/");
+  const dueReceivablesCount = (state.accountsReceivable || []).filter((item) => {
+    if (item.status === "paid" || Number(item.balance ?? item.amount ?? 0) <= 0) return false;
+    const dueDate = String(item.dueDate || "");
+    return dueDate && dueDate <= accountingDate;
+  }).length;
+  const assetSources = getAssetSources(state);
   const isGoodsSource = (source) => {
     if (source.type !== "custom") return false;
     const id = String(source.key).split(":")[1];
@@ -984,10 +1006,15 @@ const pinnedExpenseCategories = allExpenseCategories
 
 const mainExpenseCategories = pinnedExpenseCategories;
   const firstVisibleExpenseCategory = mainExpenseCategories[0]?.label || "";
+  const selectedExpenseCategory = String(category || "").trim();
+  const selectedCategoryExists = allExpenseCategories.some(
+    (item) => !item.isOther && String(item.label || "").trim() === selectedExpenseCategory
+  );
   const activeExpenseCategory =
-    categoryTouched &&
-    mainExpenseCategories.some((item) => item.label === category)
-      ? category
+    categoryTouched && selectedCategoryExists
+      ? selectedExpenseCategory
+      : categoryTouched
+      ? ""
       : firstVisibleExpenseCategory;
   const enteredAmount = Number(amount || 0);
   const pendingTotal = pendingExpenses.reduce(
@@ -1209,7 +1236,7 @@ useEffect(() => {
       return;
     }
     if (!paymentMethod) {
-      alert("اختر أسلوب الدفع قبل إضافة البند");
+      alert("اختر طريقة الدفع قبل إضافة البند");
       return;
     }
     if (isMixedPayment) {
@@ -1272,7 +1299,7 @@ useEffect(() => {
 
   const changePaymentMethod = (value) => {
     if (pendingExpenses.length > 0 && value !== paymentMethod) {
-      alert("لديك مصروفات غير مسجلة. سجلها أولاً أو قم بإلغائها قبل تغيير اسلوب الدفع.");
+      alert("لديك مصروفات غير مسجلة. سجلها أولاً أو قم بإلغائها قبل تغيير طريقة الدفع.");
       return;
     }
 
@@ -1502,6 +1529,10 @@ useEffect(() => {
       const visibleCategory = revealExpenseCategoryInMain(suggestedCategory);
       setCategory(visibleCategory);
       setCategoryTouched(true);
+    } else {
+      setCategory("");
+      setCategoryTouched(true);
+      alert("لم يتم التعرف على نوع المصروف. اختر نوع المصروف من القائمة قبل التسجيل.");
     }
 
     const nextNote = [suggestion?.note, suggestion?.summary]
@@ -1715,7 +1746,7 @@ useEffect(() => {
     );
 
     if (!effectivePaymentMethod) {
-      alert("اختر أسلوب الدفع");
+      alert("اختر طريقة الدفع");
       return;
     }
 
@@ -2057,7 +2088,7 @@ setState(nextState);
     }
 
     if (!paymentMethod) {
-      alert("اختر أسلوب الدفع");
+      alert("اختر طريقة الدفع");
       return;
     }
 
@@ -2725,6 +2756,8 @@ function deleteExpenseCategory(catItem) {
         overBudgetSpent={budget.overBudgetSpent}
         dueLiabilitiesCount={dueCurrentLiabilities.length}
         onOpenDueLiabilities={onOpenDueLiabilities}
+        dueReceivablesCount={dueReceivablesCount}
+        onOpenReceivables={onOpenReceivables}
         accountingDateDisplay={accountingDateDisplay}
         recentExpenses={recent}
         onSelectExpense={setSelectedExpense}
@@ -3018,9 +3051,9 @@ function deleteExpenseCategory(catItem) {
                 width: 72,
                 minHeight: 42,
                 borderRadius: 12,
-                border: `1px solid ${visualIdentity.colors.gold}`,
-                background: visualIdentity.gradients.gold,
-                color: visualIdentity.colors.navy,
+                border: `1px solid ${visualIdentity.colors.green}88`,
+                background: visualIdentity.gradients.positive,
+                color: "#A4FFC8",
                 display: "inline-flex",
                 alignItems: "center",
                 justifyContent: "center",
@@ -3029,7 +3062,7 @@ function deleteExpenseCategory(catItem) {
                 fontFamily: "inherit",
                 fontSize: 10,
                 fontWeight: 900,
-                boxShadow: "0 6px 14px rgba(255,184,0,0.18)",
+                boxShadow: "0 6px 14px rgba(4,201,92,0.12)",
               }}
             >
               <span aria-hidden="true" style={{ fontSize: 16, lineHeight: 1 }}>+</span>
@@ -3610,7 +3643,7 @@ function deleteExpenseCategory(catItem) {
         </div>
 
         <div style={HOME_UI.row}>
-          <span style={{ color: HOME_UI.muted }}>اسلوب الدفع</span>
+          <span style={{ color: HOME_UI.muted }}>طريقة الدفع</span>
           <b>
             {selectedExpenseFundingLabel
               ? `كاش + ${selectedExpenseFundingLabel}`
@@ -3951,7 +3984,11 @@ function ReportsScreen({ state }) {
       month: snapshot.month,
       totalAssets: Number(snapshot.assetTotals?.totalAssets || 0),
       netWorth: Number(snapshot.assetTotals?.netWorth || 0),
-      breakdown: assetBreakdownFromAssets(snapshot.assets || {}, state.settings?.market || {}),
+      breakdown: assetBreakdownFromAssets(
+        snapshot.assets || {},
+        state.settings?.market || {},
+        snapshot.accountsReceivable || []
+      ),
       closed: true,
     });
   });
@@ -3959,7 +3996,11 @@ function ReportsScreen({ state }) {
     month: state.currentMonth || new Date().toISOString().slice(0, 7),
     totalAssets: Number(currentAssets.totalAssets || 0),
     netWorth: Number(currentAssets.netWorth || 0),
-    breakdown: assetBreakdownFromAssets(state.assets || {}, state.settings?.market || {}),
+    breakdown: assetBreakdownFromAssets(
+      state.assets || {},
+      state.settings?.market || {},
+      state.accountsReceivable || []
+    ),
     closed: false,
   });
   const assetTrend = Array.from(assetTrendByMonth.values()).sort((a, b) =>
@@ -4163,14 +4204,21 @@ function ReportsScreen({ state }) {
     banks: 0,
     gold: 0,
     stocks: 0,
+    receivables: 0,
     other: 0,
   };
-  assetBreakdownFromAssets(state.assets || {}, state.settings?.market || {}).forEach(
+  assetBreakdownFromAssets(
+    state.assets || {},
+    state.settings?.market || {},
+    state.accountsReceivable || []
+  ).forEach(
     (item) => {
       const key = String(item.key || "");
       const group =
         key === "cash"
           ? "cash"
+          : key === "receivables"
+          ? "receivables"
           : key.startsWith("bank:")
           ? "banks"
           : key.startsWith("gold:")
@@ -4190,6 +4238,7 @@ function ReportsScreen({ state }) {
     { key: "banks", label: "بنوك", value: reportAssetGroups.banks, color: visualIdentity.colors.sky },
     { key: "gold", label: "ذهب", value: reportAssetGroups.gold, color: visualIdentity.semantic.warning },
     { key: "stocks", label: "أسهم", value: reportAssetGroups.stocks, color: visualIdentity.colors.purple },
+    { key: "receivables", label: "ذمم مدينة", value: reportAssetGroups.receivables, color: visualIdentity.colors.green },
     { key: "other", label: "أخرى", value: reportAssetGroups.other, color: visualIdentity.colors.coral },
   ]
     .filter((item) => item.value > 0)
@@ -4217,6 +4266,7 @@ function ReportsScreen({ state }) {
     { key: "banks", label: "بنوك", value: reportAssetGroups.banks, change: 0, color: visualIdentity.colors.sky },
     { key: "gold", label: "ذهب", value: reportAssetGroups.gold, change: reportChange(reportAssetGroups.gold, reportGoldCost), color: visualIdentity.semantic.warning },
     { key: "stocks", label: "أسهم", value: reportAssetGroups.stocks, change: reportChange(reportAssetGroups.stocks, reportStockCost), color: visualIdentity.colors.purple },
+    { key: "receivables", label: "ذمم مدينة", value: reportAssetGroups.receivables, change: 0, color: visualIdentity.colors.green },
     { key: "other", label: "أخرى", value: reportAssetGroups.other, change: 0, color: visualIdentity.colors.coral },
   ];
   const weeklyExpenseWindow = buildRollingExpenseWindow(state.expenses || []);
@@ -4226,6 +4276,24 @@ function ReportsScreen({ state }) {
   const weeklyExpensesByCategory = buildExpensesByCategory(weeklyExpenses);
   const weeklyExpensesTotal = weeklyExpenses.reduce(
     (sum, item) => sum + Number(item.amount || 0),
+    0
+  );
+  const todayReportDate = getDateKey(new Date());
+  const unpaidReceivables = (state.accountsReceivable || [])
+    .filter((item) => item.status !== "paid" && Number(item.balance ?? item.amount ?? 0) > 0)
+    .sort((a, b) => String(a.dueDate || "9999-12-31").localeCompare(String(b.dueDate || "9999-12-31")));
+  const receivablesTotal = unpaidReceivables.reduce(
+    (sum, item) => sum + Number(item.balance ?? item.amount ?? 0),
+    0
+  );
+  const dueReceivables = unpaidReceivables.filter(
+    (item) => String(item.dueDate || "") && String(item.dueDate) <= todayReportDate
+  );
+  const overdueReceivables = unpaidReceivables.filter(
+    (item) => String(item.dueDate || "") && String(item.dueDate) < todayReportDate
+  );
+  const dueReceivablesTotal = dueReceivables.reduce(
+    (sum, item) => sum + Number(item.balance ?? item.amount ?? 0),
     0
   );
   const paymentMethodsSummary = weeklyExpenses.reduce((summary, expense) => {
@@ -4259,6 +4327,7 @@ function ReportsScreen({ state }) {
       remainingCap: Number(remainingSpendingCap || 0),
       savingsTotal: Number(state.session?.savingsAmount || 0),
       assetsTotal: Number(currentAssets.totalAssets || 0),
+      receivablesTotal: Number(receivablesTotal || 0),
       liabilitiesTotal: Number(currentAssets.currentLiabilities || 0),
       netWorth: Number(currentAssets.netWorth || 0),
     },
@@ -4293,6 +4362,30 @@ function ReportsScreen({ state }) {
         change: Number(month.change || 0),
       })),
     })),
+    accountsReceivable: {
+      label: "الذمم المدينة",
+      note: "هذه مبالغ مستحقة للمستخدم من الآخرين. تعامل معها كأصل غير سائل حتى السداد، ولا تعتبر السداد دخلاً جديداً إذا كان مجرد تحصيل لمبلغ سبق تسجيله.",
+      totalUnpaid: Number(receivablesTotal || 0),
+      unpaidCount: unpaidReceivables.length,
+      dueTotal: Number(dueReceivablesTotal || 0),
+      dueCount: dueReceivables.length,
+      overdueCount: overdueReceivables.length,
+      nextDue: unpaidReceivables[0]
+        ? {
+            debtorName: unpaidReceivables[0].debtorName || unpaidReceivables[0].name || "غير محدد",
+            amount: Number(unpaidReceivables[0].balance ?? unpaidReceivables[0].amount ?? 0),
+            dueDate: unpaidReceivables[0].dueDate || "",
+            source: unpaidReceivables[0].source || "",
+          }
+        : null,
+      items: unpaidReceivables.slice(0, 12).map((item) => ({
+        debtorName: item.debtorName || item.name || "غير محدد",
+        amount: Number(item.balance ?? item.amount ?? 0),
+        dueDate: item.dueDate || "",
+        source: item.source || "",
+        note: item.note || "",
+      })),
+    },
     paymentMethodsSummary,
   });
   const requestAiWealthReport = async () => {
@@ -4656,7 +4749,14 @@ function ReportsScreen({ state }) {
   );
 }
 
-function AssetsScreen({ state, setState, onAddExtraCash, readOnly = false }) {
+function AssetsScreen({
+  state,
+  setState,
+  onAddExtraCash,
+  readOnly = false,
+  focusReceivablesDueOnly = false,
+  onCloseReceivablesFocus,
+}) {
   const assets = calcAssets(state);
   const currencyLabel = getCurrencyLabel(state);
 
@@ -4668,7 +4768,7 @@ function AssetsScreen({ state, setState, onAddExtraCash, readOnly = false }) {
   const [transferSourceUnits, setTransferSourceUnits] = useState("");
   const [transferSourcePrice, setTransferSourcePrice] = useState("");
   const [transferAllocations, setTransferAllocations] = useState([
-    { id: 1, allocation: "cash", amount: "", targetId: "", assetName: "", units: "", price: "" },
+    { id: 1, allocation: "cash", amount: "", targetId: "", assetName: "", dueDate: "", note: "", units: "", price: "" },
   ]);
 
   const [assetKind, setAssetKind] = useState("bank");
@@ -4730,6 +4830,7 @@ function AssetsScreen({ state, setState, onAddExtraCash, readOnly = false }) {
     if (c.type === "fixed") return sum + Number(c.amount || 0);
     return sum + Number(c.units || 0) * getGenericUnitPrice(c);
   }, 0);
+  const receivablesTotal = Number(assets.receivables || 0);
 
   const openAddAsset = (kind) => {
     setAssetKind(kind);
@@ -4969,6 +5070,106 @@ function AssetsScreen({ state, setState, onAddExtraCash, readOnly = false }) {
   setAssetPrice("");
 };
 
+  const settleAccountReceivable = (receivableId, targetKey = "spendingCap") => {
+    setState((prev) => {
+      const item = (prev.accountsReceivable || []).find(
+        (entry) => String(entry.id) === String(receivableId)
+      );
+      if (!item || item.status === "paid") return prev;
+
+      const amount = Number(item.balance ?? item.amount ?? 0);
+      if (amount <= 0) return prev;
+
+      const now = new Date().toISOString();
+      const operationId = Date.now();
+      let next = structuredClone(prev);
+      const receivableLabel = `سداد ذمة مدينة - ${item.debtorName || "مدين"}`;
+
+      next.accountsReceivable = (next.accountsReceivable || []).map((entry) =>
+        String(entry.id) === String(receivableId)
+          ? {
+              ...entry,
+              balance: 0,
+              status: "paid",
+              paidAt: now,
+              paidTo: targetKey,
+            }
+          : entry
+      );
+
+      next.transactions = [
+        ...(next.transactions || []),
+        {
+          id: `${operationId}-receivable-paid`,
+          type: "account_receivable_paid",
+          amount,
+          receivableId,
+          debtorName: item.debtorName || "",
+          targetKey,
+          date: now,
+        },
+      ];
+
+      if (targetKey === "spendingCap") {
+        next.session = {
+          ...next.session,
+          spendingCap: Number((Number(next.session?.spendingCap || 0) + amount).toFixed(2)),
+        };
+        next.expenses = [
+          ...(next.expenses || []),
+          {
+            id: operationId + 1,
+            amount: 0,
+            originalAmount: amount,
+            category: "سداد ذمم مدينة",
+            paymentMethod: "income",
+            note: receivableLabel,
+            date: now.slice(0, 10),
+            createdAt: now,
+            budgetCovered: 0,
+            overBudget: 0,
+            isIncomeEntry: true,
+          },
+        ];
+        next.assetHistory = [
+          ...(next.assetHistory || []),
+          {
+            id: `${operationId}-receivable-cap`,
+            date: now,
+            recordedAt: now,
+            type: "receivable_paid_to_spending_cap",
+            source: "accounts_receivable",
+            amount,
+            receivableId,
+            note: receivableLabel,
+          },
+        ];
+        return rebalanceExpenseCoverageAfterCapIncrease(next);
+      }
+
+      next = addToAsset(next, targetKey, amount);
+      const target = getAssetSources(next).find((source) => source.key === targetKey);
+      next.assetHistory = [
+        ...(next.assetHistory || []),
+        {
+          id: `${operationId}-receivable-asset`,
+          date: now,
+          recordedAt: now,
+          type: "receivable_paid_to_asset",
+          source: "accounts_receivable",
+          assetKey: targetKey,
+          assetKind: target?.type || "",
+          amount,
+          receivableId,
+          debtorName: item.debtorName || "",
+          note: receivableLabel,
+          displayLabel: receivableLabel,
+        },
+      ];
+      return next;
+    });
+  };
+
   const transferDestinationOptions = (allocation) => {
     if (allocation === "bank") return state.assets.banks || [];
     if (allocation === "stock") return state.assets.stocks || [];
@@ -5057,7 +5258,7 @@ function AssetsScreen({ state, setState, onAddExtraCash, readOnly = false }) {
       setTransferSourceUnits("");
       setTransferSourcePrice("");
       setTransferAllocations([
-        { id: 1, allocation: "cash", amount: "", targetId: "", assetName: "", units: "", price: "" },
+        { id: 1, allocation: "cash", amount: "", targetId: "", assetName: "", dueDate: "", note: "", units: "", price: "" },
       ]);
       return;
     }
@@ -5070,6 +5271,8 @@ function AssetsScreen({ state, setState, onAddExtraCash, readOnly = false }) {
       units: Number(row.units || 0),
       price: Number(row.price || 0),
       assetName: String(row.assetName || "").trim(),
+      dueDate: String(row.dueDate || "").trim(),
+      note: String(row.note || "").trim(),
     }));
 
     const allocatedTotal = rows.reduce((sum, row) => sum + Number(row.amount || 0), 0);
@@ -5296,6 +5499,42 @@ function AssetsScreen({ state, setState, onAddExtraCash, readOnly = false }) {
       if (row.allocation === "goods") {
         if (!addUnitAsset({ row, listName: "custom", nameField: "name", type: "custom" })) return;
       }
+
+      if (row.allocation === "receivable") {
+        if (!row.assetName || !row.dueDate) {
+          alert("أدخل اسم المدين وتاريخ استحقاق الذمة المدينة");
+          return;
+        }
+        const receivableId = `transfer-receivable-${Date.now()}-${row.id}`;
+        next.accountsReceivable = [
+          ...(next.accountsReceivable || []),
+          {
+            id: receivableId,
+            debtorName: row.assetName,
+            amount: Number(row.amount.toFixed(2)),
+            balance: Number(row.amount.toFixed(2)),
+            dueDate: row.dueDate,
+            note: row.note || "مناقلة من أصل",
+            status: "pending",
+            source: "asset_transfer",
+            fromAsset,
+            createdAt: now,
+          },
+        ];
+        next.assetHistory.push({
+          id: `${Date.now()}-${row.id}-receivable`,
+          date: now,
+          recordedAt: now,
+          type: "transfer_to_receivable",
+          source: "asset_transfer",
+          assetKey: fromAsset,
+          receivableId,
+          debtorName: row.assetName,
+          amount: row.amount,
+          note: `مناقلة إلى ذمة مدينة - ${row.assetName}`,
+          displayLabel: `مناقلة إلى ذمة مدينة - ${row.assetName}`,
+        });
+      }
     }
 
     next.transactions.push({
@@ -5311,7 +5550,7 @@ function AssetsScreen({ state, setState, onAddExtraCash, readOnly = false }) {
     setShowTransfer(false);
     setTransferAmount("");
     setTransferAllocations([
-      { id: 1, allocation: "cash", amount: "", targetId: "", assetName: "", units: "", price: "" },
+      { id: 1, allocation: "cash", amount: "", targetId: "", assetName: "", dueDate: "", note: "", units: "", price: "" },
     ]);
   };
 
@@ -5331,7 +5570,7 @@ function AssetsScreen({ state, setState, onAddExtraCash, readOnly = false }) {
     setTransferAmount("");
     if (needsSale) {
       setTransferAllocations([
-        { id: 1, allocation: "cash", amount: "", targetId: "", assetName: "", units: "", price: "" },
+        { id: 1, allocation: "cash", amount: "", targetId: "", assetName: "", dueDate: "", note: "", units: "", price: "" },
       ]);
     }
   };
@@ -5417,7 +5656,8 @@ function AssetsScreen({ state, setState, onAddExtraCash, readOnly = false }) {
   const monthStartBreakdown = new Map(
     assetBreakdownFromAssets(
       previousMonthSnapshot?.assets || {},
-      state.settings?.market || {}
+      state.settings?.market || {},
+      previousMonthSnapshot?.accountsReceivable || []
     ).map((item) => [item.key, Number(item.value || 0)])
   );
   const monthStartTotal = previousMonthSnapshot
@@ -5433,7 +5673,8 @@ function AssetsScreen({ state, setState, onAddExtraCash, readOnly = false }) {
   const referenceBreakdown = new Map(
     assetBreakdownFromAssets(
       referenceAssetSnapshot?.assets || {},
-      state.settings?.market || {}
+      state.settings?.market || {},
+      referenceAssetSnapshot?.accountsReceivable || []
     ).map((item) => [item.key, Number(item.value || 0)])
   );
   const previousChangePct = (assetKey, currentValue) => {
@@ -5575,11 +5816,14 @@ function AssetsScreen({ state, setState, onAddExtraCash, readOnly = false }) {
     transfer_out: "مناقلة صادرة",
     transfer_to_cash: "مناقلة إلى الكاش الادخاري",
     transfer_to_bank: "مناقلة إلى الحساب البنكي",
+    transfer_to_receivable: "مناقلة إلى ذمة مدينة",
     transfer_in_units: "إضافة وحدات بالمناقلة",
     opening_balance: "رصيد افتتاحي",
     opening_asset: "إضافة أصل افتتاحي",
     asset_value_reset: "إعادة تعيين قيمة أصل",
     extra_cash: "دخل إضافي",
+    receivable_paid_to_asset: "سداد ذمة مدينة إلى أصل",
+    receivable_paid_to_spending_cap: "سداد ذمة مدينة إلى سقف الصرف",
   };
   const movementRows = (row) =>
     (state.assetHistory || [])
@@ -5684,6 +5928,7 @@ function AssetsScreen({ state, setState, onAddExtraCash, readOnly = false }) {
     { key: "banks", label: "بنوك", value: bankTotal, color: "#35AEEF" },
     { key: "gold", label: "ذهب", value: goldTotal, color: visualIdentity.semantic.warning },
     { key: "stocks", label: "أسهم", value: stockTotal, color: "#9A72F5" },
+    { key: "receivables", label: "ذمم مدينة", value: receivablesTotal, color: visualIdentity.colors.green },
     { key: "other", label: "أخرى", value: otherTotal, color: "#3B91A9" },
   ].filter((item) => item.value > 0);
   const distributionTotal = distributionBase.reduce((sum, item) => sum + item.value, 0);
@@ -5712,6 +5957,11 @@ function AssetsScreen({ state, setState, onAddExtraCash, readOnly = false }) {
         trendPoints={trendPoints}
         onAddIncome={onAddExtraCash}
         onTransfer={() => setShowTransfer(true)}
+        receivables={state.accountsReceivable || []}
+        assetSources={sources}
+        onSettleReceivable={settleAccountReceivable}
+        receivablesDueOnly={focusReceivablesDueOnly}
+        onCloseReceivablesFocus={onCloseReceivablesFocus}
         readOnly={readOnly}
         currencyLabel={currencyLabel}
       />
@@ -5901,7 +6151,7 @@ function AssetsScreen({ state, setState, onAddExtraCash, readOnly = false }) {
           setTransferSourceUnits("");
           setTransferSourcePrice("");
           setTransferAllocations([
-            { id: 1, allocation: "cash", amount: "", targetId: "", assetName: "", units: "", price: "" },
+            { id: 1, allocation: "cash", amount: "", targetId: "", assetName: "", dueDate: "", note: "", units: "", price: "" },
           ]);
         }}
         onFromAssetChange={changeTransferSource}
@@ -7009,6 +7259,11 @@ const [openingAssetName, setOpeningAssetName] = useState("");
 const [openingAssetUnits, setOpeningAssetUnits] = useState("");
 const [openingAssetPrice, setOpeningAssetPrice] = useState("");
 const [showOpeningAssetForm, setShowOpeningAssetForm] = useState(false);
+const [showOpeningReceivableForm, setShowOpeningReceivableForm] = useState(false);
+const [openingReceivableName, setOpeningReceivableName] = useState("");
+const [openingReceivableAmount, setOpeningReceivableAmount] = useState("");
+const [openingReceivableDueDate, setOpeningReceivableDueDate] = useState("");
+const [openingReceivableNote, setOpeningReceivableNote] = useState("");
 const [openingBalanceDrafts, setOpeningBalanceDrafts] = useState({});
 const [showStructuralForm, setShowStructuralForm] = useState(false);
 const [settingsSectionsOpen, setSettingsSectionsOpen] = useState({
@@ -7527,6 +7782,38 @@ const addOpeningAsset = () => {
   setOpeningAssetUnits("");
   setOpeningAssetPrice("");
   setShowOpeningAssetForm(false);
+};
+const addOpeningReceivable = () => {
+  const debtorName = String(openingReceivableName || "").trim();
+  const amount = Number(openingReceivableAmount || 0);
+  if (!debtorName || amount <= 0 || !openingReceivableDueDate) {
+    alert("أدخل اسم المدين والمبلغ وتاريخ الاستحقاق");
+    return;
+  }
+
+  setState((prev) => ({
+    ...prev,
+    accountsReceivable: [
+      ...(prev.accountsReceivable || []),
+      {
+        id: `settings-receivable-${Date.now()}`,
+        debtorName,
+        amount: Number(amount.toFixed(2)),
+        balance: Number(amount.toFixed(2)),
+        dueDate: openingReceivableDueDate,
+        note: String(openingReceivableNote || "رصيد افتتاحي").trim(),
+        status: "pending",
+        source: "settings",
+        createdAt: new Date().toISOString(),
+      },
+    ],
+  }));
+
+  setOpeningReceivableName("");
+  setOpeningReceivableAmount("");
+  setOpeningReceivableDueDate("");
+  setOpeningReceivableNote("");
+  setShowOpeningReceivableForm(false);
 };
  const addStructuralLiability = () => {
   if (!structuralName.trim()) return alert("أدخل اسم الالتزام الهيكلي");
@@ -8180,6 +8467,119 @@ const hasOpeningBalanceDrafts = Object.keys(openingBalanceDrafts).length > 0;
           hasChanges={hasOpeningBalanceDrafts}
           inputStyle={G.inp()}
         />
+
+        <div
+          style={{
+            marginTop: 12,
+            padding: 10,
+            borderRadius: 12,
+            border: `1px solid ${visualIdentity.colors.green}55`,
+            background: `${visualIdentity.colors.green}12`,
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 8 }}>
+            <div style={{ textAlign: "right" }}>
+              <b style={{ display: "block", color: visualIdentity.colors.green, fontSize: 13 }}>
+                الذمم المدينة
+              </b>
+              <span style={{ color: visualIdentity.colors.textSecondary, fontSize: 10 }}>
+                أرصدة مستحقة لك عند الآخرين
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowOpeningReceivableForm((value) => !value)}
+              style={{
+                width: 32,
+                height: 32,
+                borderRadius: 10,
+                border: `1px solid ${visualIdentity.colors.green}66`,
+                background: "rgba(255,255,255,0.08)",
+                color: visualIdentity.colors.green,
+                cursor: "pointer",
+                fontFamily: "inherit",
+                fontWeight: 900,
+              }}
+            >
+              +
+            </button>
+          </div>
+
+          {showOpeningReceivableForm && (
+            <div style={{ display: "grid", gap: 7, marginBottom: 9 }}>
+              <input value={openingReceivableName} onChange={(event) => setOpeningReceivableName(event.target.value)} placeholder="اسم المدين" style={G.inp()} />
+              <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) 42px 42px", gap: 7, alignItems: "center" }}>
+                <input type="number" value={openingReceivableAmount} onChange={(event) => setOpeningReceivableAmount(event.target.value)} placeholder="المبلغ" style={{ ...G.inp(), marginBottom: 0 }} />
+                <CalendarDatePicker value={openingReceivableDueDate} onChange={setOpeningReceivableDueDate} label="اختيار تاريخ استحقاق الذمة المدينة" />
+                <button
+                  type="button"
+                  onClick={() => {
+                    const nextNote = window.prompt("ملاحظة الذمة المدينة", openingReceivableNote || "");
+                    if (nextNote !== null) setOpeningReceivableNote(nextNote);
+                  }}
+                  title={openingReceivableNote ? "تعديل ملاحظة الذمة المدينة" : "إضافة ملاحظة للذمة المدينة"}
+                  aria-label={openingReceivableNote ? "تعديل ملاحظة الذمة المدينة" : "إضافة ملاحظة للذمة المدينة"}
+                  style={{
+                    width: 42,
+                    height: 42,
+                    borderRadius: 12,
+                    border: openingReceivableNote
+                      ? `1.5px solid ${visualIdentity.colors.gold}`
+                      : "1px solid rgba(255,255,255,0.18)",
+                    background: openingReceivableNote
+                      ? "rgba(255,198,45,0.14)"
+                      : "rgba(255,255,255,0.08)",
+                    color: openingReceivableNote
+                      ? visualIdentity.colors.gold
+                      : visualIdentity.colors.textSecondary,
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    cursor: "pointer",
+                    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.08)",
+                  }}
+                >
+                  <StickyNote size={18} strokeWidth={2.4} />
+                </button>
+              </div>
+              <button
+                type="button"
+                onClick={addOpeningReceivable}
+                style={G.btn(visualIdentity.gradients.positive, "#A4FFC8", {
+                  width: "100%",
+                  border: `1px solid ${visualIdentity.colors.green}66`,
+                })}
+              >
+                حفظ الذمة المدينة
+              </button>
+            </div>
+          )}
+
+          {(state.accountsReceivable || [])
+            .filter((item) => item.status !== "paid" && Number(item.balance ?? item.amount ?? 0) > 0)
+            .map((item) => (
+              <div
+                key={item.id}
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "minmax(0,1fr) auto",
+                  gap: 8,
+                  alignItems: "center",
+                  padding: "8px 0",
+                  borderTop: "1px solid rgba(255,255,255,0.10)",
+                  color: visualIdentity.colors.white,
+                  fontSize: 11,
+                }}
+              >
+                <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {item.debtorName || "مدين"} · {item.dueDate || "بدون تاريخ"}
+                </span>
+                <b style={{ color: visualIdentity.colors.green }}>
+                  {Number(item.balance ?? item.amount ?? 0).toFixed(2)} {currencyLabel}
+                </b>
+              </div>
+            ))}
+        </div>
       </OpeningBalancesSettingsSection>
       </>}
 
@@ -8631,6 +9031,7 @@ function buildMonthlySnapshot(state) {
     },
 
     assets: structuredClone(state.assets || {}),
+    accountsReceivable: structuredClone(state.accountsReceivable || []),
     assetHistory: structuredClone(state.assetHistory || []),
 
     liabilities: {
@@ -8661,6 +9062,7 @@ function buildAssetDailySnapshot(state, dateValue = new Date()) {
       netWorth: assetTotals.netWorth,
     },
     assets: structuredClone(state.assets || {}),
+    accountsReceivable: structuredClone(state.accountsReceivable || []),
   };
 }
 
@@ -8670,8 +9072,23 @@ function syncAssetDailySnapshot(prev, dateValue = new Date()) {
   const existing = (prev.assetDailySnapshots || []).find((item) => item.date === date);
   const existingTotal = Number(existing?.assetTotals?.totalAssets || 0);
   const nextTotal = Number(snapshot.assetTotals.totalAssets || 0);
+  const normalizeBreakdown = (item) =>
+    JSON.stringify(
+      assetBreakdownFromAssets(
+        item?.assets || {},
+        prev.settings?.market || {},
+        item?.accountsReceivable || []
+      ).map((row) => ({
+        key: row.key,
+        value: Number(Number(row.value || 0).toFixed(2)),
+      }))
+    );
 
-  if (existing && Math.abs(existingTotal - nextTotal) < 0.01) {
+  if (
+    existing &&
+    Math.abs(existingTotal - nextTotal) < 0.01 &&
+    normalizeBreakdown(existing) === normalizeBreakdown(snapshot)
+  ) {
     return prev;
   }
 
@@ -8973,6 +9390,9 @@ function hydrateAppState(storedState) {
       : [],
     currentLiabilities: hydratedCurrentLiabilities,
     reservedPayments: hydratedReservedPayments,
+    accountsReceivable: Array.isArray(storedState.accountsReceivable)
+      ? storedState.accountsReceivable
+      : [],
     expenses: storedExpenses,
     transactions: Array.isArray(storedState.transactions) ? storedState.transactions : [],
     monthlySnapshots: Array.isArray(storedState.monthlySnapshots)
@@ -9017,6 +9437,11 @@ function OnboardingFlow({ state, setState, onComplete }) {
   const [cardLimit, setCardLimit] = useState("");
   const [cardBalance, setCardBalance] = useState("");
   const [cardDueDay, setCardDueDay] = useState("");
+  const [receivableRows, setReceivableRows] = useState([]);
+  const [showReceivableForm, setShowReceivableForm] = useState(false);
+  const [receivableName, setReceivableName] = useState("");
+  const [receivableAmount, setReceivableAmount] = useState("");
+  const [receivableDueDate, setReceivableDueDate] = useState("");
 
   const choiceButtonStyle = (active, color = visualIdentity.colors.cyan) => ({
     minHeight: 30,
@@ -9052,7 +9477,7 @@ function OnboardingFlow({ state, setState, onComplete }) {
       ? totalStructural + pendingStructuralMonthly
       : totalStructural;
   const candidateMaxCap = Math.max(0, safeSalary - candidateStructuralTotal);
-  const canContinueWithDraft = safeSalary > 0 && safeCap > 0 && safeCap <= candidateMaxCap;
+  const canContinueWithDraft = safeSalary > 0 && candidateMaxCap >= 0;
 
   const addStructuralRow = () => {
     const monthly = Number(structuralMonthly || 0);
@@ -9133,20 +9558,49 @@ function OnboardingFlow({ state, setState, onComplete }) {
     setOpeningAssetUnits("");
     setOpeningAssetPrice("");
   };
+  const addReceivableRow = () => {
+    const amount = Number(receivableAmount || 0);
+    const name = String(receivableName || "").trim();
+    if (!showReceivableForm || (!name && amount <= 0 && !receivableDueDate)) return true;
+    if (!name || amount <= 0 || !receivableDueDate) {
+      alert("أكمل اسم المدين والمبلغ وتاريخ الاستحقاق أو اترك الخانة فارغة.");
+      return false;
+    }
+    setReceivableRows((rows) => [
+      ...rows,
+      {
+        id: `draft-receivable-${rows.length}`,
+        debtorName: name,
+        amount,
+        dueDate: receivableDueDate,
+      },
+    ]);
+    setReceivableName("");
+    setReceivableAmount("");
+    setReceivableDueDate("");
+    setShowReceivableForm(false);
+    return true;
+  };
   const goNext = () => {
     if (step === 1) {
-      if (!canContinueRequired) return alert("أدخل الراتب وسقف صرف صحيحين أولًا");
+      if (safeSalary <= 0) return alert("أدخل الراتب الشهري أولًا");
     }
     if (step === 2) {
       if (hasStructuralObligations === null) return alert("اختر نعم أو لا للالتزامات الشهرية الثابتة");
-      if (hasCategoryCaps === null) return alert("اختر نعم أو لا لسقوف بنود الصرف");
       if (!addStructuralRow()) return;
-      if (!canContinueWithDraft) return alert("سقف الصرف لا يجوز أن يتجاوز المتاح بعد الالتزامات الهيكلية");
+      if (!canContinueWithDraft) return alert("مجموع الالتزامات الهيكلية لا يجوز أن يتجاوز الراتب");
+    }
+    if (step === 3) {
+      if (!canContinueRequired) return alert("أدخل سقف صرف صحيح لا يتجاوز المتاح بعد الالتزامات");
+      if (hasCategoryCaps === null) return alert("اختر نعم أو لا لسقوف بنود الصرف");
       if (hasCategoryCaps === false) setCaps({});
       if (hasCategoryCaps === true && plannedCapsTotal > safeCap) return alert("مجموع سقوف البنود أعلى من سقف الصرف");
     }
-    if (step === 3 && hasOpeningAssets === null) return alert("اختر نعم أو لا للمتابعة");
     if (step === 4) {
+      if (hasOpeningAssets === null) return alert("اختر نعم أو لا للمتابعة");
+      if (!addReceivableRow()) return;
+    }
+    if (step === 5) {
       if (hasCurrentObligations === null) return alert("اختر نعم أو لا للمتابعة");
       if (!addLiabilityRow()) return;
       if (!addCardRow()) return;
@@ -9240,6 +9694,17 @@ function OnboardingFlow({ state, setState, onComplete }) {
       createdAt: now,
       date: now.slice(0, 10),
     }));
+    const accountsReceivable = receivableRows.map((row, index) => ({
+      id: `setup-receivable-${setupId}-${index}`,
+      debtorName: row.debtorName,
+      amount: Number(row.amount || 0),
+      balance: Number(row.amount || 0),
+      dueDate: row.dueDate,
+      note: "رصيد افتتاحي",
+      status: "pending",
+      source: "setup",
+      createdAt: now,
+    }));
 
     setState((prev) => ({
       ...prev,
@@ -9262,6 +9727,7 @@ function OnboardingFlow({ state, setState, onComplete }) {
       },
       structuralLiabilities,
       currentLiabilities: [...manualLiabilities, ...cards],
+      accountsReceivable,
       assetHistory: [...(prev.assetHistory || []), ...openingGroups.history],
       currentMonth,
       session: {
@@ -9365,13 +9831,17 @@ function OnboardingFlow({ state, setState, onComplete }) {
         : Number(row.units || 0) * Number(row.price || 0);
     return sum + value;
   }, 0);
+  const openingReceivablesTotal = receivableRows.reduce(
+    (sum, row) => sum + Number(row.amount || 0),
+    0
+  );
   const currentObligationCount = liabilityRows.length + cardRows.length;
   const flowBase = Math.max(1, safeSalary);
   const structuralPct = Math.min(100, (totalStructural / flowBase) * 100);
   const spendingPct = Math.min(100, (safeCap / flowBase) * 100);
   const savingsPct = Math.min(100, (surplus / flowBase) * 100);
 
-  const progressWidth = `${Math.min(100, Math.max(16, ((step + 1) / 6) * 100))}%`;
+  const progressWidth = `${Math.min(100, Math.max(14, ((step + 1) / 7) * 100))}%`;
 
   return (
     <main
@@ -9680,7 +10150,7 @@ function OnboardingFlow({ state, setState, onComplete }) {
                 الإدارة المالية
               </h1>
               <p style={{ margin: 0, color: stitch.textMuted, fontSize: 10, lineHeight: "18px", fontWeight: 500 }}>
-                حدد دخلك وسقف صرفك الشهري لبدء التخطيط الذكي.
+                ابدأ بإدخال دخلك الشهري، ثم سنحسب المتاح بعد الالتزامات قبل تحديد سقف الصرف.
               </p>
             </div>
 
@@ -9691,13 +10161,6 @@ function OnboardingFlow({ state, setState, onComplete }) {
                 value: salary,
                 setter: setSalary,
                 icon: "¤",
-              },
-              {
-                id: "spendingCap",
-                label: "سقف الصرف الشهري",
-                value: spendingCap,
-                setter: setSpendingCap,
-                icon: "▣",
               },
             ].map((field) => (
               <label key={field.id} style={{ display: "grid", gap: 7 }}>
@@ -9772,26 +10235,26 @@ function OnboardingFlow({ state, setState, onComplete }) {
             >
               <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center" }}>
                 <span style={{ color: stitch.textMuted, fontSize: 10, fontWeight: 700 }}>
-                  المتاح بعد الالتزامات
+                  الخطوة التالية
                 </span>
                 <span
                   style={{
-                    color: canContinueRequired ? stitch.secondary : stitch.error,
+                    color: safeSalary > 0 ? stitch.secondary : stitch.error,
                     fontSize: 14,
                     fontWeight: 700,
                     direction: "ltr",
                   }}
                 >
-                  {maxCap.toFixed(2)} {currencyLabel}
+                  الالتزامات الهيكلية
                 </span>
               </div>
               <div style={{ height: 1, background: stitch.outlineVariant }} />
               <p style={{ margin: 0, color: stitch.textMuted, fontSize: 9, lineHeight: "16px" }}>
-                المتاح بعد الالتزامات الشهرية الثابتة = الراتب - الالتزامات الهيكلية.
+                بعدها سيظهر المتاح الحقيقي: الراتب - الالتزامات الهيكلية.
               </p>
-              {!canContinueRequired && (safeSalary > 0 || safeCap > 0) && (
+              {safeSalary <= 0 && (
                 <div style={{ color: stitch.error, fontSize: 10, fontWeight: 700 }}>
-                  يجب أن يكون سقف الصرف أقل أو يساوي المتاح.
+                  أدخل الراتب الشهري للمتابعة.
                 </div>
               )}
             </div>
@@ -9820,7 +10283,7 @@ function OnboardingFlow({ state, setState, onComplete }) {
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
                 <button type="button" onClick={() => { setHasStructuralObligations(true); setShowStructuralForm(true); }} style={stitchChoice(hasStructuralObligations === true)}>نعم</button>
-                <button type="button" onClick={() => { setHasStructuralObligations(false); setShowStructuralForm(false); setStructuralName(""); setStructuralMonthly(""); }} style={stitchChoice(hasStructuralObligations === false)}>لا</button>
+                <button type="button" onClick={() => { setHasStructuralObligations(false); setShowStructuralForm(false); setStructuralRows([]); setStructuralName(""); setStructuralMonthly(""); }} style={stitchChoice(hasStructuralObligations === false)}>لا</button>
               </div>
               {hasStructuralObligations === true && (
                 <div style={{ ...stitchPanel, padding: 12, display: "grid", gap: 9 }}>
@@ -9848,7 +10311,81 @@ function OnboardingFlow({ state, setState, onComplete }) {
               )}
             </div>
 
-            <div style={{ height: 1, background: stitch.outlineVariant }} />
+            <div
+              style={{
+                ...stitchPanel,
+                padding: 14,
+                display: "grid",
+                gap: 8,
+                border: `1px solid ${candidateMaxCap >= 0 ? stitch.outlineVariant : stitch.error}`,
+              }}
+            >
+              <span style={{ color: stitch.textMuted, fontSize: 11, fontWeight: 700 }}>
+                المتاح لتحديد سقف الصرف بعد الالتزامات
+              </span>
+              <b style={{ color: candidateMaxCap >= 0 ? stitch.secondary : stitch.error, fontSize: 22, direction: "ltr" }}>
+                {candidateMaxCap.toFixed(2)} {currencyLabel}
+              </b>
+              <span style={{ color: stitch.textMuted, fontSize: 10, lineHeight: "17px" }}>
+                في الخطوة التالية ستحدد سقف الصرف بناءً على هذا المتاح.
+              </span>
+            </div>
+          </div>
+        )}
+
+        {step === 3 && (
+          <div style={{ display: "grid", gap: 16, fontFamily: stitch.font, color: stitch.text }}>
+            <div style={{ display: "grid", gap: 10 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <span style={{ width: 38, height: 38, borderRadius: 10, display: "grid", placeItems: "center", background: "rgba(233,195,73,0.10)", color: stitch.secondary, fontSize: 19 }}>▣</span>
+                <h2 style={{ margin: 0, color: stitch.secondary, fontSize: 20, lineHeight: "28px", fontWeight: 700 }}>سقف الصرف</h2>
+              </div>
+              <p style={{ margin: 0, color: stitch.textMuted, fontSize: 13, lineHeight: "22px" }}>
+                المتاح بعد الالتزامات الهيكلية هو {maxCap.toFixed(2)} {currencyLabel}. حدد سقف الصرف ضمن هذا الحد.
+              </p>
+            </div>
+
+            <label style={{ display: "grid", gap: 7 }}>
+              <span style={{ color: stitch.textMuted, fontSize: 11, fontWeight: 700 }}>سقف الصرف الشهري</span>
+              <span
+                style={{
+                  minHeight: 50,
+                  display: "grid",
+                  gridTemplateColumns: "minmax(0,1fr) auto",
+                  alignItems: "center",
+                  gap: 8,
+                  padding: "8px 11px",
+                  borderRadius: 12,
+                  background: stitch.surfaceLow,
+                  border: `1px solid ${safeCap > maxCap ? stitch.error : stitch.outlineVariant}`,
+                }}
+              >
+                <input
+                  type="number"
+                  value={spendingCap}
+                  onChange={(event) => setSpendingCap(event.target.value)}
+                  placeholder="0.00"
+                  style={{
+                    width: "100%",
+                    border: 0,
+                    outline: "none",
+                    background: "transparent",
+                    color: stitch.text,
+                    textAlign: "left",
+                    direction: "ltr",
+                    fontSize: 22,
+                    fontWeight: 700,
+                    fontFamily: stitch.numeral,
+                  }}
+                />
+                <span style={{ color: stitch.textMuted, fontSize: 10, fontWeight: 700 }}>{currencyLabel}</span>
+              </span>
+              {safeCap > maxCap && (
+                <span style={{ color: stitch.error, fontSize: 10, fontWeight: 700 }}>
+                  سقف الصرف لا يجوز أن يتجاوز المتاح بعد الالتزامات.
+                </span>
+              )}
+            </label>
 
             <div style={{ display: "grid", gap: 12 }}>
               <div style={{ textAlign: "right" }}>
@@ -9880,7 +10417,7 @@ function OnboardingFlow({ state, setState, onComplete }) {
           </div>
         )}
 
-        {step === 3 && (
+        {step === 4 && (
           <div style={{ display: "grid", gap: 16, fontFamily: stitch.font, color: stitch.text }}>
             <div style={{ display: "grid", gap: 10 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -9974,10 +10511,50 @@ function OnboardingFlow({ state, setState, onComplete }) {
                 تم تخطي الأرصدة الافتتاحية. يمكنك إضافتها لاحقًا من الإعدادات.
               </div>
             )}
+
+            <div style={{ ...stitchPanel, padding: 16, display: "grid", gap: 12 }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                <div>
+                  <h3 style={{ margin: 0, color: visualIdentity.colors.green, fontSize: 15, fontWeight: 800 }}>
+                    الذمم المدينة
+                  </h3>
+                  <p style={{ margin: "4px 0 0", color: stitch.textMuted, fontSize: 11, lineHeight: "18px" }}>
+                    مبالغ مستحقة لك عند الآخرين.
+                  </p>
+                </div>
+                <b style={{ color: visualIdentity.colors.green, fontSize: 13, whiteSpace: "nowrap" }}>
+                  {openingReceivablesTotal.toFixed(2)} {currencyLabel}
+                </b>
+              </div>
+
+              {showReceivableForm && (
+                <div style={{ display: "grid", gap: 9 }}>
+                  <input value={receivableName} onChange={(event) => setReceivableName(event.target.value)} placeholder="اسم المدين" style={stitchInput} />
+                  <input type="number" value={receivableAmount} onChange={(event) => setReceivableAmount(event.target.value)} placeholder="المبلغ" style={stitchNumberInput} />
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, minHeight: 44, padding: "0 10px", borderRadius: 10, border: `1px solid ${stitch.outlineVariant}`, background: stitch.surfaceLow, color: receivableDueDate ? stitch.text : stitch.textMuted }}>
+                    <span style={{ fontSize: 11, fontWeight: 700 }}>{receivableDueDate || "اختر تاريخ الاستحقاق"}</span>
+                    <CalendarDatePicker value={receivableDueDate} onChange={setReceivableDueDate} label="اختيار تاريخ استحقاق الذمة المدينة" />
+                  </div>
+                  <button type="button" onClick={addReceivableRow} style={{ ...stitchChoice(true), minHeight: 40 }}>
+                    حفظ الذمة المدينة
+                  </button>
+                </div>
+              )}
+
+              {receivableRows.map((row) => (
+                <div key={row.id} style={{ padding: "9px 10px", borderRadius: 12, background: "rgba(255,255,255,0.07)", color: stitch.textMuted, fontSize: 12 }}>
+                  {row.debtorName}: {row.amount.toFixed(2)} - {row.dueDate}
+                </div>
+              ))}
+
+              <button type="button" onClick={() => setShowReceivableForm(true)} style={stitchAddButton}>
+                + إضافة ذمة مدينة
+              </button>
+            </div>
           </div>
         )}
 
-        {step === 4 && (
+        {step === 5 && (
           <div style={{ display: "grid", gap: 16, fontFamily: stitch.font, color: stitch.text }}>
             <div style={{ display: "grid", gap: 10 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -10085,7 +10662,7 @@ function OnboardingFlow({ state, setState, onComplete }) {
           </div>
         )}
 
-        {step === 5 && (
+        {step === 6 && (
           <div style={{ display: "grid", gap: 12, fontFamily: stitch.font, color: stitch.text }}>
             <header style={{ textAlign: "center", padding: "6px 0 2px" }}>
               <div
@@ -10134,7 +10711,7 @@ function OnboardingFlow({ state, setState, onComplete }) {
               <div style={{ ...stitchPanel, padding: 12, display: "grid", gap: 5 }}>
                 <span style={{ color: stitch.secondary, fontSize: 18 }}>▣</span>
                 <span style={{ color: stitch.secondary, fontSize: 10, fontWeight: 700 }}>الأرصدة الحالية</span>
-                <span style={{ color: stitch.text, fontSize: 18, fontWeight: 700 }}>{openingAssetsTotal.toFixed(2)}</span>
+                <span style={{ color: stitch.text, fontSize: 18, fontWeight: 700 }}>{(openingAssetsTotal + openingReceivablesTotal).toFixed(2)}</span>
                 <span style={{ color: stitch.textMuted, fontSize: 9 }}>{currencyLabel}</span>
               </div>
               <div style={{ ...stitchPanel, padding: 12, display: "grid", gap: 5 }}>
@@ -10214,7 +10791,7 @@ function OnboardingFlow({ state, setState, onComplete }) {
             >
               رجوع
             </button>
-              {step < 5 ? (
+              {step < 6 ? (
                 <button
                 type="button"
                 onClick={goNext}
@@ -10282,6 +10859,7 @@ export default function App() {
   }, [appDirection, appLanguage, state.settings?.locale?.currency]);
   const [tab, setTab] = useState("overview");
   const [liabilitiesFocusDueOnly, setLiabilitiesFocusDueOnly] = useState(false);
+  const [receivablesFocusDueOnly, setReceivablesFocusDueOnly] = useState(false);
     const [showExtraCash, setShowExtraCash] = useState(false);
     const [extraCashPreset, setExtraCashPreset] = useState(null);
     const [selectedViewMonth, setSelectedViewMonth] = useState("current");
@@ -10817,6 +11395,7 @@ async function handleClearState() {
     cleanState.structuralLiabilities = [];
     cleanState.currentLiabilities = [];
     cleanState.reservedPayments = [];
+    cleanState.accountsReceivable = [];
     cleanState.session = structuredClone(INITIAL_STATE.session);
     cleanState.expenses = [];
     cleanState.transactions = [];
@@ -11081,6 +11660,11 @@ const canLeaveSettingsTab = () => {
               setLiabilitiesFocusDueOnly(true);
               setTab("liabilities");
             }}
+            onOpenReceivables={() => {
+              if (isSnapshotView) return;
+              setReceivablesFocusDueOnly(true);
+              setTab("assets");
+            }}
             onAllocateSurplus={(amount) => {
               setExtraCashPreset({
                 amount,
@@ -11099,6 +11683,8 @@ const canLeaveSettingsTab = () => {
             state={viewState}
             setState={setState}
             readOnly={isSnapshotView}
+            focusReceivablesDueOnly={!isSnapshotView && receivablesFocusDueOnly}
+            onCloseReceivablesFocus={() => setReceivablesFocusDueOnly(false)}
             onAddExtraCash={() => {
               setExtraCashPreset(null);
               setShowExtraCash(true);
@@ -11145,6 +11731,7 @@ const canLeaveSettingsTab = () => {
         onSelect={(id) => {
           if (id !== tab && !canLeaveSettingsTab()) return;
           setLiabilitiesFocusDueOnly(false);
+          setReceivablesFocusDueOnly(false);
           setTab(id);
         }}
       />

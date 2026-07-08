@@ -1,6 +1,7 @@
 import DueLiabilitiesButton from "./DueLiabilitiesButton";
 import visualIdentity from "../../theme/visualIdentity";
 import { useLocale } from "../../i18n/locale";
+import { Bell } from "lucide-react";
 
 const { colors, gradients, cards, typography } = visualIdentity;
 
@@ -12,6 +13,8 @@ export default function SpendingCapCard({
   overBudgetSpent,
   dueLiabilitiesCount,
   onOpenDueLiabilities,
+  dueReceivablesCount = 0,
+  onOpenReceivables,
   accountingDateDisplay,
 }) {
   const { currencyLabel, t } = useLocale();
@@ -69,8 +72,59 @@ export default function SpendingCapCard({
           boxShadow: cards.outer.boxShadow,
           direction: "rtl",
           overflow: "hidden",
+          position: "relative",
         }}
       >
+        <button
+          type="button"
+          title="جرس سقف الصرف"
+          aria-label="جرس سقف الصرف"
+          onClick={onOpenReceivables}
+          style={{
+            position: "absolute",
+            top: 13,
+            left: 13,
+            width: 26,
+            height: 26,
+            borderRadius: 10,
+            border: `1px solid ${colors.green}66`,
+            background: `${colors.green}18`,
+            color: colors.green,
+            display: "inline-flex",
+            alignItems: "center",
+            justifyContent: "center",
+            cursor: onOpenReceivables ? "pointer" : "default",
+            fontFamily: "inherit",
+            boxShadow: `0 0 0 3px ${colors.green}10, inset 0 1px 0 rgba(255,255,255,0.12)`,
+            zIndex: 2,
+          }}
+        >
+          <Bell size={15} strokeWidth={2.5} />
+          {Number(dueReceivablesCount || 0) > 0 && (
+            <span
+              style={{
+                position: "absolute",
+                top: -5,
+                right: -5,
+                minWidth: 16,
+                height: 16,
+                padding: "0 4px",
+                borderRadius: 999,
+                background: colors.green,
+                color: colors.navy,
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                fontSize: 9,
+                fontWeight: 900,
+                lineHeight: 1,
+                boxShadow: `0 1px 5px ${colors.green}55`,
+              }}
+            >
+              {dueReceivablesCount}
+            </span>
+          )}
+        </button>
         <div style={{ display: "flex", alignItems: "stretch", gap: 14, direction: "rtl" }}>
           <div
             style={{

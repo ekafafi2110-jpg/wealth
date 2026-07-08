@@ -65,7 +65,12 @@ export function calcAssets(state) {
     return sum + Number(a.units || 0) * unitPrice(a, 0, "price");
   }, 0);
 
-  const totalAssets = cash + banks + gold + silver + stocks + custom;
+  const receivables = (state.accountsReceivable || []).reduce((sum, item) => {
+    if (item.status === "paid") return sum;
+    return sum + Number(item.balance ?? item.amount ?? 0);
+  }, 0);
+
+  const totalAssets = cash + banks + gold + silver + stocks + custom + receivables;
   const currentLiabilities = calcCurrentLiabilitiesTotal(state);
 
   return {
@@ -75,6 +80,7 @@ export function calcAssets(state) {
     silver,
     stocks,
     custom,
+    receivables,
     totalAssets,
     currentLiabilities,
     netWorth: totalAssets - currentLiabilities,

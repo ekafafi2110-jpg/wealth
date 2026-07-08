@@ -35,6 +35,7 @@ export const INITIAL_STATE = {
   structuralLiabilities: [],
   currentLiabilities: [],
   reservedPayments: [],
+  accountsReceivable: [],
 
   session: {
     isOpen: false,

@@ -66,13 +66,32 @@ export default function AssetsDashboard({
   trendPoints,
   onAddIncome,
   onTransfer,
+  receivables = [],
+  assetSources = [],
+  onSettleReceivable,
+  receivablesDueOnly = false,
+  onCloseReceivablesFocus,
   readOnly,
   currencyLabel = "JOD",
 }) {
   const { direction, t } = useLocale();
   const [selectedAssetKey, setSelectedAssetKey] = useState("");
   const [animatedNetWorth, setAnimatedNetWorth] = useState(0);
+  const [receivableTargets, setReceivableTargets] = useState({});
   const selectedAsset = assetRows.find((row) => row.id === selectedAssetKey);
+  const todayKey = new Date().toISOString().slice(0, 10);
+  const openReceivables = receivables.filter((item) => {
+    if (item.status === "paid" || Number(item.balance ?? item.amount ?? 0) <= 0) return false;
+    if (!receivablesDueOnly) return true;
+    return item.dueDate && String(item.dueDate) <= todayKey;
+  });
+  const receivablesTotal = openReceivables.reduce(
+    (sum, item) => sum + Number(item.balance ?? item.amount ?? 0),
+    0
+  );
+  const dueReceivablesCount = openReceivables.filter(
+    (item) => item.dueDate && String(item.dueDate) <= todayKey
+  ).length;
   const firstTrendValue = Number(trendPoints?.[0]?.value || 0);
   const lastTrendValue = Number(trendPoints?.[trendPoints.length - 1]?.value || 0);
   const trendChange = lastTrendValue - firstTrendValue;
@@ -141,6 +160,46 @@ export default function AssetsDashboard({
         "--icon-saturation-to": visualIdentity.lighting.iconSaturationTo,
       }}
     >
+      {receivablesDueOnly && (
+        <header
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 10,
+            marginBottom: 12,
+          }}
+        >
+          <button
+            type="button"
+            onClick={onCloseReceivablesFocus}
+            title="عرض كل الأصول"
+            aria-label="عرض كل الأصول"
+            style={{
+              width: 38,
+              height: 38,
+              borderRadius: 12,
+              border: "1px solid rgba(255,255,255,0.16)",
+              background: "rgba(255,255,255,0.08)",
+              color: visualIdentity.colors.white,
+              fontSize: 22,
+              cursor: "pointer",
+            }}
+          >
+            ×
+          </button>
+          <div style={{ textAlign: "right" }}>
+            <h1 style={{ margin: 0, fontSize: 21, fontWeight: 900, color: visualIdentity.colors.green }}>
+              الذمم المدينة المستحقة
+            </h1>
+            <div style={{ marginTop: 3, color: visualIdentity.colors.textSecondary, fontSize: 11 }}>
+              البنود المستحقة أو المتأخرة فقط
+            </div>
+          </div>
+        </header>
+      )}
+
+      {!receivablesDueOnly && (
       <header
         style={{
           display: "flex",
@@ -198,7 +257,9 @@ export default function AssetsDashboard({
           </div>
         )}
       </header>
+      )}
 
+      {!receivablesDueOnly && (
       <section
         className="asset-dashboard-card asset-hero-card"
         style={{
@@ -268,8 +329,9 @@ export default function AssetsDashboard({
           </div>
         </div>
       </section>
+      )}
 
-      {selectedAsset && (
+      {!receivablesDueOnly && selectedAsset && (
         <div
           role="presentation"
           onClick={(event) => {
@@ -379,13 +441,16 @@ export default function AssetsDashboard({
         </div>
       )}
 
+      {!receivablesDueOnly && (
       <AssetDistributionCard
         distribution={distribution}
         totalAssets={totalAssets}
         currencyLabel={currencyLabel}
         variant="compact"
       />
+      )}
 
+      {!receivablesDueOnly && (
       <section className="asset-dashboard-card asset-list-card" style={{ ...card, padding: "5px 14px", marginBottom: 12 }}>
         {assetRows.map((row, index) => (
           <div
@@ -429,7 +494,126 @@ export default function AssetsDashboard({
           </div>
         ))}
       </section>
+      )}
+
+      <section
+        className="asset-dashboard-card"
+        style={{
+          ...card,
+          padding: 13,
+          marginBottom: 12,
+          border: `1px solid ${visualIdentity.colors.green}66`,
+          background: `linear-gradient(145deg, ${visualIdentity.colors.green}1A, rgba(24,73,133,0.96) 54%)`,
+        }}
+      >
+        <header style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 10 }}>
+          <div style={{ textAlign: "right", minWidth: 0 }}>
+            <div style={{ color: visualIdentity.colors.green, fontSize: 15, fontWeight: 900 }}>
+              الذمم المدينة
+            </div>
+            <div style={{ marginTop: 2, color: visualIdentity.colors.textSecondary, fontSize: 10, fontWeight: 800 }}>
+              {openReceivables.length} بند مفتوح · {dueReceivablesCount} مستحق
+            </div>
+          </div>
+          <b style={{ color: visualIdentity.colors.green, fontSize: 16, whiteSpace: "nowrap" }}>
+            {money(receivablesTotal)} {currencyLabel}
+          </b>
+        </header>
+
+        <div style={{ display: "grid", gap: 8 }}>
+          {openReceivables.map((item) => {
+            const amount = Number(item.balance ?? item.amount ?? 0);
+            const due = item.dueDate && String(item.dueDate) <= todayKey;
+            const selectedTarget = receivableTargets[item.id] || "spendingCap";
+
+            return (
+              <div
+                key={item.id}
+                style={{
+                  minHeight: 68,
+                  padding: 10,
+                  borderRadius: 14,
+                  border: `1px solid ${due ? visualIdentity.colors.gold : "rgba(255,255,255,0.14)"}`,
+                  background: due ? "rgba(255,198,45,0.10)" : "rgba(255,255,255,0.065)",
+                }}
+              >
+                <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) auto", gap: 8, alignItems: "center" }}>
+                  <div style={{ minWidth: 0 }}>
+                    <b style={{ display: "block", fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {item.debtorName || "مدين"}
+                    </b>
+                    <span style={{ display: "block", marginTop: 2, color: visualIdentity.colors.textSecondary, fontSize: 9, fontWeight: 800 }}>
+                      استحقاق {item.dueDate || "غير محدد"}{item.note ? ` · ${item.note}` : ""}
+                    </span>
+                  </div>
+                  <b style={{ color: visualIdentity.colors.green, fontSize: 13, whiteSpace: "nowrap" }}>
+                    {money(amount)} {currencyLabel}
+                  </b>
+                </div>
+
+                {!readOnly && (
+                  <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) 74px", gap: 7, marginTop: 8 }}>
+                    <select
+                      value={selectedTarget}
+                      onChange={(event) =>
+                        setReceivableTargets((prev) => ({ ...prev, [item.id]: event.target.value }))
+                      }
+                      style={receivableInputStyle}
+                    >
+                      <option value="spendingCap">إلى سقف الصرف</option>
+                      {assetSources.map((source) => (
+                        <option key={source.key} value={source.key}>
+                          إلى {source.label}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={() => onSettleReceivable?.(item.id, selectedTarget)}
+                      style={receivablePrimaryButtonStyle}
+                    >
+                      سداد
+                    </button>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+
+          {!openReceivables.length && (
+            <div style={{ padding: "14px 6px 4px", color: visualIdentity.colors.textSecondary, fontSize: 11, textAlign: "center" }}>
+              لا توجد ذمم مدينة مفتوحة
+            </div>
+          )}
+        </div>
+      </section>
 
     </div>
   );
 }
+
+const receivableInputStyle = {
+  width: "100%",
+  minHeight: 36,
+  borderRadius: 10,
+  border: "1px solid rgba(255,255,255,0.16)",
+  background: "rgba(255,255,255,0.08)",
+  color: visualIdentity.colors.white,
+  fontFamily: "inherit",
+  fontSize: 11,
+  fontWeight: 800,
+  outline: "none",
+  padding: "7px 9px",
+};
+
+const receivablePrimaryButtonStyle = {
+  minHeight: 36,
+  borderRadius: 10,
+  border: `1px solid ${visualIdentity.colors.green}88`,
+  background: visualIdentity.gradients.positive,
+  color: "#A4FFC8",
+  fontFamily: "inherit",
+  fontSize: 11,
+  fontWeight: 900,
+  cursor: "pointer",
+};

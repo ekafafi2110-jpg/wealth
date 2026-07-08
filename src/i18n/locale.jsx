@@ -15,7 +15,7 @@ export const translations = {
     "expenses.amount": "المبلغ",
     "expenses.category": "التصنيف",
     "expenses.note": "ملاحظة",
-    "expenses.paymentMethod": "أسلوب الدفع",
+    "expenses.paymentMethod": "طريقة الدفع",
     "expenses.cash": "كاش",
     "expenses.card": "بطاقة",
     "expenses.newLiability": "التزام جديد",

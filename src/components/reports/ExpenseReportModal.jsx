@@ -457,7 +457,7 @@ export default function ExpenseReportModal({
               />
               <DetailRow label="التصنيف" value={selectedExpense.category} />
               <DetailRow
-                label="أسلوب الدفع"
+                label="طريقة الدفع"
                 value={selectedFundingLabel ? `كاش + ${selectedFundingLabel}` : selectedExpense.paymentMethod}
               />
               <DetailRow

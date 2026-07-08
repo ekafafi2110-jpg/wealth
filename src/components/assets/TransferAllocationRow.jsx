@@ -1,4 +1,6 @@
 import visualIdentity from "../../theme/visualIdentity";
+import CalendarDatePicker from "../common/CalendarDatePicker";
+import { StickyNote } from "lucide-react";
 
 export default function TransferAllocationRow({
   row,
@@ -17,6 +19,7 @@ export default function TransferAllocationRow({
   const needsName = ["bank", "stock", "gold", "silver", "goods"].includes(
     row.allocation
   );
+  const isReceivable = row.allocation === "receivable";
 
   const selectTarget = (value) => {
     const preset = options.find(
@@ -39,7 +42,27 @@ export default function TransferAllocationRow({
     ["gold", "ذهب"],
     ["silver", "فضة"],
     ["goods", "بضاعة"],
+    ["receivable", "ذمم مدينة"],
   ].filter(([value]) => !allowedAllocations || allowedAllocations.includes(value));
+  const updateReceivableNote = () => {
+    const nextNote = window.prompt("ملاحظة الذمة المدينة", row.note || "");
+    if (nextNote !== null) onUpdate({ note: nextNote });
+  };
+  const receivableIconButtonStyle = (active) => ({
+    width: 42,
+    height: 42,
+    borderRadius: 12,
+    border: active
+      ? `1.5px solid ${visualIdentity.colors.gold}`
+      : "1px solid rgba(255,255,255,0.18)",
+    background: active ? "rgba(255,198,45,0.14)" : "rgba(255,255,255,0.08)",
+    color: active ? visualIdentity.colors.gold : visualIdentity.colors.textSecondary,
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    cursor: "pointer",
+    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.08)",
+  });
 
   return (
     <div
@@ -72,6 +95,8 @@ export default function TransferAllocationRow({
               allocation: event.target.value,
               targetId: "",
               assetName: "",
+              dueDate: "",
+              note: "",
               units: "",
               price: "",
             })
@@ -86,13 +111,47 @@ export default function TransferAllocationRow({
         </select>
       </div>
 
-      <input
-        type="number"
-        value={row.amount}
-        onChange={(event) => onUpdate({ amount: event.target.value })}
-        placeholder="المبلغ"
-        style={{ ...inputStyle, marginBottom: 8 }}
-      />
+      {isReceivable ? (
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "minmax(0, 1fr) 42px 42px",
+            gap: 8,
+            marginBottom: 8,
+            alignItems: "center",
+          }}
+        >
+          <input
+            type="number"
+            value={row.amount}
+            onChange={(event) => onUpdate({ amount: event.target.value })}
+            placeholder="المبلغ"
+            style={{ ...inputStyle, marginBottom: 0 }}
+          />
+          <CalendarDatePicker
+            value={row.dueDate || ""}
+            onChange={(value) => onUpdate({ dueDate: value })}
+            label="اختيار تاريخ استحقاق الذمة المدينة"
+          />
+          <button
+            type="button"
+            onClick={updateReceivableNote}
+            title={row.note ? "تعديل ملاحظة الذمة المدينة" : "إضافة ملاحظة للذمة المدينة"}
+            aria-label={row.note ? "تعديل ملاحظة الذمة المدينة" : "إضافة ملاحظة للذمة المدينة"}
+            style={receivableIconButtonStyle(Boolean(String(row.note || "").trim()))}
+          >
+            <StickyNote size={18} strokeWidth={2.4} />
+          </button>
+        </div>
+      ) : (
+        <input
+          type="number"
+          value={row.amount}
+          onChange={(event) => onUpdate({ amount: event.target.value })}
+          placeholder="المبلغ"
+          style={{ ...inputStyle, marginBottom: 8 }}
+        />
+      )}
 
       {options.length > 0 && (
         <select
@@ -116,6 +175,17 @@ export default function TransferAllocationRow({
           placeholder={row.allocation === "gold" ? "مثال: ذهب 21" : "اسم الأصل"}
           style={{ ...inputStyle, marginBottom: 8 }}
         />
+      )}
+
+      {isReceivable && (
+        <div style={{ display: "grid", gap: 8 }}>
+          <input
+            value={row.assetName}
+            onChange={(event) => onUpdate({ assetName: event.target.value })}
+            placeholder="اسم المدين"
+            style={inputStyle}
+          />
+        </div>
       )}
 
       {needsUnits && (

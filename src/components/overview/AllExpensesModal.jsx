@@ -13,6 +13,11 @@ export default function AllExpensesModal({
 }) {
   if (!open) return null;
 
+  const totalExpenses = (items || []).reduce((sum, expense) => {
+    if (expense.isIncomeEntry) return sum;
+    return sum + Number(incomeAmount(expense) || 0);
+  }, 0);
+
   return (
     <div
       onClick={(event) => event.target === event.currentTarget && onClose()}
@@ -58,6 +63,9 @@ export default function AllExpensesModal({
             </strong>
             <span style={{ color: colors.textSecondary, fontSize: 10, fontWeight: 700 }}>
               {items.length} عملية مسجلة
+            </span>
+            <span style={{ display: "block", marginTop: 4, color: colors.gold, fontSize: 12, fontWeight: 900 }}>
+              مجموع المصاريف: {totalExpenses.toFixed(2)}
             </span>
           </div>
           <button
