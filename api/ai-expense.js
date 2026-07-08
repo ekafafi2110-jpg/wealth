@@ -247,7 +247,7 @@ export default async function handler(req, res) {
       }
 
       const form = new FormData();
-      const transcribeModel = process.env.OPENAI_TRANSCRIBE_MODEL || "gpt-4o-mini-transcribe";
+      const transcribeModel = process.env.OPENAI_TRANSCRIBE_MODEL || "gpt-4o-transcribe";
       form.append("model", transcribeModel);
       form.append("file", new Blob([file.buffer], { type: file.mimeType }), "expense.webm");
 
