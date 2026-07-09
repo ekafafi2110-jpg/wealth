@@ -967,6 +967,8 @@ const [overBudgetDueDate, setOverBudgetDueDate] = useState("");
   const [unusualDueDate, setUnusualDueDate] = useState("");
   const [aiExpenseBusy, setAiExpenseBusy] = useState(false);
   const [voiceRecording, setVoiceRecording] = useState(false);
+  const [bankMessageModalOpen, setBankMessageModalOpen] = useState(false);
+  const [bankMessageDraft, setBankMessageDraft] = useState("");
   const [receiptSourceMenuOpen, setReceiptSourceMenuOpen] = useState(false);
   const aiReceiptInputRef = useRef(null);
   const aiReceiptUploadInputRef = useRef(null);
@@ -1620,7 +1622,11 @@ useEffect(() => {
 
   const analyzeBankMessage = async (sharedMessage = "") => {
     if (aiExpenseBusy || voiceRecording) return;
-    const message = sharedMessage || window.prompt("الصق رسالة البنك أو البطاقة هنا");
+    if (!sharedMessage) {
+      setBankMessageModalOpen(true);
+      return;
+    }
+    const message = sharedMessage;
     if (!message || !message.trim()) return;
 
     const context = {
@@ -1643,6 +1649,9 @@ useEffect(() => {
       if (!response.ok) {
         throw new Error(data.error || "تعذر تحليل رسالة البنك");
       }
+
+      setBankMessageModalOpen(false);
+      setBankMessageDraft("");
 
       if (data.type !== "expense") {
         alert(data.summary || "هذه الرسالة لا تبدو كمصروف قابل للتسجيل.");
@@ -3070,6 +3079,113 @@ function deleteExpenseCategory(catItem) {
               />
             </div>
           </div>
+
+          {bankMessageModalOpen && (
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-label="تحليل رسالة بنك أو بطاقة"
+              onClick={(event) => {
+                if (event.target === event.currentTarget && !aiExpenseBusy) {
+                  setBankMessageModalOpen(false);
+                }
+              }}
+              style={{
+                position: "fixed",
+                inset: 0,
+                zIndex: 60,
+                display: "grid",
+                placeItems: "center",
+                padding: 16,
+                background: "rgba(2,12,28,0.68)",
+                backdropFilter: "blur(10px)",
+              }}
+            >
+              <div
+                className="asset-dashboard-card"
+                style={{
+                  width: "min(100%, 390px)",
+                  padding: 16,
+                  borderRadius: 18,
+                  border: visualIdentity.cards.outer.border,
+                  background: visualIdentity.gradients.outerCard,
+                  boxShadow: "0 24px 60px rgba(0,0,0,0.42), inset 0 1px 0 rgba(255,255,255,0.12)",
+                  color: visualIdentity.colors.white,
+                  direction: "rtl",
+                  textAlign: "right",
+                }}
+              >
+                <h3 style={{ margin: "0 0 6px", color: visualIdentity.colors.gold, fontSize: 16, fontWeight: 900 }}>
+                  رسالة البنك أو البطاقة
+                </h3>
+                <p style={{ margin: "0 0 12px", color: visualIdentity.colors.textSecondary, fontSize: 11, lineHeight: 1.8 }}>
+                  الصق نص الرسالة هنا، وسيتم تجهيز بيانات المصروف للمراجعة قبل التسجيل.
+                </p>
+                <textarea
+                  value={bankMessageDraft}
+                  onChange={(event) => setBankMessageDraft(event.target.value)}
+                  placeholder="مثال: تمت عملية شراء بقيمة 12.50 دينار..."
+                  rows={6}
+                  autoFocus
+                  style={{
+                    width: "100%",
+                    resize: "vertical",
+                    minHeight: 132,
+                    borderRadius: 14,
+                    border: "1px solid rgba(255,255,255,0.18)",
+                    background: "rgba(255,255,255,0.08)",
+                    color: visualIdentity.colors.white,
+                    padding: 12,
+                    outline: "none",
+                    fontFamily: "inherit",
+                    fontSize: 13,
+                    lineHeight: 1.8,
+                    boxSizing: "border-box",
+                  }}
+                />
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 12 }}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (aiExpenseBusy) return;
+                      setBankMessageModalOpen(false);
+                    }}
+                    style={{
+                      minHeight: 42,
+                      borderRadius: 12,
+                      border: `1px solid ${visualIdentity.colors.gold}88`,
+                      background: "transparent",
+                      color: visualIdentity.colors.gold,
+                      fontFamily: "inherit",
+                      fontWeight: 900,
+                      cursor: aiExpenseBusy ? "not-allowed" : "pointer",
+                      opacity: aiExpenseBusy ? 0.6 : 1,
+                    }}
+                  >
+                    إلغاء
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => analyzeBankMessage(bankMessageDraft)}
+                    disabled={aiExpenseBusy || !bankMessageDraft.trim()}
+                    style={{
+                      minHeight: 42,
+                      borderRadius: 12,
+                      border: `1px solid ${visualIdentity.colors.gold}`,
+                      background: visualIdentity.gradients.gold,
+                      color: visualIdentity.colors.navy,
+                      fontFamily: "inherit",
+                      fontWeight: 900,
+                      cursor: aiExpenseBusy || !bankMessageDraft.trim() ? "not-allowed" : "pointer",
+                      opacity: aiExpenseBusy || !bankMessageDraft.trim() ? 0.65 : 1,
+                    }}
+                  >
+                    {aiExpenseBusy ? "جار التحليل..." : "تحليل الرسالة"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
 
 <ExpenseCategoryGrid
             categories={mainExpenseCategories}
@@ -7008,6 +7124,151 @@ const [liabilityAssetKey, setLiabilityAssetKey] = useState("cash");
   );
 }
 
+const HOW_IT_WORKS_SECTIONS = [
+  {
+    title: "أولاً: ما هو سقف الصرف؟",
+    paragraphs: [
+      "سقف الصرف هو المبلغ الذي خططت أن تصرفه خلال الشهر.",
+      "كل مصروف تسجله ينقص من هذا السقف، مهما كانت طريقة الدفع.",
+      "الهدف من السقف ليس منعك من الصرف، بل إعطاؤك مؤشراً واضحاً:",
+      "هل أنت ما زلت ضمن خطتك الشهرية، أم بدأت تتجاوز المبلغ الذي كنت تريد الالتزام به؟",
+    ],
+  },
+  {
+    title: "ثانياً: لماذا كل طرق الدفع تنقص سقف الصرف؟",
+    paragraphs: [
+      "لأن المصروف حدث فعلاً.",
+      "سواء دفعت كاش، أو دفعت بالبطاقة، أو أجلت الدفع، يبقى هذا المبلغ جزءاً من مصاريفك الشهرية.",
+      "لذلك يقوم التطبيق بخصم المصروف من سقف الصرف حتى يسهل عليك تتبع مصاريفك حسب النوع، مثل: طعام، وقود، فواتير، مشتريات، صحة، وغيرها.",
+    ],
+  },
+  {
+    title: "ثالثاً: الفرق بين طرق الدفع",
+    paragraphs: [
+      "الدفع كاش يعني أن المال خرج الآن من الكاش المخصص للصرف.",
+      "الدفع بالبطاقة يعني أن المصروف تم الآن، لكن الدفع مؤجل أو محجوز للسداد لاحقاً.",
+      "وفي الحالتين يبقى خصم المصروف من سقف الصرف قائماً، لأن المصروف تم فعلاً.",
+    ],
+  },
+  {
+    title: "رابعاً: كاش الصرف وكاش الادخار",
+    paragraphs: [
+      "التطبيق يفرق بين نوعين من الكاش:",
+      "كاش الصرف: المال المخصص للمصاريف اليومية العادية.",
+      "كاش الادخار: مال محفوظ للطوارئ أو للأهداف، والمفروض ألا يُستخدم إلا عند الحاجة.",
+      "هذا الفصل مهم حتى لا تختلط مصاريفك اليومية مع مدخراتك.",
+      "إذا استخدمت كاش الادخار، سيظهر لك التطبيق أن مدخراتك نقصت، ولماذا نقصت.",
+    ],
+  },
+  {
+    title: "خامساً: ماذا يحدث عند تجاوز سقف الصرف؟",
+    paragraphs: [
+      "التطبيق لا يمنعك من تسجيل المصروف عند تجاوز السقف.",
+      "لكنه ينبهك أنك تجاوزت الخطة، ثم يطلب منك تحديد مصدر تغطية هذا التجاوز.",
+      "هل غطيته من كاش الادخار؟",
+      "من حساب بنكي؟",
+      "من أصل مثل الذهب أو الأسهم بعد تحويله إلى كاش؟",
+      "بهذه الطريقة لا يختفي التجاوز، بل يتم تتبعه ومعرفة مصدر تغطيته.",
+    ],
+  },
+  {
+    title: "سادساً: الأصول متتبعة بدقة",
+    paragraphs: [
+      "الأصول مثل الذهب أو الأسهم أو أي أصل تملكه لا تُعامل كأنها كاش مباشر.",
+      "إذا استخدمت أصلاً لتغطية مصروف، فالفكرة أن الأصل يتحول أولاً إلى كاش، ثم يتم استخدام هذا الكاش في الدفع.",
+      "لذلك يتابع التطبيق أمرين معاً:",
+      "كم نقص الأصل، ولماذا نقص.",
+    ],
+  },
+  {
+    title: "سابعاً: الديون والاستحقاقات",
+    paragraphs: [
+      "يساعدك التطبيق أيضاً على تتبع الديون والالتزامات:",
+      "ما عليك دفعه، ومتى يجب دفعه، وما تم سداده فعلاً.",
+      "كما يمكنك متابعة الأموال التي لك عند الآخرين، مثل المبالغ المستحقة لك أو التي تنتظر تحصيلها، مع تاريخها وحالتها.",
+      "بهذا لا تبقى الديون أو الأموال لدى الغير مجرد ملاحظات خارجية، بل تصبح جزءاً واضحاً من صورتك المالية.",
+    ],
+  },
+  {
+    title: "ثامناً: سجّل كل حركة نقدية",
+    paragraphs: [
+      "للحصول على صورة مالية دقيقة، لا تسجل المصاريف فقط.",
+      "سجّل كل حركة نقدية مهمة تحدث معك، مثل: كاش إضافي، دخل جانبي، سحب، إيداع، تحويل، تحصيل مبلغ من شخص، أو دفع مبلغ لشخص.",
+      "كلما مرّت حركاتك المالية من خلال التطبيق، استطاع التطبيق أن يوضح لك بدقة من أين أتى المال، وأين ذهب، ولماذا تغيّر الكاش أو الادخار أو الأصول.",
+      "جودة البيانات التي تدخلها هي أساس جودة التقارير.",
+      "كلما كانت بياناتك أوضح، حصلت على رؤية أفضل لعاداتك المالية، واستطاع الذكاء الاصطناعي مساعدتك بتحليل أدق ومشورة أفضل.",
+      "الذكاء الاصطناعي يساعدك على الفهم والتحليل، لكن القرار المالي النهائي يبقى لك.",
+    ],
+  },
+  {
+    title: "تاسعاً: التقارير",
+    paragraphs: [
+      "بعد تسجيل المصاريف والحركات، تعرض لك التقارير صورة واضحة عن مالك:",
+      "أين صرفت؟",
+      "متى صرفت؟",
+      "على ماذا صرفت؟",
+      "كم صرفت من كل نوع؟",
+      "هل دفعت فوراً أم أجلت الدفع؟",
+      "هل صرفت من كاش الصرف أم من المدخرات؟",
+      "هل لديك ديون أو استحقاقات قادمة؟",
+      "وهل تغيرت أصولك بسبب مصروف أو تحويل؟",
+      "كما تساعدك التقارير على مقارنة عادات الصرف عبر الأشهر، حتى تعرف هل إنفاقك يتحسن، أم يتكرر نفس التجاوز، وأي أنواع المصاريف تأخذ الجزء الأكبر من مالك.",
+    ],
+  },
+  {
+    title: "الخلاصة",
+    paragraphs: [
+      "كل مصروف ينقص سقف الصرف لأنه جزء من إنفاقك الشهري.",
+      "الفرق بين طرق الدفع هو معرفة هل دفعت الآن، أم أجلت الدفع، أم استخدمت من مدخراتك أو أصولك.",
+      "التطبيق يساعدك على تتبع المصروف، ومصدر الدفع، وحركة الكاش، وتغير الأصول، والديون، والأموال المستحقة لك، ثم يعرض ذلك في تقارير واسعة تساعدك على فهم عاداتك المالية واتخاذ قرارات أفضل.",
+    ],
+  },
+];
+
+function HowItWorksContent({
+  cardStyle,
+  headingColor,
+  textColor,
+  mutedColor,
+  className = "asset-dashboard-card",
+  sectionTitleSize = 14,
+}) {
+  const baseCardStyle = { ...cardStyle, padding: 16 };
+  return (
+    <>
+      <div className={className} style={baseCardStyle}>
+        <h3 style={{ margin: "0 0 10px", color: headingColor, fontSize: 17, fontWeight: 900 }}>
+          كيف يعمل مدير الثروة الذكي؟
+        </h3>
+        <p style={{ margin: 0, color: textColor, fontSize: 12, lineHeight: 1.9 }}>
+          مدير الثروة الذكي لا يسجل المصروف فقط، بل يساعدك على فهم حركة مالك بالكامل: كم صرفت، متى صرفت، أين صرفت، ومن أي مصدر تم الدفع.
+        </p>
+      </div>
+
+      {HOW_IT_WORKS_SECTIONS.map((section) => (
+        <section key={section.title} className={className} style={baseCardStyle}>
+          <h3 style={{ margin: "0 0 9px", color: headingColor, fontSize: sectionTitleSize, lineHeight: 1.7, fontWeight: 900 }}>
+            {section.title}
+          </h3>
+          {section.paragraphs.map((paragraph) => (
+            <p
+              key={paragraph}
+              style={{
+                margin: "0 0 7px",
+                color: mutedColor,
+                fontSize: 12,
+                lineHeight: 1.9,
+              }}
+            >
+              {paragraph}
+            </p>
+          ))}
+        </section>
+      ))}
+    </>
+  );
+}
+
 function SettingsScreen({
   state,
   setState,
@@ -8225,6 +8486,7 @@ const hasOpeningBalanceDrafts = Object.keys(openingBalanceDrafts).length > 0;
     reset: [t("settings.reset"), ""],
     share: [t("settings.share"), ""],
     about: [t("settings.about"), ""],
+    howItWorks: ["كيف يعمل مدير الثروة الذكي", "شرح طريقة احتساب المصروفات وحركة المال"],
   };
   useEffect(() => {
     window.scrollTo({ top: 0, left: 0, behavior: "auto" });
@@ -8327,6 +8589,10 @@ const hasOpeningBalanceDrafts = Object.keys(openingBalanceDrafts).length > 0;
         title={settingsPageMeta[settingsView]?.[0] || t("nav.settings")}
         subtitle={settingsPageMeta[settingsView]?.[1] || ""}
         onBack={() => {
+          if (settingsView === "howItWorks") {
+            setSettingsView("about");
+            return;
+          }
           if (canLeaveSalarySettings()) setSettingsView("menu");
         }}
       >
@@ -8880,6 +9146,17 @@ const hasOpeningBalanceDrafts = Object.keys(openingBalanceDrafts).length > 0;
         <ResetDataSettings onReset={onResetAllData} />
       )}
 
+      {settingsView === "howItWorks" && (
+        <div style={{ display: "grid", gap: 12, direction: "rtl", textAlign: "right" }}>
+          <HowItWorksContent
+            cardStyle={settingsPanelStyle}
+            headingColor={visualIdentity.colors.gold}
+            textColor={visualIdentity.colors.textSecondary}
+            mutedColor={visualIdentity.colors.textSecondary}
+          />
+        </div>
+      )}
+
       {settingsView === "about" && (
         <div className="asset-dashboard-card" style={{ ...settingsPanelStyle, padding: 18, direction: "rtl", textAlign: "right" }}>
           <h3 style={{ margin: "0 0 12px", color: visualIdentity.colors.gold, fontSize: 16, fontWeight: 900 }}>
@@ -8903,6 +9180,39 @@ const hasOpeningBalanceDrafts = Object.keys(openingBalanceDrafts).length > 0;
               {paragraph}
             </p>
           ))}
+          <button
+            type="button"
+            onClick={() => setSettingsView("howItWorks")}
+            style={{
+              width: "100%",
+              minHeight: 52,
+              marginTop: 8,
+              padding: "10px 12px",
+              display: "grid",
+              gridTemplateColumns: "minmax(0,1fr) 22px",
+              alignItems: "center",
+              gap: 10,
+              borderRadius: 14,
+              border: `1px solid ${visualIdentity.colors.gold}66`,
+              background: "rgba(255,198,45,0.10)",
+              color: visualIdentity.colors.white,
+              fontFamily: "inherit",
+              textAlign: "right",
+              cursor: "pointer",
+            }}
+          >
+            <span style={{ minWidth: 0 }}>
+              <b style={{ display: "block", color: visualIdentity.colors.gold, fontSize: 13 }}>
+                كيف يعمل مدير الثروة الذكي
+              </b>
+              <small style={{ display: "block", marginTop: 3, color: visualIdentity.colors.textSecondary, fontSize: 10 }}>
+                شرح سقف الصرف، طرق الدفع، الكاش، الأصول، والديون
+              </small>
+            </span>
+            <span aria-hidden="true" style={{ color: visualIdentity.colors.gold, fontSize: 22 }}>
+              ‹
+            </span>
+          </button>
         </div>
       )}
       </SettingsSubpageShell>
@@ -9457,6 +9767,7 @@ function hydrateAppState(storedState) {
 function OnboardingFlow({ state, setState, onComplete }) {
   const { currencyLabel } = useLocale();
   const [step, setStep] = useState(0);
+  const [showHowItWorks, setShowHowItWorks] = useState(false);
   const [salary, setSalary] = useState(String(state.settings?.salary || ""));
   const [spendingCap, setSpendingCap] = useState(String(state.settings?.spendingCap || state.session?.spendingCap || ""));
   const [caps, setCaps] = useState(state.settings?.expenseCategoryCaps || {});
@@ -9891,6 +10202,87 @@ function OnboardingFlow({ state, setState, onComplete }) {
 
   const progressWidth = `${Math.min(100, Math.max(14, ((step + 1) / 7) * 100))}%`;
 
+  if (showHowItWorks) {
+    return (
+      <main
+        dir="rtl"
+        style={{
+          minHeight: "100vh",
+          display: "flex",
+          alignItems: "stretch",
+          justifyContent: "center",
+          padding: "0 0 18px",
+          background: visualIdentity.gradients.appBackground,
+          fontFamily: stitch.font,
+        }}
+      >
+        <section
+          style={{
+            position: "relative",
+            width: "min(100%, 440px)",
+            minHeight: "100vh",
+            overflowY: "auto",
+            overflowX: "hidden",
+            background: stitch.background,
+            color: stitch.text,
+            padding: "16px 14px 22px",
+          }}
+        >
+          <header
+            style={{
+              position: "sticky",
+              top: 0,
+              zIndex: 6,
+              display: "grid",
+              gridTemplateColumns: "86px minmax(0,1fr)",
+              gap: 10,
+              alignItems: "center",
+              padding: "10px 0 14px",
+              background: "linear-gradient(180deg, rgba(8,42,85,0.98), rgba(8,42,85,0.86) 76%, rgba(8,42,85,0))",
+            }}
+          >
+            <button
+              type="button"
+              onClick={() => setShowHowItWorks(false)}
+              style={{
+                minHeight: 40,
+                borderRadius: 10,
+                border: `1px solid ${stitch.secondary}`,
+                background: "transparent",
+                color: stitch.secondary,
+                fontFamily: stitch.font,
+                fontSize: 13,
+                fontWeight: 800,
+                cursor: "pointer",
+              }}
+            >
+              رجوع
+            </button>
+            <div style={{ minWidth: 0, textAlign: "right" }}>
+              <span style={{ display: "block", color: stitch.textMuted, fontSize: 11, fontWeight: 800 }}>
+                طريقة عمل التطبيق
+              </span>
+              <h1 style={{ margin: "3px 0 0", color: stitch.secondary, fontSize: 20, lineHeight: 1.45, fontWeight: 950 }}>
+                كيف يعمل مدير الثروة الذكي؟
+              </h1>
+            </div>
+          </header>
+
+          <div style={{ display: "grid", gap: 12, paddingTop: 4 }}>
+            <HowItWorksContent
+              cardStyle={stitchPanel}
+              headingColor={stitch.secondary}
+              textColor={stitch.text}
+              mutedColor={stitch.textMuted}
+              className=""
+              sectionTitleSize={15}
+            />
+          </div>
+        </section>
+      </main>
+    );
+  }
+
   return (
     <main
       style={{
@@ -10102,6 +10494,60 @@ function OnboardingFlow({ state, setState, onComplete }) {
             >
               لنبدأ بضبط بياناتك الأساسية حتى يعمل التطبيق بشكل صحيح.
             </p>
+
+            <div
+              style={{
+                ...stitchPanel,
+                position: "relative",
+                width: "100%",
+                padding: 14,
+                marginBottom: 12,
+                display: "grid",
+                gap: 8,
+                textAlign: "right",
+              }}
+            >
+              <h2 style={{ margin: 0, color: stitch.secondary, fontSize: 15, lineHeight: 1.5, fontWeight: 900 }}>
+                كيف يساعدك التطبيق؟
+              </h2>
+              <div style={{ display: "grid", gap: 5 }}>
+                {[
+                  "مدير الثروة الذكي لا يسجل المصروف فقط، بل يربط كل عملية بسقف الصرف، وطريقة الدفع، والكاش، والمدخرات، والأصول، والديون.",
+                  "كل مصروف يتم تسجيله حتى تعرف أين صرفت مالك، وهل دفعت فوراً، أم أجلت الدفع، أم استخدمت من مدخراتك أو أصولك.",
+                  "وللحصول على نتائج أدق، سجّل كل حركة نقدية مهمة مثل الدخل الإضافي، السحب، الإيداع، التحويل، أو تحصيل الأموال من الآخرين.",
+                  "كلما كانت بياناتك أوضح، أصبحت التقارير والذكاء الاصطناعي أكثر قدرة على مساعدتك في فهم مالك واتخاذ قرار أفضل.",
+                ].map((paragraph) => (
+                  <p
+                    key={paragraph}
+                    style={{ margin: 0, color: stitch.textMuted, fontSize: 11.5, lineHeight: 1.75, fontWeight: 600 }}
+                  >
+                    {paragraph}
+                  </p>
+                ))}
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowHowItWorks(true)}
+                style={{
+                  minHeight: 38,
+                  justifySelf: "start",
+                  padding: "0 12px",
+                  borderRadius: 10,
+                  border: `1px solid ${stitch.secondary}`,
+                  background: "rgba(233,195,73,0.10)",
+                  color: stitch.secondary,
+                  fontFamily: stitch.font,
+                  fontSize: 12,
+                  fontWeight: 900,
+                  cursor: "pointer",
+                }}
+              >
+                تعرّف على المزيد
+              </button>
+              <p style={{ margin: 0, color: stitch.textMuted, fontSize: 10.5, lineHeight: 1.7, fontWeight: 700 }}>
+                يمكنك الرجوع إلى الشرح الكامل لاحقاً من الإعدادات، ثم حول التطبيق.
+              </p>
+            </div>
 
             <div style={{ position: "relative", width: "100%", display: "grid", gap: 10 }}>
               <button
