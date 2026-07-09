@@ -1622,11 +1622,11 @@ useEffect(() => {
 
   const analyzeBankMessage = async (sharedMessage = "") => {
     if (aiExpenseBusy || voiceRecording) return;
-    if (!sharedMessage) {
+    const message = typeof sharedMessage === "string" ? sharedMessage : "";
+    if (!message) {
       setBankMessageModalOpen(true);
       return;
     }
-    const message = sharedMessage;
     if (!message || !message.trim()) return;
 
     const context = {
@@ -2916,7 +2916,7 @@ function deleteExpenseCategory(catItem) {
               </button>
               <button
                 type="button"
-                onClick={analyzeBankMessage}
+                onClick={() => analyzeBankMessage()}
                 disabled={aiExpenseBusy || voiceRecording}
                 title="تحليل رسالة بنك أو بطاقة"
                 aria-label="تحليل رسالة بنك أو بطاقة"
