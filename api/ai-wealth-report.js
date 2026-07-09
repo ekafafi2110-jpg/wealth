@@ -2,37 +2,55 @@
 
 const JSON_HEADERS = { "Content-Type": "application/json; charset=utf-8" };
 
-const defaultReport = {
-  title: "تقرير الثروة الذكي",
-  executiveSummary: "",
-  healthScore: 0,
-  status: "يحتاج انتباه",
-  keyInsights: [],
-  expenseAnalysis: {
-    summary: "",
-    highestCategories: [],
-    warnings: [],
-    savingTips: [],
+const INVESTMENT_DISCLAIMER =
+  "هذه ليست نصيحة مالية ملزمة ولا توصية شراء أو بيع مباشرة. القرار النهائي لك، والاستثمار يحمل مخاطر. الهدف من التقرير مساعدتك على رؤية الفرص والمخاطر بناءً على بياناتك، ويفضل مراجعة مختص قبل أي قرار استثماري كبير.";
+
+const reportShape = {
+  overallJudgment: "",
+  financialHealthScore: {
+    score: 0,
+    label: "",
+    reason: "",
   },
+  financialDiagnosis: "",
+  topProblems: [
+    {
+      title: "",
+      reason: "",
+      risk: "",
+      decision: "",
+    },
+  ],
+  immediateDecisions: [],
+  nextWeekPlan: [],
+  restOfMonthPlan: [],
+  upcomingExpenses: [],
+  savingPlan: [],
   assetsAnalysis: {
     summary: "",
-    positiveMovements: [],
-    negativeMovements: [],
-    allocationSuggestions: [],
+    liquidityStatus: "",
+    concentrationRisk: "",
+    recommendations: [],
   },
-  marketOutlook: {
-    summary: "",
-    gold: "",
-    stocks: "",
-    cashAndDeposits: "",
-    opportunities: [],
-    risks: [],
-    sources: [],
+  assetReturnOpportunities: [
+    {
+      opportunity: "",
+      why: "",
+      riskLevel: "",
+      suggestedAmount: "",
+      urgency: "",
+      conditionBeforeAction: "",
+      whatToWatch: "",
+      conservativeAlternative: "",
+    },
+  ],
+  doNotDoThisMonth: [],
+  dataQuality: {
+    status: "",
+    missingData: [],
+    message: "",
   },
-  recommendations: [],
-  nextActions: [],
-  disclaimer:
-    "هذا تحليل مساعد وليس نصيحة مالية أو استثمارية ملزمة. راجع مختصاً قبل أي قرار استثماري.",
+  investmentDisclaimer: INVESTMENT_DISCLAIMER,
 };
 
 function sendJson(res, status, payload) {
@@ -69,116 +87,125 @@ function parseJsonOnly(text) {
   return JSON.parse(cleaned);
 }
 
-function asStringArray(value) {
+function asString(value) {
+  return String(value || "").trim();
+}
+
+function asStringArray(value, max = 10) {
   return Array.isArray(value)
-    ? value.map((item) => String(item || "").trim()).filter(Boolean)
+    ? value.map(asString).filter(Boolean).slice(0, max)
     : [];
 }
 
-function asRecommendationArray(value) {
+function asProblemArray(value) {
   return Array.isArray(value)
-    ? value.slice(0, 8).map((item) => ({
-        title: String(item?.title || "نصيحة"),
-        description: String(item?.description || ""),
-        priority: ["high", "medium", "low"].includes(item?.priority)
-          ? item.priority
-          : "medium",
+    ? value.slice(0, 3).map((item) => ({
+        title: asString(item?.title || item?.problem || "مشكلة مالية"),
+        reason: asString(item?.reason),
+        risk: asString(item?.risk),
+        decision: asString(item?.decision),
+      }))
+    : [];
+}
+
+function asOpportunityArray(value) {
+  return Array.isArray(value)
+    ? value.slice(0, 5).map((item) => ({
+        opportunity: asString(item?.opportunity),
+        why: asString(item?.why),
+        riskLevel: ["منخفضة", "متوسطة", "مرتفعة"].includes(item?.riskLevel)
+          ? item.riskLevel
+          : asString(item?.riskLevel || "متوسطة"),
+        suggestedAmount: asString(item?.suggestedAmount),
+        urgency: asString(item?.urgency),
+        conditionBeforeAction: asString(item?.conditionBeforeAction),
+        whatToWatch: asString(item?.whatToWatch),
+        conservativeAlternative: asString(item?.conservativeAlternative),
       }))
     : [];
 }
 
 function normalizeReport(value) {
   const report = value && typeof value === "object" ? value : {};
-  const expenseAnalysis =
-    report.expenseAnalysis && typeof report.expenseAnalysis === "object"
-      ? report.expenseAnalysis
+  const scoreBlock =
+    report.financialHealthScore && typeof report.financialHealthScore === "object"
+      ? report.financialHealthScore
       : {};
   const assetsAnalysis =
     report.assetsAnalysis && typeof report.assetsAnalysis === "object"
       ? report.assetsAnalysis
       : {};
-  const marketOutlook =
-    report.marketOutlook && typeof report.marketOutlook === "object"
-      ? report.marketOutlook
+  const dataQuality =
+    report.dataQuality && typeof report.dataQuality === "object"
+      ? report.dataQuality
       : {};
+  const score = Number(scoreBlock.score ?? report.healthScore ?? 0);
 
   return {
-    ...defaultReport,
-    title: String(report.title || defaultReport.title),
-    executiveSummary: String(report.executiveSummary || ""),
-    healthScore: Math.max(0, Math.min(100, Number(report.healthScore || 0))),
-    status: ["جيد", "يحتاج انتباه", "خطر"].includes(report.status)
-      ? report.status
-      : defaultReport.status,
-    keyInsights: asStringArray(report.keyInsights).slice(0, 8),
-    expenseAnalysis: {
-      summary: String(expenseAnalysis.summary || ""),
-      highestCategories: asStringArray(expenseAnalysis.highestCategories).slice(0, 8),
-      warnings: asStringArray(expenseAnalysis.warnings).slice(0, 8),
-      savingTips: asStringArray(expenseAnalysis.savingTips).slice(0, 8),
+    overallJudgment: asString(report.overallJudgment || report.executiveSummary),
+    financialHealthScore: {
+      score: Math.max(0, Math.min(100, Number.isFinite(score) ? score : 0)),
+      label: asString(scoreBlock.label || report.status),
+      reason: asString(scoreBlock.reason),
     },
+    financialDiagnosis: asString(report.financialDiagnosis),
+    topProblems: asProblemArray(report.topProblems),
+    immediateDecisions: asStringArray(report.immediateDecisions, 8),
+    nextWeekPlan: asStringArray(report.nextWeekPlan, 8),
+    restOfMonthPlan: asStringArray(report.restOfMonthPlan, 8),
+    upcomingExpenses: asStringArray(report.upcomingExpenses, 8),
+    savingPlan: asStringArray(report.savingPlan, 8),
     assetsAnalysis: {
-      summary: String(assetsAnalysis.summary || ""),
-      positiveMovements: asStringArray(assetsAnalysis.positiveMovements).slice(0, 8),
-      negativeMovements: asStringArray(assetsAnalysis.negativeMovements).slice(0, 8),
-      allocationSuggestions: asStringArray(assetsAnalysis.allocationSuggestions).slice(0, 8),
+      summary: asString(assetsAnalysis.summary),
+      liquidityStatus: asString(assetsAnalysis.liquidityStatus),
+      concentrationRisk: asString(assetsAnalysis.concentrationRisk),
+      recommendations: asStringArray(assetsAnalysis.recommendations, 8),
     },
-    marketOutlook: {
-      summary: String(marketOutlook.summary || ""),
-      gold: String(marketOutlook.gold || ""),
-      stocks: String(marketOutlook.stocks || ""),
-      cashAndDeposits: String(marketOutlook.cashAndDeposits || ""),
-      opportunities: asStringArray(marketOutlook.opportunities).slice(0, 8),
-      risks: asStringArray(marketOutlook.risks).slice(0, 8),
-      sources: asStringArray(marketOutlook.sources).slice(0, 6),
+    assetReturnOpportunities: asOpportunityArray(report.assetReturnOpportunities),
+    doNotDoThisMonth: asStringArray(report.doNotDoThisMonth, 8),
+    dataQuality: {
+      status: asString(dataQuality.status),
+      missingData: asStringArray(dataQuality.missingData, 8),
+      message: asString(dataQuality.message),
     },
-    recommendations: asRecommendationArray(report.recommendations),
-    nextActions: asStringArray(report.nextActions).slice(0, 8),
-    disclaimer: String(report.disclaimer || defaultReport.disclaimer),
+    investmentDisclaimer: asString(report.investmentDisclaimer) || INVESTMENT_DISCLAIMER,
   };
 }
 
-function buildPrompt(payload, { allowCurrentMarketSearch }) {
+function buildPrompt(payload) {
   return [
-    "أنت محلل مالي شخصي داخل تطبيق إدارة ثروة ومصاريف.",
-    "اكتب بالعربية بالكامل وبأسلوب مباشر ومفيد للمستخدم.",
-    "حلّل بيانات المستخدم المرسلة فقط عند الحديث عن مصروفاته وأصوله. لا تخترع أرقاماً غير موجودة.",
-    "قدّم نصائح توفير مصروفات عملية مبنية على أكبر بنود الصرف، تكرار الصرف، تجاوز السقف، وطريقة الدفع.",
-    "إذا وجدت accountsReceivable أو بند الذمم المدينة، فحلله كبند أصول غير سائل ومبالغ مستحقة للمستخدم. فرّق بين إجمالي الذمم، المستحق، والمتأخر، ولا تعتبر تحصيل الذمة دخلاً جديداً بل انتقالاً من ذمة إلى سيولة/سقف/أصل.",
-    allowCurrentMarketSearch
-      ? "استخدم البحث على الويب للاطلاع على أحدث الاتجاهات الاقتصادية العالمية المؤثرة على الذهب، الأسهم، السيولة، الفائدة، التضخم، والدولار. اذكر السياق العام بدون جزم."
-      : "إذا لم يتوفر بحث ويب مباشر، قدّم قراءة سوقية عامة ومتحفظة واذكر أن السياق العالمي غير محدث لحظياً.",
-    "اقترح توزيع أصول عام كنطاقات أو اتجاهات فقط، مثل زيادة السيولة أو تخفيف المخاطر أو تنويع الذهب والأسهم، ولا توصِ بشراء سهم أو أصل محدد.",
-    "اذكر الفرص الاستثمارية كأفكار عامة للمراقبة لا كأوامر شراء: سيولة احتياطية، ذهب كتحوط، أسهم عريضة التنويع، ودائع/صناديق نقدية، أو انتظار هبوط مخاطر.",
-    "ميّز بوضوح بين: نصائح توفير المصروفات، قراءة الأسواق، اقتراح توزيع الأصول، وخطوات الأسبوع القادم.",
-    "إذا كانت البيانات ناقصة أو الفترة قصيرة، اذكر ذلك بوضوح.",
-    "لا تغيّر أي بيانات في التطبيق. المطلوب تقرير تحليلي فقط.",
-    "أعد JSON صالحاً فقط، بدون Markdown وبدون شرح خارج JSON.",
+    "أنت مستشار مالي محافظ لرب أسرة داخل تطبيق عربي لإدارة المال.",
+    "مهمتك ليست تكرار البيانات، بل تحويلها إلى: تشخيص + قرار + خطة عمل + تحذير + فرصة.",
+    "اكتب بالعربية بالكامل، بنبرة حازمة وعملية ومباشرة.",
+    "اعتمد فقط على بيانات المستخدم المرسلة. لا تخترع أسعار سوق، ولا تزعم وجود فرصة سوقية إذا لم ترَ بيانات أسعار حقيقية.",
+    "لا تعط توصية شراء أو بيع مباشرة. استخدم ألفاظ: ادرس، راقب، يمكن تخصيص جزء محدود، القرار النهائي لك.",
+    "الأولوية: حماية سيولة الأسرة، الأقساط، المدارس، السيارة، الالتزامات، والطوارئ. تحسين العائد يأتي بعد حماية الأسرة.",
+    "حلل المصاريف: أين المشكلة تحديداً؟ هل السبب مبلغ كبير واحد أم تكرار صغير؟ ما المبلغ المطلوب تخفيضه؟ ما الذي يوقف فوراً؟ ما الذي يؤجل؟",
+    "حلل الأصول: هل السيولة قليلة أو زائدة؟ هل يوجد تركّز خطير؟ هل الذهب أو الأسهم أعلى من قدرة الأسرة؟ هل صندوق الطوارئ كاف؟",
+    "قسم فرص تحسين العائد يجب أن يكون محافظاً ومشروطاً، ولا يقترح استثمار سيولة لازمة لالتزام خلال 60 يوم.",
+    "إذا كانت البيانات قليلة، قل ذلك بوضوح لكن لا تكتفِ بعبارة عامة؛ أعط خطة لتحسين البيانات وحكم احترازي معقول.",
+    "أعد JSON صالحاً فقط، بدون Markdown وبدون نص خارج JSON.",
     "الشكل المطلوب بالضبط:",
-    JSON.stringify(defaultReport),
-    "بيانات المستخدم:",
+    JSON.stringify(reportShape),
+    "يجب أن يظهر investmentDisclaimer بالنص التالي حرفياً:",
+    INVESTMENT_DISCLAIMER,
+    "بيانات المستخدم المضغوطة:",
     JSON.stringify(payload),
   ].join("\n");
 }
 
-async function requestOpenAiReport({ model, payload, allowCurrentMarketSearch }) {
-  const requestBody = {
-    model,
-    input: buildPrompt(payload, { allowCurrentMarketSearch }),
-    temperature: 0.2,
-  };
-
-  if (allowCurrentMarketSearch) {
-    requestBody.tools = [{ type: "web_search" }];
-  }
-
+async function requestOpenAiReport({ model, payload }) {
   const response = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
     headers: {
       Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify(requestBody),
+    body: JSON.stringify({
+      model,
+      input: buildPrompt(payload),
+      temperature: 0.15,
+    }),
   });
 
   const data = await response.json().catch(() => ({}));
@@ -186,7 +213,26 @@ async function requestOpenAiReport({ model, payload, allowCurrentMarketSearch })
     throw new Error(data.error?.message || `OpenAI request failed: ${response.status}`);
   }
 
-  return normalizeReport(parseJsonOnly(extractText(data)));
+  const text = extractText(data);
+  try {
+    return normalizeReport(parseJsonOnly(text));
+  } catch {
+    return normalizeReport({
+      overallJudgment: "تعذر تنظيم التقرير تلقائياً بالكامل، لكن تم استلام تحليل نصي من الذكاء الاصطناعي.",
+      financialHealthScore: {
+        score: 50,
+        label: "يحتاج مراجعة",
+        reason: "الاستجابة لم تكن بصيغة JSON منظمة.",
+      },
+      financialDiagnosis: String(text || "").slice(0, 1800),
+      dataQuality: {
+        status: "تحتاج مراجعة",
+        missingData: ["أعد تشغيل التحليل إذا ظهر التقرير كنص غير منظم."],
+        message: "تم عرض النص الخام بشكل آمن بدلاً من كسر شاشة التقرير.",
+      },
+      investmentDisclaimer: INVESTMENT_DISCLAIMER,
+    });
+  }
 }
 
 export default async function handler(req, res) {
@@ -204,35 +250,20 @@ export default async function handler(req, res) {
   try {
     const raw = await collectBody(req);
     const body = JSON.parse(raw || "{}");
-    const model = process.env.OPENAI_REPORT_MODEL || "gpt-4o-mini";
-    const allowWebSearch = process.env.OPENAI_REPORT_WEB_SEARCH !== "false";
+    const model =
+      process.env.OPENAI_REPORT_MODEL ||
+      process.env.OPENAI_WEALTH_REPORT_MODEL ||
+      process.env.OPENAI_EXPENSE_MODEL ||
+      "gpt-4o-mini";
 
-    try {
-      const report = await requestOpenAiReport({
-        model,
-        payload: body,
-        allowCurrentMarketSearch: allowWebSearch,
-      });
-      sendJson(res, 200, report);
-    } catch (error) {
-      if (!allowWebSearch) throw error;
-      const fallbackReport = await requestOpenAiReport({
-        model,
-        payload: body,
-        allowCurrentMarketSearch: false,
-      });
-      sendJson(res, 200, {
-        ...fallbackReport,
-        marketOutlook: {
-          ...fallbackReport.marketOutlook,
-          summary:
-            fallbackReport.marketOutlook.summary ||
-            "تعذر استخدام البحث الاقتصادي الحي في هذه المحاولة، لذلك جاءت قراءة الأسواق عامة ومتحفظة.",
-        },
-      });
-    }
-  } catch {
-    sendJson(res, 500, { error: "تعذر إعداد التقرير الذكي حالياً. حاول مرة أخرى." });
+    const report = await requestOpenAiReport({ model, payload: body });
+    sendJson(res, 200, report);
+  } catch (error) {
+    sendJson(res, 500, {
+      error:
+        error.message ||
+        "تعذر إعداد التقرير المالي المتخصص حالياً. حاول مرة أخرى بعد قليل.",
+    });
   } finally {
     console.timeEnd("ai-wealth-report");
   }

@@ -4104,6 +4104,88 @@ function AiReportList({ items, color = "rgba(255,255,255,0.72)" }) {
   );
 }
 
+function AiProblemList({ items = [] }) {
+  const rows = Array.isArray(items) ? items.filter(Boolean) : [];
+  if (!rows.length) return <AiReportList items={[]} />;
+  return (
+    <div style={{ display: "grid", gap: 10 }}>
+      {rows.map((item, index) => (
+        <div
+          key={`${item.title || "problem"}-${index}`}
+          style={{
+            padding: 10,
+            borderRadius: 12,
+            border: "1px solid rgba(255,255,255,0.11)",
+            background: "rgba(255,255,255,0.06)",
+          }}
+        >
+          <b style={{ display: "block", color: "#FFB86B", fontSize: 12 }}>
+            {item.title || "مشكلة مالية"}
+          </b>
+          {[
+            ["السبب", item.reason, "#7BBFF5"],
+            ["الخطر", item.risk, "#FF6B6B"],
+            ["القرار", item.decision, "#52E5A0"],
+          ].map(([label, value, color]) =>
+            value ? (
+              <p key={label} style={{ ...aiReportParagraphStyle, marginTop: 6 }}>
+                <b style={{ color }}>{label}: </b>
+                {value}
+              </p>
+            ) : null
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function AiOpportunityList({ items = [] }) {
+  const rows = Array.isArray(items) ? items.filter(Boolean) : [];
+  if (!rows.length) return <AiReportList items={[]} />;
+  return (
+    <div style={{ display: "grid", gap: 10 }}>
+      {rows.map((item, index) => (
+        <div
+          key={`${item.opportunity || "opportunity"}-${index}`}
+          style={{
+            padding: 10,
+            borderRadius: 12,
+            border: "1px solid rgba(245,200,66,0.22)",
+            background: "rgba(245,200,66,0.08)",
+          }}
+        >
+          <b style={{ display: "block", color: "#F5C842", fontSize: 12 }}>
+            {item.opportunity || "فرصة محافظة"}
+          </b>
+          {[
+            ["السبب", item.why],
+            ["المخاطرة", item.riskLevel],
+            ["المبلغ المبدئي", item.suggestedAmount],
+            ["الاستعجال", item.urgency],
+            ["الشرط قبل القرار", item.conditionBeforeAction],
+            ["ما يجب مراقبته", item.whatToWatch],
+            ["البديل المحافظ", item.conservativeAlternative],
+          ].map(([label, value]) =>
+            value ? (
+              <p key={label} style={{ ...aiReportParagraphStyle, marginTop: 6 }}>
+                <b style={{ color: "#F5C842" }}>{label}: </b>
+                {value}
+              </p>
+            ) : null
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function addDaysKey(dateKey, days) {
+  const date = getLocalDateTime(dateKey) || new Date();
+  date.setDate(date.getDate() + days);
+  return getDateKey(date);
+}
+
 function ReportsScreen({ state }) {
   const [reportView, setReportView] = useState("overview");
   const [expenseReportView, setExpenseReportView] = useState("distribution");
@@ -4470,9 +4552,91 @@ function ReportsScreen({ state }) {
     summary[key] = current;
     return summary;
   }, {});
+  const reportMonth = state.currentMonth || new Date().toISOString().slice(0, 7);
+  const monthExpenses = (state.expenses || []).filter(
+    (expense) => String(expense.date || expense.createdAt || "").slice(0, 7) === reportMonth
+  );
+  const monthExpensesTotal = monthExpenses.reduce(
+    (sum, expense) => sum + Number(expense.originalAmount ?? expense.amount ?? 0),
+    0
+  );
+  const monthExpensesByCategory = buildExpensesByCategory(monthExpenses);
+  const categoryCaps = state.settings?.expenseCategoryCaps || {};
+  const categoriesWithCaps = Object.entries(categoryCaps).map(([label, cap]) => {
+    const spent = Number(monthExpensesByCategory[label] || 0);
+    const limit = Number(cap || 0);
+    return {
+      label,
+      cap: limit,
+      spent,
+      remaining: Number((limit - spent).toFixed(2)),
+      overBy: Number(Math.max(0, spent - limit).toFixed(2)),
+    };
+  });
+  const overCapCategories = categoriesWithCaps.filter((item) => item.overBy > 0);
+  const categoryFrequency = monthExpenses.reduce((map, expense) => {
+    const key = expense.category || "غير مصنف";
+    const current = map.get(key) || { category: key, count: 0, total: 0 };
+    current.count += 1;
+    current.total = Number((current.total + Number(expense.originalAmount ?? expense.amount ?? 0)).toFixed(2));
+    map.set(key, current);
+    return map;
+  }, new Map());
+  const recurringExpenses = [...categoryFrequency.values()]
+    .filter((item) => item.count >= 3)
+    .sort((a, b) => b.total - a.total)
+    .slice(0, 8);
+  const averageMonthExpense = monthExpenses.length
+    ? monthExpensesTotal / monthExpenses.length
+    : 0;
+  const unusualLargeExpenses = [...monthExpenses]
+    .map((expense) => ({
+      date: expense.date || expense.createdAt || "",
+      category: expense.category || "غير مصنف",
+      amount: Number(expense.originalAmount ?? expense.amount ?? 0),
+      paymentMethod: expense.paymentMethod || "",
+      note: expense.note || "",
+    }))
+    .filter((expense) => expense.amount >= Math.max(averageMonthExpense * 1.75, monthExpensesTotal * 0.12, 25))
+    .sort((a, b) => b.amount - a.amount)
+    .slice(0, 8);
+  const paymentMethodsMonthlySummary = monthExpenses.reduce((summary, expense) => {
+    const key = expense.paymentMethod || "غير محدد";
+    const current = summary[key] || { count: 0, total: 0 };
+    current.count += 1;
+    current.total = Number((current.total + Number(expense.originalAmount ?? expense.amount ?? 0)).toFixed(2));
+    summary[key] = current;
+    return summary;
+  }, {});
+  const sixtyDaysFromNow = addDaysKey(todayReportDate, 60);
+  const pendingCurrentLiabilities = (state.currentLiabilities || [])
+    .filter((item) => item.status !== "paid" && Number(item.balance ?? item.amount ?? 0) > 0)
+    .sort((a, b) => String(a.dueDate || "9999-12-31").localeCompare(String(b.dueDate || "9999-12-31")));
+  const upcomingLiabilities = pendingCurrentLiabilities
+    .filter((item) => !item.dueDate || String(item.dueDate) <= sixtyDaysFromNow)
+    .slice(0, 12)
+    .map((item) => ({
+      name: item.name || item.creditorName || item.category || (item.type === "card" ? "بطاقة" : "التزام"),
+      amount: Number(item.balance ?? item.amount ?? 0),
+      dueDate: item.dueDate || "",
+      type: item.type || "",
+      source: item.source || "",
+      note: item.note || "",
+    }));
+  const structuralLiabilitiesSummary = (state.structuralLiabilities || state.structural || [])
+    .slice(0, 12)
+    .map((item) => ({
+      name: item.name || "التزام ثابت",
+      monthlyAmount: Number(item.monthlyAmount ?? item.monthly ?? item.amount ?? 0),
+      dueDate: item.dueDate || "",
+    }));
+  const emergencyMonths =
+    Number(state.settings?.salary || 0) > 0
+      ? Number(((Number(currentAssets.cash || 0) + Number(currentAssets.banks || 0)) / Number(state.settings.salary || 1)).toFixed(2))
+      : null;
   const buildAiWealthPayload = () => ({
     currency: getCurrencyLabel(state),
-    month: state.currentMonth || new Date().toISOString().slice(0, 7),
+    month: reportMonth,
     generatedAt: new Date().toISOString(),
     analysisWindow: {
       label: "آخر 7 أيام",
@@ -4483,19 +4647,33 @@ function ReportsScreen({ state }) {
       recentExpensesCount: Math.min(20, weeklyExpenses.length),
       totalExpensesCount: expenses.length,
       windowExpensesCount: weeklyExpenses.length,
+      monthExpensesCount: monthExpenses.length,
     },
     summary: {
       salary: Number(state.settings?.salary || 0),
       monthlyCap: Number(reportBudget.spendingCap || 0),
-      totalExpenses: Number(weeklyExpensesTotal || 0),
+      weeklyExpensesTotal: Number(weeklyExpensesTotal || 0),
+      monthlyExpensesTotal: Number(monthExpensesTotal || 0),
       remainingCap: Number(remainingSpendingCap || 0),
       savingsTotal: Number(state.session?.savingsAmount || 0),
       assetsTotal: Number(currentAssets.totalAssets || 0),
       receivablesTotal: Number(receivablesTotal || 0),
       liabilitiesTotal: Number(currentAssets.currentLiabilities || 0),
       netWorth: Number(currentAssets.netWorth || 0),
+      liquidCash: Number(currentAssets.cash || 0),
+      bankBalances: Number(currentAssets.banks || 0),
+      liquidAssets: Number(currentAssets.cash || 0) + Number(currentAssets.banks || 0),
+      emergencyMonths,
+      riskProfile: "محافظ لرب أسرة",
+      savingsGoal: Number(state.session?.savingsAmount || 0),
     },
-    expensesByCategory: weeklyExpensesByCategory,
+    expensesByCategory: monthExpensesByCategory,
+    weeklyExpensesByCategory,
+    categoryCaps: categoriesWithCaps,
+    overCapCategories,
+    recurringExpenses,
+    unusualLargeExpenses,
+    paymentMethodsSummary: paymentMethodsMonthlySummary,
     recentExpenses: weeklyExpenses.slice(0, 20).map((expense) => ({
       date: expense.date || expense.createdAt || "",
       category: expense.category || "غير مصنف",
@@ -4550,7 +4728,26 @@ function ReportsScreen({ state }) {
         note: item.note || "",
       })),
     },
-    paymentMethodsSummary,
+    liabilities: {
+      structuralMonthlyTotal: Number(structuralLiabilitiesSummary.reduce((sum, item) => sum + item.monthlyAmount, 0).toFixed(2)),
+      structuralItems: structuralLiabilitiesSummary,
+      currentTotal: Number(currentAssets.currentLiabilities || 0),
+      upcomingWithin60Days: upcomingLiabilities,
+      pendingCount: pendingCurrentLiabilities.length,
+    },
+    familyPlanningNotes: {
+      knownSchoolCategories: monthExpenses.filter((expense) =>
+        String(expense.category || "").includes("مدارس") ||
+        String(expense.category || "").includes("جامعات")
+      ).length,
+      knownCarCategories: monthExpenses.filter((expense) =>
+        String(expense.category || "").includes("سيارة")
+      ).length,
+      userNotes: monthExpenses
+        .map((expense) => expense.note)
+        .filter(Boolean)
+        .slice(0, 12),
+    },
   });
   const requestAiWealthReport = async () => {
     setAiWealthReportLoading(true);
@@ -4703,10 +4900,10 @@ function ReportsScreen({ state }) {
             }}
           >
             <div style={{ color: visualIdentity.colors.gold, fontSize: 15, fontWeight: 900 }}>
-              تحليل ذكي للمصاريف والأصول
+              مستشار مالي ذكي للأسرة
             </div>
             <div style={{ marginTop: 6, color: visualIdentity.colors.textSecondary, fontSize: 10, lineHeight: 1.7 }}>
-              يرسل ملخصاً محدوداً من بيانات الشهر الحالي والأصول والحركة إلى الذكاء الاصطناعي لإعداد تقرير مرتب.
+              يرسل ملخصاً رقمياً محدوداً من المصاريف والأصول والالتزامات لإعداد تشخيص وقرارات وخطة عمل.
             </div>
             <button
               type="button"
@@ -4727,7 +4924,7 @@ function ReportsScreen({ state }) {
                 opacity: aiWealthReportLoading ? 0.68 : 1,
               }}
             >
-              {aiWealthReportLoading ? "جاري إعداد التقرير الذكي..." : "تحليل ذكي"}
+              {aiWealthReportLoading ? "جاري إعداد تقرير مالي متخصص..." : "تحليل ذكي"}
             </button>
             {aiWealthReportError && (
               <div style={{ marginTop: 10, color: "#FF6B6B", fontSize: 10, fontWeight: 800 }}>
@@ -4750,93 +4947,83 @@ function ReportsScreen({ state }) {
               }}
             >
               <h2 style={{ margin: 0, color: "#F5C842", fontSize: 20, fontWeight: 900 }}>
-                {aiWealthReport.title || "تقرير الثروة الذكي"}
+                تقرير المستشار المالي الذكي
               </h2>
-              <ReportGlassBlock title="الملخص التنفيذي">
-                <p style={aiReportParagraphStyle}>{aiWealthReport.executiveSummary}</p>
+              <ReportGlassBlock title="الحكم العام">
+                <p style={aiReportParagraphStyle}>{aiWealthReport.overallJudgment}</p>
               </ReportGlassBlock>
               <ReportGlassBlock title="درجة الصحة المالية">
                 <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
                   <strong style={{ color: "#F5C842", fontSize: 28, fontWeight: 900 }}>
-                    {Number(aiWealthReport.healthScore || 0).toFixed(0)}
+                    {Number(aiWealthReport.financialHealthScore?.score || 0).toFixed(0)}
                   </strong>
                   <span style={{ color: visualIdentity.colors.textSecondary, fontSize: 11 }}>
-                    {aiWealthReport.status || "يحتاج انتباه"}
+                    {aiWealthReport.financialHealthScore?.label || "تقييم مالي"}
                   </span>
                 </div>
+                {aiWealthReport.financialHealthScore?.reason && (
+                  <p style={{ ...aiReportParagraphStyle, marginTop: 8 }}>
+                    {aiWealthReport.financialHealthScore.reason}
+                  </p>
+                )}
               </ReportGlassBlock>
-              <ReportGlassBlock title="أهم الملاحظات">
-                <AiReportList items={aiWealthReport.keyInsights} />
+              <ReportGlassBlock title="التشخيص المالي">
+                <p style={aiReportParagraphStyle}>{aiWealthReport.financialDiagnosis}</p>
               </ReportGlassBlock>
-              <ReportGlassBlock title="تحليل المصاريف">
-                <p style={aiReportParagraphStyle}>{aiWealthReport.expenseAnalysis?.summary}</p>
-                <AiReportList items={aiWealthReport.expenseAnalysis?.highestCategories} />
-                <AiReportList items={aiWealthReport.expenseAnalysis?.warnings} color="#FF6B6B" />
+              <ReportGlassBlock title="أهم 3 مشاكل">
+                <AiProblemList items={aiWealthReport.topProblems} />
               </ReportGlassBlock>
-              <ReportGlassBlock title="نصائح توفير المصروفات">
-                <AiReportList items={aiWealthReport.expenseAnalysis?.savingTips} color="#52E5A0" />
+              <ReportGlassBlock title="قرارات فورية">
+                <AiReportList items={aiWealthReport.immediateDecisions} color="#F5C842" />
               </ReportGlassBlock>
-              <ReportGlassBlock title="تحليل الأصول">
+              <ReportGlassBlock title="خطة الأسبوع القادم">
+                <AiReportList items={aiWealthReport.nextWeekPlan} color="#52E5A0" />
+              </ReportGlassBlock>
+              <ReportGlassBlock title="خطة باقي الشهر">
+                <AiReportList items={aiWealthReport.restOfMonthPlan} color="#7BBFF5" />
+              </ReportGlassBlock>
+              <ReportGlassBlock title="المصاريف القادمة المتوقعة">
+                <AiReportList items={aiWealthReport.upcomingExpenses} color="#F5C842" />
+              </ReportGlassBlock>
+              <ReportGlassBlock title="خطة الادخار">
+                <AiReportList items={aiWealthReport.savingPlan} color="#52E5A0" />
+              </ReportGlassBlock>
+              <ReportGlassBlock title="تحليل الأصول والسيولة">
                 <p style={aiReportParagraphStyle}>{aiWealthReport.assetsAnalysis?.summary}</p>
-                <AiReportList items={aiWealthReport.assetsAnalysis?.positiveMovements} color="#52E5A0" />
-                <AiReportList items={aiWealthReport.assetsAnalysis?.negativeMovements} color="#FF6B6B" />
-              </ReportGlassBlock>
-              <ReportGlassBlock title="قراءة الأسواق العالمية">
-                <p style={aiReportParagraphStyle}>{aiWealthReport.marketOutlook?.summary}</p>
-                {aiWealthReport.marketOutlook?.gold && (
+                {aiWealthReport.assetsAnalysis?.liquidityStatus && (
                   <p style={{ ...aiReportParagraphStyle, marginTop: 8 }}>
-                    <b style={{ color: "#F5C842" }}>الذهب: </b>
-                    {aiWealthReport.marketOutlook.gold}
+                    <b style={{ color: "#52E5A0" }}>السيولة: </b>
+                    {aiWealthReport.assetsAnalysis.liquidityStatus}
                   </p>
                 )}
-                {aiWealthReport.marketOutlook?.stocks && (
+                {aiWealthReport.assetsAnalysis?.concentrationRisk && (
                   <p style={{ ...aiReportParagraphStyle, marginTop: 8 }}>
-                    <b style={{ color: "#7BBFF5" }}>الأسهم: </b>
-                    {aiWealthReport.marketOutlook.stocks}
+                    <b style={{ color: "#FF6B6B" }}>تركز المخاطر: </b>
+                    {aiWealthReport.assetsAnalysis.concentrationRisk}
                   </p>
                 )}
-                {aiWealthReport.marketOutlook?.cashAndDeposits && (
-                  <p style={{ ...aiReportParagraphStyle, marginTop: 8 }}>
-                    <b style={{ color: "#52E5A0" }}>السيولة والودائع: </b>
-                    {aiWealthReport.marketOutlook.cashAndDeposits}
+                <AiReportList items={aiWealthReport.assetsAnalysis?.recommendations} color="#7BBFF5" />
+              </ReportGlassBlock>
+              <ReportGlassBlock title="فرص تحسين العائد على الأصول">
+                <AiOpportunityList items={aiWealthReport.assetReturnOpportunities} />
+              </ReportGlassBlock>
+              <ReportGlassBlock title="ما الذي يجب ألا تفعله هذا الشهر">
+                <AiReportList items={aiWealthReport.doNotDoThisMonth} color="#FF6B6B" />
+              </ReportGlassBlock>
+              <ReportGlassBlock title="جودة البيانات">
+                <p style={aiReportParagraphStyle}>
+                  {aiWealthReport.dataQuality?.status || "غير محددة"}
+                </p>
+                {aiWealthReport.dataQuality?.message && (
+                  <p style={{ ...aiReportParagraphStyle, marginTop: 7 }}>
+                    {aiWealthReport.dataQuality.message}
                   </p>
                 )}
-                <AiReportList items={aiWealthReport.marketOutlook?.opportunities} color="#F5C842" />
-                <AiReportList items={aiWealthReport.marketOutlook?.risks} color="#FF6B6B" />
-              </ReportGlassBlock>
-              <ReportGlassBlock title="اقتراح توزيع الأصول">
-                <AiReportList items={aiWealthReport.assetsAnalysis?.allocationSuggestions} color="#7BBFF5" />
-              </ReportGlassBlock>
-              <ReportGlassBlock title="التوصيات">
-                {(aiWealthReport.recommendations || []).map((item, index) => {
-                  const priorityColor =
-                    item.priority === "high"
-                      ? "#FF6B6B"
-                      : item.priority === "low"
-                        ? "#52E5A0"
-                        : "#F5C842";
-                  return (
-                    <div key={`${item.title}-${index}`} style={{ marginTop: index ? 10 : 0 }}>
-                      <b style={{ color: priorityColor, fontSize: 12 }}>{item.title}</b>
-                      <div style={{ marginTop: 3, color: visualIdentity.colors.textSecondary, fontSize: 10, lineHeight: 1.7 }}>
-                        {item.description}
-                      </div>
-                    </div>
-                  );
-                })}
-              </ReportGlassBlock>
-              <ReportGlassBlock title="خطوات مقترحة">
-                <AiReportList items={aiWealthReport.nextActions} color="#F5C842" />
+                <AiReportList items={aiWealthReport.dataQuality?.missingData} color="#F5C842" />
               </ReportGlassBlock>
               <div style={{ marginTop: 12, color: visualIdentity.colors.textFaint, fontSize: 9, lineHeight: 1.7 }}>
-                {aiWealthReport.disclaimer}
+                {aiWealthReport.investmentDisclaimer}
               </div>
-              {Array.isArray(aiWealthReport.marketOutlook?.sources) &&
-                aiWealthReport.marketOutlook.sources.length > 0 && (
-                  <div style={{ marginTop: 8, color: visualIdentity.colors.textFaint, fontSize: 8, lineHeight: 1.7 }}>
-                    مصادر السوق: {aiWealthReport.marketOutlook.sources.join(" | ")}
-                  </div>
-                )}
             </section>
           )}
         </>

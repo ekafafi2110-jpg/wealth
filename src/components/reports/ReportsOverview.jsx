@@ -21,8 +21,8 @@ const reportCards = {
     color: visualIdentity.colors.green,
   },
   weeklyAi: {
-    title: "تقرير AI الأسبوعي",
-    meta: "تحليل أسبوع أو أكثر من المصاريف والتغيرات مع نصائح ذكية للمستخدم",
+    title: "المستشار المالي الذكي",
+    meta: "تشخيص عملي للمصاريف والسيولة والأصول مع قرارات وخطة أسبوعية",
     icon: Sparkles,
     color: visualIdentity.colors.purple,
   },
