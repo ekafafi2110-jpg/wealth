@@ -1662,7 +1662,7 @@ useEffect(() => {
         amount: data.amount,
         category: data.category,
         note: data.note || data.merchant || message,
-        summary: data.confidence < 0.75 ? "راجع البيانات قبل التسجيل" : "",
+        summary: "",
         paymentMethodSuggestion: data.paymentMethodSuggestion,
       });
 
