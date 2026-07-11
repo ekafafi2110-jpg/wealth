@@ -32,7 +32,6 @@ import PendingExpensesReview from "./components/expenses/PendingExpensesReview";
 import PendingSurplusCard from "./components/overview/PendingSurplusCard";
 import SpendingCapCard from "./components/overview/SpendingCapCard";
 import RecentExpensesPreview from "./components/overview/RecentExpensesPreview";
-import AllExpensesModal from "./components/overview/AllExpensesModal";
 import AssetsToolbar from "./components/assets/AssetsToolbar";
 import AssetsSummaryCard from "./components/assets/AssetsSummaryCard";
 import AssetSectionCard from "./components/assets/AssetSectionCard";
@@ -73,6 +72,7 @@ import AuthScreen from "./components/common/AuthScreen";
 import StorageErrorScreen from "./components/common/StorageErrorScreen";
 import AppHeader from "./components/common/AppHeader";
 import CalendarDatePicker from "./components/common/CalendarDatePicker";
+import TextInputModal from "./components/common/TextInputModal";
 import StructuralLiabilitiesCard from "./components/liabilities/StructuralLiabilitiesCard";
 import CurrentLiabilitiesCard from "./components/liabilities/CurrentLiabilitiesCard";
 import ReservedPaymentsCard from "./components/liabilities/ReservedPaymentsCard";
@@ -534,6 +534,21 @@ const incomeEntryMeta = (entry) =>
         entry?.overBudget || 0
       ).toFixed(2)}`;
 
+const buildExpenseStatementRows = (expenses = []) =>
+  expenses.map((expense) => ({
+    id: expense.id,
+    expense,
+    isIncome: expense.isIncomeEntry,
+    amount: incomeEntryAmount(expense),
+    meta: incomeEntryMeta(expense),
+    title: expense.category || "غير مصنف",
+    category: expense.category,
+    paymentMethod: expense.paymentMethod,
+    categoryColor: expense.isIncomeEntry
+      ? "#60C698"
+      : CC[expense.category] || "rgba(255,255,255,0.72)",
+  }));
+
 function assetBreakdownFromAssets(assets = {}, market = {}, accountsReceivable = []) {
   const goldPrice = Number(market.goldGramPrice || 0);
   const silverPrice = Number(market.silverGramPrice || 0);
@@ -925,6 +940,14 @@ function rebalanceExpenseCoverageAfterCapIncrease(state) {
   return next;
 }
 
+function rebalanceAfterSpendingCapIncrease(previousState, nextState) {
+  const previousCap = Number(previousState.session?.spendingCap || 0);
+  const nextCap = Number(nextState.session?.spendingCap || 0);
+
+  if (nextCap <= previousCap) return nextState;
+  return rebalanceExpenseCoverageAfterCapIncrease(nextState);
+}
+
 function Overview({
   state,
   setState,
@@ -938,8 +961,11 @@ function Overview({
   const { currencyLabel: localeCurrencyLabel, t } = useLocale();
   const budget = calcBudget(state);
   const [selectedExpense, setSelectedExpense] = useState(null);
+  const [selectedStatementExpense, setSelectedStatementExpense] = useState(null);
   const [showCategoryManager, setShowCategoryManager] = useState(false);
   const [showAllExpenses, setShowAllExpenses] = useState(false);
+  const [noteDialog, setNoteDialog] = useState(null);
+  const [categoryDeleteDialog, setCategoryDeleteDialog] = useState(null);
   const deficitLiabilityNameRef = useRef(null);
   const amountInputRef = useRef(null);
   const [amount, setAmount] = useState("");
@@ -989,6 +1015,7 @@ const [overBudgetDueDate, setOverBudgetDueDate] = useState("");
   );
   const recent = [...state.expenses].slice(-5).reverse();
   const allExpenses = [...state.expenses].reverse();
+  const expenseStatementRows = buildExpenseStatementRows(allExpenses);
   const dueCurrentLiabilities = (state.currentLiabilities || []).filter((l) => {
   if (!l.dueDate || l.status === "paid") return false;
 
@@ -1082,6 +1109,16 @@ const mainExpenseCategories = pinnedExpenseCategories;
   );
   const selectedExpenseAsset = Number(
     selectedExpense?.emergencyFunding?.assetAmount || 0
+  );
+  const selectedStatementTotal = Number(
+    selectedStatementExpense?.originalAmount ?? selectedStatementExpense?.amount ?? 0
+  );
+  const selectedStatementRecorded = Number(selectedStatementExpense?.amount || 0);
+  const selectedStatementDebt = Number(
+    selectedStatementExpense?.emergencyFunding?.liabilityAmount || 0
+  );
+  const selectedStatementAsset = Number(
+    selectedStatementExpense?.emergencyFunding?.assetAmount || 0
   );
   const selectedExpenseFunding = selectedExpense?.overBudgetFunding || null;
   const selectedExpenseFundingLabel = selectedExpenseFunding
@@ -1311,24 +1348,27 @@ useEffect(() => {
   };
 
   const editExpenseNote = () => {
-    const nextNote = window.prompt("اكتب ملاحظة المصروف", note || "");
-    if (nextNote !== null) {
-      setNote(nextNote);
-    }
+    setNoteDialog({
+      value: note || "",
+      onSave: (nextNote) => setNote(nextNote),
+    });
   };
   const editRecordedExpenseNote = (expense) => {
     if (!expense?.id) return;
-    const nextNote = window.prompt("اكتب ملاحظة المصروف", expense.note || "");
-    if (nextNote === null) return;
-    setState((prev) => ({
-      ...prev,
-      expenses: (prev.expenses || []).map((item) =>
-        item.id === expense.id ? { ...item, note: nextNote } : item
-      ),
-    }));
-    setSelectedExpense((current) =>
-      current?.id === expense.id ? { ...current, note: nextNote } : current
-    );
+    setNoteDialog({
+      value: expense.note || "",
+      onSave: (nextNote) => {
+        setState((prev) => ({
+          ...prev,
+          expenses: (prev.expenses || []).map((item) =>
+            item.id === expense.id ? { ...item, note: nextNote } : item
+          ),
+        }));
+        setSelectedExpense((current) =>
+          current?.id === expense.id ? { ...current, note: nextNote } : current
+        );
+      },
+    });
   };
 
   const changePaymentMethod = (value) => {
@@ -2741,23 +2781,9 @@ function toggleExpenseCategoryPinned(catId) {
     };
   });
 }
-function deleteExpenseCategory(catItem) {
-  if (!catItem?.id || catItem.isOther) return;
-
-  const categoryLabel = String(catItem.label || "").trim();
-  const hasRecordedExpense = [
-    ...(state.expenses || []),
-    ...(state.monthlySnapshots || []).flatMap((snapshot) => snapshot.expenses || []),
-  ].some((expense) => String(expense.category || "").trim() === categoryLabel);
-
-  if (hasRecordedExpense) {
-    alert("لا يمكن حذف هذا النوع لأن هناك مصروفات مسجلة عليه. احفظ السجل كما هو حتى لا تختل التقارير.");
-    return;
-  }
-
-  const confirmed = window.confirm(`هل تريد حذف نوع المصروف "${categoryLabel}"؟`);
-  if (!confirmed) return;
-
+function applyExpenseCategoryDelete(catItem, replacementLabel = "") {
+  const categoryLabel = String(catItem?.label || "").trim();
+  if (!catItem?.id || !categoryLabel) return;
   setState((prev) => {
     const savedItems =
       prev.expenseCategories?.items ||
@@ -2768,6 +2794,7 @@ function deleteExpenseCategory(catItem) {
     const isDefault = defaultExpenseCategories.some((base) => base.id === catItem.id);
     const cleanedCaps = { ...(prev.settings?.expenseCategoryCaps || {}) };
     delete cleanedCaps[categoryLabel];
+    const cleanReplacementLabel = String(replacementLabel || "").trim();
 
     const nextItems = isDefault
       ? [
@@ -2778,6 +2805,23 @@ function deleteExpenseCategory(catItem) {
 
     return {
       ...prev,
+      expenses: cleanReplacementLabel
+        ? (prev.expenses || []).map((expense) =>
+            String(expense.category || "").trim() === categoryLabel
+              ? { ...expense, category: cleanReplacementLabel }
+              : expense
+          )
+        : prev.expenses,
+      monthlySnapshots: cleanReplacementLabel
+        ? (prev.monthlySnapshots || []).map((snapshot) => ({
+            ...snapshot,
+            expenses: (snapshot.expenses || []).map((expense) =>
+              String(expense.category || "").trim() === categoryLabel
+                ? { ...expense, category: cleanReplacementLabel }
+                : expense
+            ),
+          }))
+        : prev.monthlySnapshots,
       settings: {
         ...prev.settings,
         expenseCategoryCaps: cleanedCaps,
@@ -2790,11 +2834,46 @@ function deleteExpenseCategory(catItem) {
   });
 
   if (category === categoryLabel) {
-    const fallback = allExpenseCategories.find(
-      (category) => category.id !== catItem.id && !category.hidden && !category.isOther
-    );
+    const fallback = replacementLabel
+      ? { label: replacementLabel }
+      : allExpenseCategories.find(
+          (category) => category.id !== catItem.id && !category.hidden && !category.isOther
+        );
     if (fallback?.label) selectExpenseCategory(fallback.label);
   }
+}
+function deleteExpenseCategory(catItem) {
+  if (!catItem?.id || catItem.isOther) return;
+
+  const categoryLabel = String(catItem.label || "").trim();
+  const recordedExpenses = [
+    ...(state.expenses || []),
+    ...(state.monthlySnapshots || []).flatMap((snapshot) => snapshot.expenses || []),
+  ].filter((expense) => String(expense.category || "").trim() === categoryLabel);
+
+  if (recordedExpenses.length > 0) {
+    const replacement = allExpenseCategories.find(
+      (item) =>
+        item.id !== catItem.id &&
+        !item.hidden &&
+        !item.isOther &&
+        String(item.label || "").trim() !== categoryLabel
+    );
+    setCategoryDeleteDialog({
+      category: catItem,
+      replacementLabel: replacement?.label || "",
+      count: recordedExpenses.length,
+      total: recordedExpenses.reduce(
+        (sum, expense) => sum + Number(expense.originalAmount ?? expense.amount ?? 0),
+        0
+      ),
+    });
+    return;
+  }
+
+  const confirmed = window.confirm(`هل تريد حذف نوع المصروف "${categoryLabel}"؟`);
+  if (!confirmed) return;
+  applyExpenseCategoryDelete(catItem);
 }
  return (
     <div
@@ -3620,6 +3699,21 @@ function deleteExpenseCategory(catItem) {
       )}
 
 
+      <TextInputModal
+        open={Boolean(noteDialog)}
+        title="اكتب ملاحظة المصروف"
+        value={noteDialog?.value || ""}
+        onChange={(value) =>
+          setNoteDialog((current) => (current ? { ...current, value } : current))
+        }
+        onCancel={() => setNoteDialog(null)}
+        onSave={() => {
+          noteDialog?.onSave(noteDialog.value || "");
+          setNoteDialog(null);
+        }}
+        placeholder="اكتب الملاحظة هنا"
+      />
+
       <AssetTransferModal
         open={Boolean(deficitTransfer)}
         sources={deficitTransfer?.sources || []}
@@ -3707,13 +3801,20 @@ function deleteExpenseCategory(catItem) {
         )}
       />
 
-      <AllExpensesModal
+      <ExpenseReportModal
         open={showAllExpenses}
-        items={allExpenses}
+        rows={expenseStatementRows}
+        selectedExpense={selectedStatementExpense}
+        selectedTotal={selectedStatementTotal}
+        selectedRecorded={selectedStatementRecorded}
+        selectedDebt={selectedStatementDebt}
+        selectedAsset={selectedStatementAsset}
         onClose={() => setShowAllExpenses(false)}
-        onSelect={setSelectedExpense}
-        onEditNote={editRecordedExpenseNote}
-        incomeAmount={incomeEntryAmount}
+        onSelect={(expense) => {
+          setShowAllExpenses(false);
+          setSelectedStatementExpense(expense);
+        }}
+        onCloseSelected={() => setSelectedStatementExpense(null)}
       />
 
       {!readOnly && selectedExpense && (
@@ -4056,6 +4157,87 @@ flexDirection: "column",
     </div>
   </div>
 )}
+{categoryDeleteDialog && (
+  <div
+    onClick={(ev) => ev.target === ev.currentTarget && setCategoryDeleteDialog(null)}
+    style={{
+      ...HOME_UI.overlay,
+      zIndex: 1160,
+    }}
+  >
+    <div
+      style={{
+        ...HOME_UI.sheet,
+        direction: "rtl",
+        maxHeight: "72vh",
+      }}
+    >
+      <div style={{ textAlign: "right", marginBottom: 12 }}>
+        <strong style={{ display: "block", color: visualIdentity.colors.gold, fontSize: 17, fontWeight: 900 }}>
+          تحويل المصاريف قبل الحذف
+        </strong>
+        <span style={{ display: "block", marginTop: 5, color: HOME_UI.muted, fontSize: 11, lineHeight: 1.7 }}>
+          النوع "{categoryDeleteDialog.category.label}" عليه {categoryDeleteDialog.count} مصروف بمجموع {Number(categoryDeleteDialog.total || 0).toFixed(2)} {localeCurrencyLabel}. اختر نوعاً آخر لنقلها إليه ثم احذف النوع القديم.
+        </span>
+      </div>
+
+      <select
+        value={categoryDeleteDialog.replacementLabel}
+        onChange={(event) =>
+          setCategoryDeleteDialog((current) =>
+            current ? { ...current, replacementLabel: event.target.value } : current
+          )
+        }
+        style={{ ...G.inp(), marginBottom: 12 }}
+      >
+        <option value="">اختر نوع المصروف البديل</option>
+        {allExpenseCategories
+          .filter(
+            (item) =>
+              !item.hidden &&
+              !item.isOther &&
+              item.id !== categoryDeleteDialog.category.id &&
+              String(item.label || "").trim() !== String(categoryDeleteDialog.category.label || "").trim()
+          )
+          .map((item) => (
+            <option key={item.id} value={item.label}>
+              {item.label}
+            </option>
+          ))}
+      </select>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+        <button
+          type="button"
+          onClick={() => setCategoryDeleteDialog(null)}
+          style={G.btn("rgba(255,255,255,0.08)", visualIdentity.colors.white, {
+            border: "1px solid rgba(255,255,255,0.16)",
+          })}
+        >
+          إلغاء
+        </button>
+        <button
+          type="button"
+          disabled={!categoryDeleteDialog.replacementLabel}
+          onClick={() => {
+            if (!categoryDeleteDialog.replacementLabel) return;
+            applyExpenseCategoryDelete(
+              categoryDeleteDialog.category,
+              categoryDeleteDialog.replacementLabel
+            );
+            setCategoryDeleteDialog(null);
+          }}
+          style={G.btn(visualIdentity.gradients.gold, visualIdentity.colors.navy, {
+            opacity: categoryDeleteDialog.replacementLabel ? 1 : 0.55,
+            cursor: categoryDeleteDialog.replacementLabel ? "pointer" : "not-allowed",
+          })}
+        >
+          تحويل وحذف
+        </button>
+      </div>
+    </div>
+  </div>
+)}
     </div>
   );
 }
@@ -4337,19 +4519,7 @@ function ReportsScreen({ state }) {
       label: String(point.month || "").slice(5, 7) || "--",
     };
   });
-  const expenseReportRows = expenses.map((expense) => ({
-    id: expense.id,
-    expense,
-    isIncome: expense.isIncomeEntry,
-    amount: incomeEntryAmount(expense),
-    meta: incomeEntryMeta(expense),
-    title: expense.category || "غير مصنف",
-    category: expense.category,
-    paymentMethod: expense.paymentMethod,
-    categoryColor: expense.isIncomeEntry
-      ? "#60C698"
-      : CC[expense.category] || "rgba(255,255,255,0.72)",
-  }));
+  const expenseReportRows = buildExpenseStatementRows(expenses);
   const assetDetailDisplayRows = assetDetailRows.map((asset) => ({
     ...asset,
     width: Math.max(
@@ -7736,7 +7906,10 @@ const queueStructuralExpenseDraft = (nextState, amount, label) => ({
       ref[keys[keys.length - 1]] = value;
       if (path === "settings.salary" || path === "settings.spendingCap" || path === "session.spendingCap") {
         const guarded = applyFinancialSettingGuards(copy);
-        return guarded.ok ? guarded.state : prev;
+        if (!guarded.ok) return prev;
+        return path === "settings.spendingCap" || path === "session.spendingCap"
+          ? rebalanceAfterSpendingCapIncrease(prev, guarded.state)
+          : guarded.state;
       }
       return copy;
     });
@@ -7760,6 +7933,8 @@ const [openingReceivableName, setOpeningReceivableName] = useState("");
 const [openingReceivableAmount, setOpeningReceivableAmount] = useState("");
 const [openingReceivableDueDate, setOpeningReceivableDueDate] = useState("");
 const [openingReceivableNote, setOpeningReceivableNote] = useState("");
+const [openingReceivableNoteDialogOpen, setOpeningReceivableNoteDialogOpen] = useState(false);
+const [openingReceivableNoteDraft, setOpeningReceivableNoteDraft] = useState("");
 const [openingBalanceDrafts, setOpeningBalanceDrafts] = useState({});
 const [showStructuralForm, setShowStructuralForm] = useState(false);
 const [settingsSectionsOpen, setSettingsSectionsOpen] = useState({
@@ -8805,7 +8980,8 @@ const hasOpeningBalanceDrafts = Object.keys(openingBalanceDrafts).length > 0;
               const guarded = applyFinancialSettingGuards(next, {
                 allowCategoryCapOverage: true,
               });
-              return guarded.ok ? guarded.state : prev;
+              if (!guarded.ok) return prev;
+              return rebalanceAfterSpendingCapIncrease(prev, guarded.state);
             });
           }}
           inputStyle={G.inp()}
@@ -9015,8 +9191,8 @@ const hasOpeningBalanceDrafts = Object.keys(openingBalanceDrafts).length > 0;
                 <button
                   type="button"
                   onClick={() => {
-                    const nextNote = window.prompt("ملاحظة الذمة المدينة", openingReceivableNote || "");
-                    if (nextNote !== null) setOpeningReceivableNote(nextNote);
+                    setOpeningReceivableNoteDraft(openingReceivableNote || "");
+                    setOpeningReceivableNoteDialogOpen(true);
                   }}
                   title={openingReceivableNote ? "تعديل ملاحظة الذمة المدينة" : "إضافة ملاحظة للذمة المدينة"}
                   aria-label={openingReceivableNote ? "تعديل ملاحظة الذمة المدينة" : "إضافة ملاحظة للذمة المدينة"}
@@ -9039,10 +9215,22 @@ const hasOpeningBalanceDrafts = Object.keys(openingBalanceDrafts).length > 0;
                     cursor: "pointer",
                     boxShadow: "inset 0 1px 0 rgba(255,255,255,0.08)",
                   }}
-                >
-                  <StickyNote size={18} strokeWidth={2.4} />
-                </button>
-              </div>
+                  >
+                    <StickyNote size={18} strokeWidth={2.4} />
+                  </button>
+                  <TextInputModal
+                    open={openingReceivableNoteDialogOpen}
+                    title="ملاحظة الذمة المدينة"
+                    value={openingReceivableNoteDraft}
+                    onChange={setOpeningReceivableNoteDraft}
+                    onCancel={() => setOpeningReceivableNoteDialogOpen(false)}
+                    onSave={() => {
+                      setOpeningReceivableNote(openingReceivableNoteDraft);
+                      setOpeningReceivableNoteDialogOpen(false);
+                    }}
+                    placeholder="اكتب الملاحظة هنا"
+                  />
+                </div>
               <button
                 type="button"
                 onClick={addOpeningReceivable}

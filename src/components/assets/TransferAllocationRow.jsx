@@ -1,6 +1,8 @@
 import visualIdentity from "../../theme/visualIdentity";
 import CalendarDatePicker from "../common/CalendarDatePicker";
+import TextInputModal from "../common/TextInputModal";
 import { StickyNote } from "lucide-react";
+import { useState } from "react";
 
 export default function TransferAllocationRow({
   row,
@@ -13,6 +15,8 @@ export default function TransferAllocationRow({
   allowedAllocations,
   allowNewTarget = true,
 }) {
+  const [noteDialogOpen, setNoteDialogOpen] = useState(false);
+  const [noteDraft, setNoteDraft] = useState("");
   const needsUnits = ["stock", "gold", "silver", "goods"].includes(
     row.allocation
   );
@@ -45,8 +49,8 @@ export default function TransferAllocationRow({
     ["receivable", "ذمم مدينة"],
   ].filter(([value]) => !allowedAllocations || allowedAllocations.includes(value));
   const updateReceivableNote = () => {
-    const nextNote = window.prompt("ملاحظة الذمة المدينة", row.note || "");
-    if (nextNote !== null) onUpdate({ note: nextNote });
+    setNoteDraft(row.note || "");
+    setNoteDialogOpen(true);
   };
   const receivableIconButtonStyle = (active) => ({
     width: 42,
@@ -206,6 +210,19 @@ export default function TransferAllocationRow({
           />
         </div>
       )}
+
+      <TextInputModal
+        open={noteDialogOpen}
+        title="ملاحظة الذمة المدينة"
+        value={noteDraft}
+        onChange={setNoteDraft}
+        onCancel={() => setNoteDialogOpen(false)}
+        onSave={() => {
+          onUpdate({ note: noteDraft });
+          setNoteDialogOpen(false);
+        }}
+        placeholder="اكتب الملاحظة هنا"
+      />
     </div>
   );
 }
