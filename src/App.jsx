@@ -348,23 +348,28 @@ const G = {
 };
 
 const DEFAULT_EXPENSE_CATEGORIES = [
-  { id: "food", label: "طعام", iconKey: "soup", color: "#f59e0b", pinned: true },
-  { id: "groceries", label: "مواد غذائية", iconKey: "apple", color: "#52E5A0", pinned: false },
-  { id: "cleaning-supplies", label: "منظفات", icon: "🧴", color: "#38BDF8", pinned: false },
-  { id: "vegetables-fruits", label: "خضار وفواكه", iconKey: "apple", color: "#52E5A0", pinned: false },
-  { id: "bakery", label: "مخبوزات", icon: "🥐", color: "#F59E0B", pinned: false },
-  { id: "meat-poultry", label: "لحوم ودواجن", iconKey: "beef", color: "#FF8A65", pinned: false },
-  { id: "transport", label: "مواصلات", iconKey: "car", color: "#3b82f6", pinned: true },
-  { id: "car-maintenance", label: "صيانة وإصلاح سيارة", iconKey: "wrench", color: "#F59E0B", pinned: false },
-  { id: "shopping", label: "تسوق", iconKey: "shopping", color: "#a855f7", pinned: true },
-  { id: "health", label: "صحة", iconKey: "health", color: "#22c55e", pinned: true },
-  { id: "entertainment", label: "ترفيه", iconKey: "gamepad", color: "#ec4899", pinned: true },
-  { id: "school-installments", label: "أقساط مدارس وجامعات", iconKey: "graduation", color: "#F5C842", pinned: false },
-  { id: "bills", label: "فواتير", iconKey: "receipt", color: "#7BBFF5", pinned: true },
-  { id: "electricity-bill", label: "فاتورة كهرباء", iconKey: "bolt", color: "#F5C842", pinned: false },
-  { id: "water-bill", label: "فاتورة ماء", iconKey: "droplets", color: "#38BDF8", pinned: false },
+  { id: "groceries", label: "مواد تموينية", iconKey: "shopping", color: "#52E5A0", pinned: true },
+  { id: "vegetables-fruits", label: "خضار وفواكه", iconKey: "apple", color: "#52E5A0", pinned: true },
+  { id: "meat-poultry", label: "لحوم ودواجن", iconKey: "beef", color: "#FF8A65", pinned: true },
+  { id: "water-bill", label: "فاتورة ماء", iconKey: "droplets", color: "#38BDF8", pinned: true },
+  { id: "electricity-bill", label: "فاتورة كهرباء", iconKey: "bolt", color: "#F5C842", pinned: true },
+  { id: "internet-bill", label: "فاتورة إنترنت", iconKey: "wifi", color: "#38BDF8", pinned: false },
   { id: "mobile-bill", label: "فاتورة خلوي", iconKey: "phone", color: "#A78BF5", pinned: false },
-  { id: "fuel", label: "بنزين", iconKey: "fuel", color: "#f97316", pinned: true },
+  { id: "other-bills", label: "فواتير أخرى", iconKey: "receipt", color: "#7BBFF5", pinned: false },
+  { id: "clothes", label: "ملابس", iconKey: "shirt", color: "#7BBFF5", pinned: false },
+  { id: "fuel", label: "وقود", iconKey: "fuel", color: "#f97316", pinned: false },
+  { id: "school-installments", label: "أقساط مدارس", iconKey: "graduation", color: "#F5C842", pinned: false },
+  { id: "car-maintenance", label: "صيانة وإصلاح سيارة", iconKey: "wrench", color: "#F59E0B", pinned: false },
+  { id: "home-maintenance", label: "صيانة منزلية", iconKey: "home", color: "#60C698", pinned: false },
+  { id: "appliances", label: "شراء أجهزة كهربائية", iconKey: "plug", color: "#A78BF5", pinned: false },
+  { id: "bakery", label: "مخبوزات", icon: "🥐", color: "#F59E0B", pinned: false },
+  { id: "children-expenses", label: "مصروف أولاد", iconKey: "baby", color: "#F5C842", pinned: false },
+  { id: "transport", label: "مواصلات", iconKey: "car", color: "#3b82f6", pinned: false },
+  { id: "cleaning-supplies", label: "منظفات", icon: "🧴", color: "#38BDF8", pinned: false },
+  { id: "health", label: "صحة", iconKey: "health", color: "#22c55e", pinned: false },
+  { id: "entertainment", label: "ترفيه", iconKey: "gamepad", color: "#ec4899", pinned: false },
+  { id: "gifts", label: "هدايا", iconKey: "gift", color: "#A78BF5", pinned: false },
+  { id: "restaurants", label: "مطاعم", iconKey: "utensils", color: "#f59e0b", pinned: false },
   { id: "other", label: "\u0623\u062e\u0631\u0649", icon: "...", color: "#91A9BF", isOther: true, pinned: true },
 ];
 const MAX_MAIN_EXPENSE_CATEGORIES = 8;
@@ -402,16 +407,23 @@ const CATEGORY_ICON_FALLBACKS = {
   apple: "🥬",
   beef: "🥩",
   bolt: "⚡",
+  baby: "🧒",
   car: "🚗",
   droplets: "💧",
   fuel: "⛽",
   gamepad: "🎮",
+  gift: "🎁",
   graduation: "🎓",
   health: "💚",
+  home: "🏠",
   phone: "📱",
+  plug: "🔌",
   receipt: "🧾",
+  shirt: "👕",
   shopping: "🛒",
   soup: "🍽️",
+  utensils: "🍽️",
+  wifi: "🛜",
   wrench: "🔧",
 };
 const limitMainExpenseCategoryPins = (categories = []) => {
@@ -548,6 +560,36 @@ const buildExpenseStatementRows = (expenses = []) =>
       ? "#60C698"
       : CC[expense.category] || "rgba(255,255,255,0.72)",
   }));
+
+const normalizeMerchantRuleKey = (value) =>
+  String(value || "")
+    .toUpperCase()
+    .replace(/[^\p{L}\p{N}\s&.-]/gu, " ")
+    .replace(/\b\d+(?:[.,]\d+)?\b/g, " ")
+    .replace(
+      /\b(JOD|JD|DINAR|ILS|USD|EUR|AMOUNT|BALANCE|CARD|VISA|POS|PURCHASE|DEBIT|CREDIT|REF|AUTH|ON|AT|IN)\b/g,
+      " "
+    )
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 80);
+
+const extractMerchantRuleKey = ({ merchant = "", note = "", message = "" } = {}) => {
+  const text = [merchant, note, message].filter(Boolean).join(" ");
+  const knownMatch = text.match(
+    /\b(MCDONALD'?S?|MCD|KFC|BURGER\s*KING|STARBUCKS|SUBWAY|PIZZA\s*HUT|DOMINO'?S?)\b/i
+  );
+  if (knownMatch) return normalizeMerchantRuleKey(knownMatch[0]);
+
+  const merchantKey = normalizeMerchantRuleKey(merchant);
+  if (merchantKey) return merchantKey;
+
+  const latinWords = text.match(/[A-Z][A-Z0-9&'.-]{2,}(?:\s+[A-Z][A-Z0-9&'.-]{2,}){0,3}/gi);
+  if (latinWords?.length) return normalizeMerchantRuleKey(latinWords[0]);
+
+  const arabicWords = text.match(/[\u0600-\u06FF]{3,}(?:\s+[\u0600-\u06FF]{3,}){0,2}/);
+  return normalizeMerchantRuleKey(arabicWords?.[0] || "");
+};
 
 function assetBreakdownFromAssets(assets = {}, market = {}, accountsReceivable = []) {
   const goldPrice = Number(market.goldGramPrice || 0);
@@ -966,6 +1008,7 @@ function Overview({
   const [showAllExpenses, setShowAllExpenses] = useState(false);
   const [noteDialog, setNoteDialog] = useState(null);
   const [categoryDeleteDialog, setCategoryDeleteDialog] = useState(null);
+  const [categoryLearningDialog, setCategoryLearningDialog] = useState(null);
   const deficitLiabilityNameRef = useRef(null);
   const amountInputRef = useRef(null);
   const [amount, setAmount] = useState("");
@@ -1585,9 +1628,70 @@ useEffect(() => {
     return categoryToReveal?.label || cleanLabel;
   };
 
+  const applyLearnedExpenseCategory = (categoryLabel) => {
+    const matchedCategory = allExpenseCategories.find(
+      (item) => String(item.label || "").trim() === String(categoryLabel || "").trim()
+    );
+    const visibleCategory = revealExpenseCategoryInMain(matchedCategory || categoryLabel);
+    setCategory(visibleCategory);
+    setCategoryTouched(true);
+    return visibleCategory;
+  };
+
+  const rememberMerchantCategory = (ruleKey, categoryLabel) => {
+    const cleanRuleKey = String(ruleKey || "").trim();
+    const cleanCategoryLabel = String(categoryLabel || "").trim();
+    if (!cleanRuleKey || !cleanCategoryLabel) return;
+
+    setState((prev) => {
+      const existingRules = prev.settings?.merchantCategoryRules || {};
+      const previous = existingRules[cleanRuleKey] || {};
+      return {
+        ...prev,
+        settings: {
+          ...prev.settings,
+          merchantCategoryRules: {
+            ...existingRules,
+            [cleanRuleKey]: {
+              category: cleanCategoryLabel,
+              count: Number(previous.count || 0) + 1,
+              lastUsedAt: new Date().toISOString(),
+            },
+          },
+        },
+      };
+    });
+  };
+
   const applyAiExpenseSuggestion = (suggestion) => {
     const nextAmount = Number(suggestion?.amount || 0);
     if (nextAmount > 0) setAmount(String(nextAmount));
+
+    const nextNote = [suggestion?.note, suggestion?.summary]
+      .filter(Boolean)
+      .join(" - ");
+    if (nextNote) setNote(nextNote);
+
+    const suggestedPayment = suggestion?.paymentMethodSuggestion;
+    if (suggestedPayment && paymentOptions.some((option) => option.value === suggestedPayment)) {
+      changePaymentMethod(suggestedPayment);
+    }
+
+    const merchantRuleKey = extractMerchantRuleKey({
+      merchant: suggestion?.merchant,
+      note: nextNote,
+      message: suggestion?.sourceMessage,
+    });
+    const learnedCategory = merchantRuleKey
+      ? state.settings?.merchantCategoryRules?.[merchantRuleKey]?.category
+      : "";
+    const learnedCategoryExists = allExpenseCategories.some(
+      (item) => String(item.label || "").trim() === String(learnedCategory || "").trim()
+    );
+    if (learnedCategory && learnedCategoryExists) {
+      applyLearnedExpenseCategory(learnedCategory);
+      return;
+    }
 
     const suggestedCategory = String(suggestion?.category || "").trim();
     const matchedCategory = allExpenseCategories.find(
@@ -1599,24 +1703,25 @@ useEffect(() => {
       const visibleCategory = revealExpenseCategoryInMain(matchedCategory);
       setCategory(visibleCategory);
       setCategoryTouched(true);
+      if (merchantRuleKey) rememberMerchantCategory(merchantRuleKey, matchedCategory.label);
     } else if (suggestedCategory) {
-      const visibleCategory = revealExpenseCategoryInMain(suggestedCategory);
-      setCategory(visibleCategory);
+      setCategory("");
       setCategoryTouched(true);
+      setCategoryLearningDialog({
+        ruleKey: merchantRuleKey,
+        suggestion,
+        suggestedCategory,
+        selectedCategory: allExpenseCategories.find((item) => !item.isOther)?.label || "",
+      });
     } else {
       setCategory("");
       setCategoryTouched(true);
-      alert("لم يتم التعرف على نوع المصروف. اختر نوع المصروف من القائمة قبل التسجيل.");
-    }
-
-    const nextNote = [suggestion?.note, suggestion?.summary]
-      .filter(Boolean)
-      .join(" - ");
-    if (nextNote) setNote(nextNote);
-
-    const suggestedPayment = suggestion?.paymentMethodSuggestion;
-    if (suggestedPayment && paymentOptions.some((option) => option.value === suggestedPayment)) {
-      changePaymentMethod(suggestedPayment);
+      setCategoryLearningDialog({
+        ruleKey: merchantRuleKey,
+        suggestion,
+        suggestedCategory: "",
+        selectedCategory: allExpenseCategories.find((item) => !item.isOther)?.label || "",
+      });
     }
   };
 
@@ -1701,9 +1806,11 @@ useEffect(() => {
       applyAiExpenseSuggestion({
         amount: data.amount,
         category: data.category,
+        merchant: data.merchant,
         note: data.note || data.merchant || message,
         summary: "",
         paymentMethodSuggestion: data.paymentMethodSuggestion,
+        sourceMessage: message,
       });
 
       const warnings = Array.isArray(data.warnings) ? data.warnings.filter(Boolean) : [];
@@ -3266,6 +3373,133 @@ function deleteExpenseCategory(catItem) {
             </div>
           )}
 
+          {categoryLearningDialog && (
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-label="اختيار نوع المصروف"
+              onClick={(event) => {
+                if (event.target === event.currentTarget) {
+                  setCategoryLearningDialog(null);
+                }
+              }}
+              style={{
+                position: "fixed",
+                inset: 0,
+                zIndex: 66,
+                display: "grid",
+                placeItems: "center",
+                padding: 16,
+                background: "rgba(2,12,28,0.72)",
+                backdropFilter: "blur(10px)",
+              }}
+            >
+              <div
+                className="asset-dashboard-card"
+                style={{
+                  width: "min(100%, 390px)",
+                  padding: 16,
+                  borderRadius: 18,
+                  border: visualIdentity.cards.outer.border,
+                  background: visualIdentity.gradients.outerCard,
+                  boxShadow: "0 24px 60px rgba(0,0,0,0.42), inset 0 1px 0 rgba(255,255,255,0.12)",
+                  color: visualIdentity.colors.white,
+                  direction: "rtl",
+                  textAlign: "right",
+                }}
+              >
+                <h3 style={{ margin: "0 0 6px", color: visualIdentity.colors.gold, fontSize: 16, fontWeight: 900 }}>
+                  اختر نوع المصروف
+                </h3>
+                <p style={{ margin: "0 0 12px", color: visualIdentity.colors.textSecondary, fontSize: 11, lineHeight: 1.8 }}>
+                  لم يتم تحديد نوع مناسب من النظام{categoryLearningDialog.suggestedCategory ? ` للنتيجة "${categoryLearningDialog.suggestedCategory}"` : ""}. اختر النوع الصحيح، وسيتم تذكره للرسائل المشابهة مستقبلاً.
+                </p>
+
+                {categoryLearningDialog.ruleKey && (
+                  <div
+                    style={{
+                      marginBottom: 10,
+                      padding: "8px 10px",
+                      borderRadius: 12,
+                      border: "1px solid rgba(255,198,45,0.22)",
+                      background: "rgba(255,198,45,0.09)",
+                      color: visualIdentity.colors.gold,
+                      fontSize: 11,
+                      fontWeight: 900,
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {categoryLearningDialog.ruleKey}
+                  </div>
+                )}
+
+                <select
+                  value={categoryLearningDialog.selectedCategory}
+                  onChange={(event) =>
+                    setCategoryLearningDialog((current) =>
+                      current ? { ...current, selectedCategory: event.target.value } : current
+                    )
+                  }
+                  style={{ ...G.inp(), marginBottom: 12 }}
+                >
+                  <option value="">اختر نوع المصروف</option>
+                  {allExpenseCategories
+                    .filter((item) => !item.isOther)
+                    .map((item) => (
+                      <option key={item.id || item.label} value={item.label}>
+                        {item.label}
+                      </option>
+                    ))}
+                </select>
+
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                  <button
+                    type="button"
+                    onClick={() => setCategoryLearningDialog(null)}
+                    style={{
+                      minHeight: 42,
+                      borderRadius: 12,
+                      border: `1px solid ${visualIdentity.colors.gold}88`,
+                      background: "transparent",
+                      color: visualIdentity.colors.gold,
+                      fontFamily: "inherit",
+                      fontWeight: 900,
+                      cursor: "pointer",
+                    }}
+                  >
+                    إلغاء
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!categoryLearningDialog.selectedCategory}
+                    onClick={() => {
+                      const selected = categoryLearningDialog.selectedCategory;
+                      if (!selected) return;
+                      applyLearnedExpenseCategory(selected);
+                      rememberMerchantCategory(categoryLearningDialog.ruleKey, selected);
+                      setCategoryLearningDialog(null);
+                    }}
+                    style={{
+                      minHeight: 42,
+                      borderRadius: 12,
+                      border: `1px solid ${visualIdentity.colors.gold}`,
+                      background: visualIdentity.gradients.gold,
+                      color: visualIdentity.colors.navy,
+                      fontFamily: "inherit",
+                      fontWeight: 900,
+                      cursor: categoryLearningDialog.selectedCategory ? "pointer" : "not-allowed",
+                      opacity: categoryLearningDialog.selectedCategory ? 1 : 0.65,
+                    }}
+                  >
+                    حفظ الاختيار
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
 <ExpenseCategoryGrid
             categories={mainExpenseCategories}
             selectedCategory={activeExpenseCategory}
@@ -4081,9 +4315,32 @@ flexDirection: "column",
       .filter((cat) => !cat.isOther)
       .map((catItem) => (
         <div key={catItem.id} style={HOME_UI.row}>
-  <span>
+  <button
+    type="button"
+    onClick={() => {
+      selectExpenseCategory(catItem.label);
+      setShowCategoryManager(false);
+    }}
+    style={{
+      flex: 1,
+      minWidth: 0,
+      border: "none",
+      background: "transparent",
+      color: visualIdentity.colors.white,
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "flex-start",
+      gap: 8,
+      padding: "8px 0",
+      cursor: "pointer",
+      fontFamily: "inherit",
+      fontSize: 14,
+      fontWeight: 800,
+      textAlign: "right",
+    }}
+  >
     {getCategoryDisplayIcon(catItem)} {catItem.label}
-  </span>
+  </button>
 
   <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
     <button
@@ -4134,6 +4391,7 @@ flexDirection: "column",
         padding: "7px 10px",
         fontSize: 12,
         border: "1px solid rgba(255,198,45,0.30)",
+        display: "none",
       })}
     >
       اختيار

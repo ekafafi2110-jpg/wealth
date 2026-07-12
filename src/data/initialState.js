@@ -3,6 +3,7 @@ export const INITIAL_STATE = {
     month: new Date().toISOString().slice(0, 7),
     salary: 0,
     expenseCategoryCaps: {},
+    merchantCategoryRules: {},
 
     market: {
       goldGramPrice: 0,
