@@ -1,3 +1,4 @@
+import { createPortal } from "react-dom";
 import visualIdentity from "../../theme/visualIdentity";
 
 export default function TextInputModal({
@@ -14,17 +15,22 @@ export default function TextInputModal({
 
   const Input = multiline ? "textarea" : "input";
 
-  return (
+  return createPortal(
     <div
+      className="text-input-modal"
       onClick={(event) => event.target === event.currentTarget && onCancel()}
       style={{
         position: "fixed",
         inset: 0,
+        width: "100%",
+        height: "100dvh",
         zIndex: 1800,
         display: "flex",
         alignItems: "flex-end",
         justifyContent: "center",
         padding: "14px 12px calc(14px + env(safe-area-inset-bottom))",
+        overflowY: "auto",
+        overscrollBehavior: "contain",
         background: "rgba(3,18,37,0.72)",
         backdropFilter: "blur(12px)",
         direction: "rtl",
@@ -40,6 +46,9 @@ export default function TextInputModal({
           boxShadow:
             "inset 0 1px 0 rgba(255,255,255,0.14), 0 18px 44px rgba(4,18,36,0.38)",
           padding: 14,
+          maxHeight: "calc(100dvh - 28px - env(safe-area-inset-bottom))",
+          overflowY: "auto",
+          flexShrink: 0,
         }}
       >
         <div style={{ marginBottom: 10, textAlign: "right" }}>
@@ -81,10 +90,14 @@ export default function TextInputModal({
 
         <div
           style={{
+            position: "sticky",
+            bottom: 0,
             display: "grid",
             gridTemplateColumns: "1fr 1fr",
             gap: 8,
             marginTop: 12,
+            paddingTop: 2,
+            background: visualIdentity.gradients.appBackground,
           }}
         >
           <button
@@ -124,6 +137,7 @@ export default function TextInputModal({
           </button>
         </div>
       </section>
-    </div>
+    </div>,
+    document.body
   );
 }

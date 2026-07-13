@@ -5,6 +5,9 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import {
+  ChevronDown,
+  ChevronUp,
+  HandCoins,
   X,
 } from "lucide-react";
 import visualIdentity from "../../theme/visualIdentity";
@@ -77,6 +80,7 @@ export default function AssetsDashboard({
   const { direction, t } = useLocale();
   const [selectedAssetKey, setSelectedAssetKey] = useState("");
   const [animatedNetWorth, setAnimatedNetWorth] = useState(0);
+  const [receivablesOpen, setReceivablesOpen] = useState(false);
   const [receivableTargets, setReceivableTargets] = useState({});
   const selectedAsset = assetRows.find((row) => row.id === selectedAssetKey);
   const todayKey = new Date().toISOString().slice(0, 10);
@@ -506,21 +510,54 @@ export default function AssetsDashboard({
           background: `linear-gradient(145deg, ${visualIdentity.colors.green}1A, rgba(24,73,133,0.96) 54%)`,
         }}
       >
-        <header style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 10 }}>
-          <div style={{ textAlign: "right", minWidth: 0 }}>
-            <div style={{ color: visualIdentity.colors.green, fontSize: 15, fontWeight: 900 }}>
-              الذمم المدينة
-            </div>
-            <div style={{ marginTop: 2, color: visualIdentity.colors.textSecondary, fontSize: 10, fontWeight: 800 }}>
+        <button
+          type="button"
+          aria-expanded={receivablesOpen}
+          onClick={() => setReceivablesOpen((value) => !value)}
+          style={{
+            width: "100%",
+            padding: 0,
+            border: 0,
+            background: "transparent",
+            color: "inherit",
+            display: "grid",
+            gridTemplateColumns: "44px minmax(0,1fr) auto",
+            alignItems: "center",
+            gap: 10,
+            cursor: "pointer",
+            fontFamily: "inherit",
+          }}
+        >
+          <span
+            className="asset-icon-shell"
+            style={{
+              width: 42,
+              height: 42,
+              borderRadius: 13,
+              display: "grid",
+              placeItems: "center",
+              color: visualIdentity.colors.green,
+              border: `1px solid ${visualIdentity.colors.green}66`,
+              background: `${visualIdentity.colors.green}18`,
+            }}
+          >
+            <HandCoins size={21} />
+          </span>
+          <span style={{ minWidth: 0, textAlign: "right" }}>
+            <strong style={{ display: "block", fontSize: 15 }}>الذمم المدينة</strong>
+            <small style={{ color: visualIdentity.colors.textSecondary, fontSize: 9, fontWeight: 800 }}>
               {openReceivables.length} بند مفتوح · {dueReceivablesCount} مستحق
-            </div>
-          </div>
-          <b style={{ color: visualIdentity.colors.green, fontSize: 16, whiteSpace: "nowrap" }}>
-            {money(receivablesTotal)} {currencyLabel}
-          </b>
-        </header>
+            </small>
+          </span>
+          <span style={{ textAlign: "left" }}>
+            <strong style={{ display: "block", color: visualIdentity.colors.green, fontSize: 18, whiteSpace: "nowrap" }}>
+              {money(receivablesTotal)} <small style={{ fontSize: 8 }}>{currencyLabel}</small>
+            </strong>
+            {receivablesOpen ? <ChevronUp size={17} /> : <ChevronDown size={17} />}
+          </span>
+        </button>
 
-        <div style={{ display: "grid", gap: 8 }}>
+        {receivablesOpen && <div style={{ display: "grid", gap: 8, marginTop: 12 }}>
           {openReceivables.map((item) => {
             const amount = Number(item.balance ?? item.amount ?? 0);
             const due = item.dueDate && String(item.dueDate) <= todayKey;
@@ -585,7 +622,7 @@ export default function AssetsDashboard({
               لا توجد ذمم مدينة مفتوحة
             </div>
           )}
-        </div>
+        </div>}
       </section>
 
     </div>

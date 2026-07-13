@@ -72,6 +72,18 @@ body {
   color: rgba(255, 255, 255, 0.5);
 }
 
+.text-input-modal input,
+.text-input-modal textarea {
+  background: rgba(255, 255, 255, 0.09) !important;
+  border: 1px solid rgba(255, 255, 255, 0.18) !important;
+  color: #fff !important;
+}
+
+.text-input-modal input::placeholder,
+.text-input-modal textarea::placeholder {
+  color: rgba(255, 255, 255, 0.5);
+}
+
 .wealth-app-header option,
 .overview-screen option,
 .assets-screen option,

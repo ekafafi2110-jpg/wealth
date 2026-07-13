@@ -4970,16 +4970,6 @@ function ReportsScreen({ state }) {
     (sum, item) => sum + Number(item.balance ?? item.amount ?? 0),
     0
   );
-  const paymentMethodsSummary = weeklyExpenses.reduce((summary, expense) => {
-    const key = expense.paymentMethod || "غير محدد";
-    const current = summary[key] || { count: 0, total: 0 };
-    current.count += 1;
-    current.total = Number(
-      (Number(current.total || 0) + Number(expense.originalAmount ?? expense.amount ?? 0)).toFixed(2)
-    );
-    summary[key] = current;
-    return summary;
-  }, {});
   const reportMonth = state.currentMonth || new Date().toISOString().slice(0, 7);
   const monthExpenses = (state.expenses || []).filter(
     (expense) => String(expense.date || expense.createdAt || "").slice(0, 7) === reportMonth
