@@ -84,6 +84,17 @@ body {
   color: rgba(255, 255, 255, 0.5);
 }
 
+.calendar-date-picker-modal select {
+  background: rgba(255, 255, 255, 0.09) !important;
+  border: 1px solid rgba(255, 255, 255, 0.18) !important;
+  color: #fff !important;
+}
+
+.calendar-date-picker-modal option {
+  background: #123A6B;
+  color: #fff;
+}
+
 .wealth-app-header option,
 .overview-screen option,
 .assets-screen option,

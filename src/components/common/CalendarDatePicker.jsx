@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import visualIdentity from "../../theme/visualIdentity";
 
 const pad = (value) => String(value).padStart(2, "0");
@@ -99,17 +100,22 @@ export default function CalendarDatePicker({
         </svg>
       </button>
 
-      {open && (
+      {open && createPortal(
         <div
+          className="calendar-date-picker-modal"
           onClick={(event) => event.target === event.currentTarget && setOpen(false)}
           style={{
             position: "fixed",
             inset: 0,
+            width: "100%",
+            height: "100dvh",
             zIndex: 1810,
             display: "flex",
             alignItems: "flex-end",
             justifyContent: "center",
             padding: "14px 12px calc(14px + env(safe-area-inset-bottom))",
+            overflowY: "auto",
+            overscrollBehavior: "contain",
             background: "rgba(3,18,37,0.72)",
             backdropFilter: "blur(12px)",
             direction: "rtl",
@@ -125,6 +131,9 @@ export default function CalendarDatePicker({
               boxShadow:
                 "inset 0 1px 0 rgba(255,255,255,0.14), 0 18px 44px rgba(4,18,36,0.38)",
               padding: 14,
+              maxHeight: "calc(100dvh - 28px - env(safe-area-inset-bottom))",
+              overflowY: "auto",
+              flexShrink: 0,
             }}
           >
             <strong
@@ -177,7 +186,8 @@ export default function CalendarDatePicker({
               </button>
             </div>
           </section>
-        </div>
+        </div>,
+        document.body
       )}
     </>
   );
