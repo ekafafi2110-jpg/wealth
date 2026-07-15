@@ -1,5 +1,5 @@
 // Test Cline Integration
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { Copy, MessageCircle, MessageSquare, Send, Share2, StickyNote, Trash2 } from "lucide-react";
 import { INITIAL_STATE } from "./data/initialState";
 import { recordExpense } from "./logic/expenses";
@@ -392,7 +392,17 @@ function readSharedExpenseMessageFromUrl() {
 
   if (!isShareTarget && !sharedParts.length) return "";
 
-  const uniqueParts = Array.from(new Set(sharedParts));
+  return Array.from(new Set(sharedParts)).join("\n").trim();
+}
+
+function clearSharedExpenseMessageFromUrl() {
+  if (typeof window === "undefined") return;
+
+  const url = new URL(window.location.href);
+  const params = url.searchParams;
+  const hasSharedExpenseParams = SHARE_TARGET_PARAM_KEYS.some((key) => params.has(key));
+  if (!hasSharedExpenseParams) return;
+
   SHARE_TARGET_PARAM_KEYS.forEach((key) => params.delete(key));
   const nextSearch = params.toString();
   window.history.replaceState(
@@ -400,8 +410,6 @@ function readSharedExpenseMessageFromUrl() {
     document.title,
     `${url.pathname}${nextSearch ? `?${nextSearch}` : ""}${url.hash}`
   );
-
-  return uniqueParts.join("\n").trim();
 }
 const CATEGORY_ICON_FALLBACKS = {
   apple: "🥬",
@@ -684,7 +692,9 @@ function summarizeAssetReasons(state, month) {
     transfer_in_units: "مناقلة بين الأصول",
     transfer_to_receivable: "مناقلة إلى ذمة مدينة",
     receivable_paid_to_asset: "سداد ذمة إلى أصل",
+    receivable_partially_paid_to_asset: "سداد جزئي لذمة إلى أصل",
     receivable_paid_to_spending_cap: "سداد ذمة إلى سقف الصرف",
+    receivable_partially_paid_to_spending_cap: "سداد جزئي لذمة إلى سقف الصرف",
   };
   const totals = {};
   const transfers = {};
@@ -1824,13 +1834,17 @@ useEffect(() => {
     }
   };
 
+  const analyzeSharedBankMessage = useEffectEvent((message) => {
+    analyzeBankMessage(message);
+  });
+
   useEffect(() => {
     if (readOnly || !sharedExpenseMessage || aiExpenseBusy || voiceRecording) return;
 
     const message = sharedExpenseMessage;
     onSharedExpenseMessageConsumed?.();
     window.setTimeout(() => {
-      analyzeBankMessage(message);
+      analyzeSharedBankMessage(message);
     }, 0);
   }, [
     aiExpenseBusy,
@@ -5839,29 +5853,57 @@ function AssetsScreen({
   setAssetPrice("");
 };
 
-  const settleAccountReceivable = (receivableId, targetKey = "spendingCap") => {
+  const settleAccountReceivable = (receivableId, targetKey = "spendingCap", requestedAmount) => {
     setState((prev) => {
       const item = (prev.accountsReceivable || []).find(
         (entry) => String(entry.id) === String(receivableId)
       );
       if (!item || item.status === "paid") return prev;
 
-      const amount = Number(item.balance ?? item.amount ?? 0);
-      if (amount <= 0) return prev;
+      const balanceBefore = Number(item.balance ?? item.amount ?? 0);
+      const paymentAmount = Number(requestedAmount ?? balanceBefore);
+      if (balanceBefore <= 0) return prev;
+      if (paymentAmount <= 0) {
+        alert("أدخل مبلغ سداد صحيحًا");
+        return prev;
+      }
+      if (paymentAmount > balanceBefore + 0.001) {
+        alert(`مبلغ السداد أكبر من المتبقي على الذمة (${balanceBefore.toFixed(2)})`);
+        return prev;
+      }
 
       const now = new Date().toISOString();
       const operationId = Date.now();
       let next = structuredClone(prev);
-      const receivableLabel = `سداد ذمة مدينة - ${item.debtorName || "مدين"}`;
+      const amount = Number(Math.min(paymentAmount, balanceBefore).toFixed(2));
+      const balanceAfter = Number(Math.max(0, balanceBefore - amount).toFixed(2));
+      const originalAmount = Number(item.originalAmount ?? item.amount ?? balanceBefore);
+      const previouslyPaid = Number(
+        item.paidAmount ?? Math.max(0, originalAmount - balanceBefore)
+      );
+      const paidAmount = Number(Math.min(originalAmount, previouslyPaid + amount).toFixed(2));
+      const isFullyPaid = balanceAfter <= 0.001;
+      const receivableLabel = `${isFullyPaid ? "سداد ذمم مدينة" : "سداد جزئي لذمم مدينة"} - ${item.debtorName || "مدين"}`;
+      const movementType = isFullyPaid
+        ? "receivable_paid_to_asset"
+        : "receivable_partially_paid_to_asset";
 
       next.accountsReceivable = (next.accountsReceivable || []).map((entry) =>
         String(entry.id) === String(receivableId)
           ? {
               ...entry,
-              balance: 0,
-              status: "paid",
-              paidAt: now,
+              originalAmount,
+              amount: originalAmount,
+              paidAmount,
+              balance: balanceAfter,
+              status: isFullyPaid ? "paid" : "partial",
+              paidAt: isFullyPaid ? now : entry.paidAt,
+              lastPaidAt: now,
               paidTo: targetKey,
+              payments: [
+                ...(entry.payments || []),
+                { id: operationId, amount, targetKey, date: now },
+              ],
             }
           : entry
       );
@@ -5875,6 +5917,9 @@ function AssetsScreen({
           receivableId,
           debtorName: item.debtorName || "",
           targetKey,
+          balanceBefore,
+          balanceAfter,
+          isPartial: !isFullyPaid,
           date: now,
         },
       ];
@@ -5906,7 +5951,9 @@ function AssetsScreen({
             id: `${operationId}-receivable-cap`,
             date: now,
             recordedAt: now,
-            type: "receivable_paid_to_spending_cap",
+            type: isFullyPaid
+              ? "receivable_paid_to_spending_cap"
+              : "receivable_partially_paid_to_spending_cap",
             source: "accounts_receivable",
             amount,
             receivableId,
@@ -5924,13 +5971,15 @@ function AssetsScreen({
           id: `${operationId}-receivable-asset`,
           date: now,
           recordedAt: now,
-          type: "receivable_paid_to_asset",
+          type: movementType,
           source: "accounts_receivable",
           assetKey: targetKey,
           assetKind: target?.type || "",
           amount,
           receivableId,
           debtorName: item.debtorName || "",
+          balanceBefore,
+          balanceAfter,
           note: receivableLabel,
           displayLabel: receivableLabel,
         },
@@ -6281,6 +6330,8 @@ function AssetsScreen({
             id: receivableId,
             debtorName: row.assetName,
             amount: Number(row.amount.toFixed(2)),
+            originalAmount: Number(row.amount.toFixed(2)),
+            paidAmount: 0,
             balance: Number(row.amount.toFixed(2)),
             dueDate: row.dueDate,
             note: row.note || "مناقلة من أصل",
@@ -6299,9 +6350,10 @@ function AssetsScreen({
           assetKey: fromAsset,
           receivableId,
           debtorName: row.assetName,
+          dueDate: row.dueDate,
           amount: row.amount,
-          note: `مناقلة إلى ذمة مدينة - ${row.assetName}`,
-          displayLabel: `مناقلة إلى ذمة مدينة - ${row.assetName}`,
+          note: `ذمة مدينة - ${row.assetName} - استحقاق ${row.dueDate}`,
+          displayLabel: `ذمة مدينة - ${row.assetName} - استحقاق ${row.dueDate}`,
         });
       }
     }
@@ -6592,7 +6644,9 @@ function AssetsScreen({
     asset_value_reset: "إعادة تعيين قيمة أصل",
     extra_cash: "دخل إضافي",
     receivable_paid_to_asset: "سداد ذمة مدينة إلى أصل",
+    receivable_partially_paid_to_asset: "سداد جزئي لذمة مدينة إلى أصل",
     receivable_paid_to_spending_cap: "سداد ذمة مدينة إلى سقف الصرف",
+    receivable_partially_paid_to_spending_cap: "سداد جزئي لذمة مدينة إلى سقف الصرف",
   };
   const movementRows = (row) =>
     (state.assetHistory || [])
@@ -6628,6 +6682,8 @@ function AssetsScreen({
           "transfer_to_cash",
           "transfer_to_bank",
           "transfer_in_units",
+          "receivable_paid_to_asset",
+          "receivable_partially_paid_to_asset",
         ];
         const isIncoming = incomingMovementTypes.includes(movement.type);
         const isOutgoing =
@@ -8718,6 +8774,8 @@ const addOpeningReceivable = () => {
         id: `settings-receivable-${Date.now()}`,
         debtorName,
         amount: Number(amount.toFixed(2)),
+        originalAmount: Number(amount.toFixed(2)),
+        paidAmount: 0,
         balance: Number(amount.toFixed(2)),
         dueDate: openingReceivableDueDate,
         note: String(openingReceivableNote || "رصيد افتتاحي").trim(),
@@ -10680,6 +10738,8 @@ function OnboardingFlow({ state, setState, onComplete }) {
       id: `setup-receivable-${setupId}-${index}`,
       debtorName: row.debtorName,
       amount: Number(row.amount || 0),
+      originalAmount: Number(row.amount || 0),
+      paidAmount: 0,
       balance: Number(row.amount || 0),
       dueDate: row.dueDate,
       note: "رصيد افتتاحي",
@@ -11965,7 +12025,9 @@ export default function App() {
   const [authError, setAuthError] = useState("");
   const [authNotice, setAuthNotice] = useState("");
   const [authLoading, setAuthLoading] = useState(false);
-  const [sharedExpenseMessage, setSharedExpenseMessage] = useState("");
+  const [sharedExpenseMessage, setSharedExpenseMessage] = useState(
+    readSharedExpenseMessageFromUrl
+  );
   const appLanguage = state.settings?.locale?.language || "ar";
   const appDirection = appLanguage === "ar" ? "rtl" : "ltr";
 
@@ -11982,12 +12044,9 @@ export default function App() {
     const [extraCashPreset, setExtraCashPreset] = useState(null);
     const [selectedViewMonth, setSelectedViewMonth] = useState("current");
     useEffect(() => {
-      const sharedMessage = readSharedExpenseMessageFromUrl();
-      if (!sharedMessage) return;
-      setSharedExpenseMessage(sharedMessage);
-      setSelectedViewMonth("current");
-      setTab("overview");
-    }, []);
+      if (!sharedExpenseMessage) return;
+      clearSharedExpenseMessageFromUrl();
+    }, [sharedExpenseMessage]);
     useEffect(() => {
     let active = true;
 

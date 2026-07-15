@@ -82,6 +82,7 @@ export default function AssetsDashboard({
   const [animatedNetWorth, setAnimatedNetWorth] = useState(0);
   const [receivablesOpen, setReceivablesOpen] = useState(false);
   const [receivableTargets, setReceivableTargets] = useState({});
+  const [receivablePayments, setReceivablePayments] = useState({});
   const selectedAsset = assetRows.find((row) => row.id === selectedAssetKey);
   const todayKey = new Date().toISOString().slice(0, 10);
   const openReceivables = receivables.filter((item) => {
@@ -560,8 +561,13 @@ export default function AssetsDashboard({
         {receivablesOpen && <div style={{ display: "grid", gap: 8, marginTop: 12 }}>
           {openReceivables.map((item) => {
             const amount = Number(item.balance ?? item.amount ?? 0);
+            const originalAmount = Number(item.originalAmount ?? item.amount ?? amount);
+            const paidAmount = Number(
+              item.paidAmount ?? Math.max(0, originalAmount - amount)
+            );
             const due = item.dueDate && String(item.dueDate) <= todayKey;
             const selectedTarget = receivableTargets[item.id] || "spendingCap";
+            const paymentValue = receivablePayments[item.id] ?? amount.toFixed(2);
 
             return (
               <div
@@ -583,13 +589,28 @@ export default function AssetsDashboard({
                       استحقاق {item.dueDate || "غير محدد"}{item.note ? ` · ${item.note}` : ""}
                     </span>
                   </div>
-                  <b style={{ color: visualIdentity.colors.green, fontSize: 13, whiteSpace: "nowrap" }}>
-                    {money(amount)} {currencyLabel}
-                  </b>
+                  <span style={{ color: due ? visualIdentity.colors.gold : visualIdentity.colors.green, fontSize: 9, fontWeight: 900, whiteSpace: "nowrap" }}>
+                    {paidAmount > 0 ? "مسددة جزئيًا" : due ? "مستحقة" : "مفتوحة"}
+                  </span>
+                </div>
+
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0,1fr))", gap: 6, marginTop: 8 }}>
+                  {[
+                    ["الأصلي", originalAmount, visualIdentity.colors.white],
+                    ["المسدد", paidAmount, visualIdentity.colors.green],
+                    ["المتبقي", amount, due ? visualIdentity.colors.gold : visualIdentity.colors.white],
+                  ].map(([label, value, color]) => (
+                    <div key={label} style={{ padding: "6px 7px", borderRadius: 9, background: "rgba(255,255,255,0.06)", textAlign: "center" }}>
+                      <span style={{ display: "block", color: visualIdentity.colors.textSecondary, fontSize: 8, fontWeight: 800 }}>{label}</span>
+                      <b style={{ display: "block", marginTop: 2, color, fontSize: 10, whiteSpace: "nowrap" }}>
+                        {money(value)} {currencyLabel}
+                      </b>
+                    </div>
+                  ))}
                 </div>
 
                 {!readOnly && (
-                  <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) 74px", gap: 7, marginTop: 8 }}>
+                  <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) minmax(92px,0.55fr) 74px", gap: 7, marginTop: 8 }}>
                     <select
                       value={selectedTarget}
                       onChange={(event) =>
@@ -604,9 +625,29 @@ export default function AssetsDashboard({
                         </option>
                       ))}
                     </select>
+                    <input
+                      type="number"
+                      min="0.01"
+                      max={amount}
+                      step="0.01"
+                      value={paymentValue}
+                      onChange={(event) =>
+                        setReceivablePayments((prev) => ({ ...prev, [item.id]: event.target.value }))
+                      }
+                      aria-label={`مبلغ سداد ذمة ${item.debtorName || "مدين"}`}
+                      title={`المتبقي ${amount.toFixed(2)} ${currencyLabel}`}
+                      style={receivableInputStyle}
+                    />
                     <button
                       type="button"
-                      onClick={() => onSettleReceivable?.(item.id, selectedTarget)}
+                      onClick={() => {
+                        onSettleReceivable?.(item.id, selectedTarget, Number(paymentValue));
+                        setReceivablePayments((prev) => {
+                          const next = { ...prev };
+                          delete next[item.id];
+                          return next;
+                        });
+                      }}
                       style={receivablePrimaryButtonStyle}
                     >
                       سداد
