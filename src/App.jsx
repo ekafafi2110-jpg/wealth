@@ -5883,7 +5883,7 @@ function AssetsScreen({
       );
       const paidAmount = Number(Math.min(originalAmount, previouslyPaid + amount).toFixed(2));
       const isFullyPaid = balanceAfter <= 0.001;
-      const receivableLabel = `${isFullyPaid ? "سداد ذمم مدينة" : "سداد جزئي لذمم مدينة"} - ${item.debtorName || "مدين"}`;
+      const receivableLabel = `${isFullyPaid ? "سداد ذمة مدينة" : "سداد جزئي لذمة مدينة"} من ${item.debtorName || "مدين"}`;
       const movementType = isFullyPaid
         ? "receivable_paid_to_asset"
         : "receivable_partially_paid_to_asset";
@@ -6712,14 +6712,21 @@ function AssetsScreen({
             movement.expenseCategory,
             movement.expenseNote || movement.note,
           ].filter(Boolean).join(" - ");
+        const receivableMovementLabel = [
+          "receivable_paid_to_asset",
+          "receivable_partially_paid_to_asset",
+        ].includes(movement.type)
+          ? `${movement.type === "receivable_partially_paid_to_asset" ? "سداد جزئي لذمة مدينة" : "سداد ذمة مدينة"} من ${movement.debtorName || "مدين"}`
+          : "";
         return {
           id: `${movement.id ?? index}-${row.id}`,
           label:
-            movement.expensePurpose === "expense_coverage"
+            receivableMovementLabel
+              || (movement.expensePurpose === "expense_coverage"
               ? movement.note || `تسييل لتغطية مصروف — ${movement.expenseCategory || "غير مصنف"}`
               : movement.source === "expense" && expenseMovementLabel
                 ? expenseMovementLabel
-              : movementLabels[movement.type] || movement.note || "حركة على الأصل",
+              : movementLabels[movement.type] || movement.note || "حركة على الأصل"),
           amount: Number(movement.amount || 0),
           unitText,
           unitPriceText,
