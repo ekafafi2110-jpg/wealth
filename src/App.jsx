@@ -1,6 +1,6 @@
 // Test Cline Integration
 import { useEffect, useEffectEvent, useRef, useState } from "react";
-import { Copy, MessageCircle, MessageSquare, Send, Share2, StickyNote, Trash2 } from "lucide-react";
+import { Copy, MessageCircle, MessageSquare, Search, Send, Share2, StickyNote, Trash2 } from "lucide-react";
 import { INITIAL_STATE } from "./data/initialState";
 import { recordExpense } from "./logic/expenses";
 import {
@@ -467,6 +467,42 @@ const getExpenseCategoryIconKeyByName = (name) => {
   ];
   return rules.find((rule) => rule.words.some((word) => text.includes(word)))?.iconKey || "";
 };
+
+function getExpenseCategoryIconByName(name) {
+  const iconKey = getExpenseCategoryIconKeyByName(name);
+  if (iconKey) return CATEGORY_ICON_FALLBACKS[iconKey] || "•";
+
+  const text = String(name || "").trim().toLowerCase();
+
+  const rules = [
+    { words: ["مدرس", "مدارس", "تعليم", "دراسة", "جامعة", "روضة"], icon: "🏫" },
+    { words: ["سيارة", "سياره", "صيانة سيارة", "كراج", "ميكانيك"], icon: "🚗" },
+    { words: ["بيت", "منزل", "شقة", "ايجار", "إيجار", "صيانة بيت"], icon: "🏠" },
+    { words: ["مطعم", "مطاعم", "اكل", "أكل", "غداء", "عشاء", "فطور"], icon: "🍽️" },
+    { words: ["قهوة", "كوفي", "كافيه", "شاي"], icon: "☕" },
+    { words: ["ملابس", "لبس", "حذاء", "أحذية", "احذية"], icon: "👕" },
+    { words: ["هدية", "هدايا", "مناسبة", "عيد"], icon: "🎁" },
+    { words: ["دواء", "علاج", "طبيب", "مستشفى", "صيدلية", "أسنان", "اسنان"], icon: "💊" },
+    { words: ["بنزين", "وقود", "ديزل"], icon: "⛽" },
+    { words: ["فاتورة", "فواتير", "كهرباء", "ماء", "انترنت", "جوال", "هاتف"], icon: "🧾" },
+    { words: ["سفر", "رحلة", "فندق", "طيران", "تذاكر"], icon: "✈️" },
+    { words: ["ترفيه", "سينما", "لعب", "العاب", "ألعاب"], icon: "🎮" },
+    { words: ["مواصلات", "تاكسي", "اوبر", "أوبر", "كريم", "باص"], icon: "🚕" },
+    { words: ["تسوق", "شراء", "سوق", "طلبات"], icon: "🛒" },
+    { words: ["اشتراك", "نتفلكس", "شاهد", "تطبيق", "برنامج"], icon: "📱" },
+    { words: ["رياضة", "نادي", "جيم", "سباحة"], icon: "🏋️" },
+    { words: ["حلاق", "صالون", "تجميل"], icon: "💈" },
+    { words: ["تبرع", "صدقة", "زكاة"], icon: "🤲" },
+  ];
+
+  const matchedRule = rules.find((rule) =>
+    rule.words.some((word) => text.includes(word))
+  );
+
+  return matchedRule?.icon || "•";
+}
+
+const createOperationTimestamp = () => Date.now();
 
 const HOME_UI = {
   overlay: {
@@ -1015,6 +1051,7 @@ function Overview({
   const [selectedExpense, setSelectedExpense] = useState(null);
   const [selectedStatementExpense, setSelectedStatementExpense] = useState(null);
   const [showCategoryManager, setShowCategoryManager] = useState(false);
+  const [categoryManagerFilter, setCategoryManagerFilter] = useState("");
   const [showAllExpenses, setShowAllExpenses] = useState(false);
   const [noteDialog, setNoteDialog] = useState(null);
   const [categoryDeleteDialog, setCategoryDeleteDialog] = useState(null);
@@ -1112,6 +1149,15 @@ const allExpenseCategories = limitMainExpenseCategoryPins(
         !defaultExpenseCategories.some((base) => base.id === saved.id)
     ),
   ].filter((category) => !category.hidden)
+);
+
+const expenseCategoriesForManager = allExpenseCategories.filter((cat) => !cat.isOther);
+const normalizedCategoryManagerFilter = categoryManagerFilter.trim().toLocaleLowerCase("ar");
+const filteredExpenseCategoriesForManager = expenseCategoriesForManager.filter((cat) =>
+  String(cat.label || "")
+    .trim()
+    .toLocaleLowerCase("ar")
+    .startsWith(normalizedCategoryManagerFilter)
 );
 
 const pinnedExpenseCategories = allExpenseCategories
@@ -1227,6 +1273,54 @@ const isMixedPayment =
   !["", "cash", "emergency"].includes(paymentMethod);
 const showLegacyDeficitPanel =
   amountExceedsCap && (paymentMethod === "cash" || isMixedPayment);
+
+  const getSaleSources = (type) =>
+    assetSources.filter((source) => {
+      if (type === "all") {
+        return ["cash", "bank", "gold", "silver", "stock"].includes(
+          source.type
+        ) || isGoodsSource(source);
+      }
+      if (type === "gold") return source.type === "gold";
+      if (type === "stock") return source.type === "stock";
+      if (type === "goods") return isGoodsSource(source);
+      return false;
+    });
+
+  const openDeficitTransfer = (
+    type = "all",
+    context = "overBudget",
+    requiredAmount = uncoveredAmount
+  ) => {
+    const sources = getSaleSources(type);
+    if (!sources.length) {
+      alert("لا يوجد أصل متاح من هذا النوع للمناقلة");
+      return;
+    }
+
+    const transferValue = Number(requiredAmount || 0).toFixed(2);
+    setDeficitTransfer({
+      type,
+      context,
+      requiredAmount: Number(requiredAmount || 0),
+      sources,
+      fromAsset: sources[0].key,
+      amount: transferValue,
+      sourceUnits: "",
+      sourcePrice: "",
+      allocations: [
+        {
+          id: 1,
+          allocation: "cash",
+          amount: transferValue,
+          targetId: "",
+          assetName: "",
+          units: "",
+          price: "",
+        },
+      ],
+    });
+  };
 
 useEffect(() => {
   const draft = state.pendingStructuralExpenseDraft;
@@ -2330,7 +2424,7 @@ setState(nextState);
     }
 
     let nextState = structuredClone(state);
-    const batchOperationId = Date.now();
+    const batchOperationId = createOperationTimestamp();
 
     for (let index = 0; index < pendingExpenses.length; index += 1) {
       const item = pendingExpenses[index];
@@ -2371,54 +2465,6 @@ setState(nextState);
     return pendingExpenses.length > 0
       ? submitPendingExpenses()
       : submitExpenseWithState(state);
-  };
-
-  const getSaleSources = (type) =>
-    assetSources.filter((source) => {
-      if (type === "all") {
-        return ["cash", "bank", "gold", "silver", "stock"].includes(
-          source.type
-        ) || isGoodsSource(source);
-      }
-      if (type === "gold") return source.type === "gold";
-      if (type === "stock") return source.type === "stock";
-      if (type === "goods") return isGoodsSource(source);
-      return false;
-    });
-
-  const openDeficitTransfer = (
-    type = "all",
-    context = "overBudget",
-    requiredAmount = uncoveredAmount
-  ) => {
-    const sources = getSaleSources(type);
-    if (!sources.length) {
-      alert("لا يوجد أصل متاح من هذا النوع للمناقلة");
-      return;
-    }
-
-    const transferValue = Number(requiredAmount || 0).toFixed(2);
-    setDeficitTransfer({
-      type,
-      context,
-      requiredAmount: Number(requiredAmount || 0),
-      sources,
-      fromAsset: sources[0].key,
-      amount: transferValue,
-      sourceUnits: "",
-      sourcePrice: "",
-      allocations: [
-        {
-          id: 1,
-          allocation: "cash",
-          amount: transferValue,
-          targetId: "",
-          assetName: "",
-          units: "",
-          price: "",
-        },
-      ],
-    });
   };
 
   const updateDeficitTransferRow = (patch) => {
@@ -2786,39 +2832,6 @@ setState(nextState);
     return next;
   });
 }
-function getExpenseCategoryIconByName(name) {
-  const iconKey = getExpenseCategoryIconKeyByName(name);
-  if (iconKey) return CATEGORY_ICON_FALLBACKS[iconKey] || "•";
-
-  const text = String(name || "").trim().toLowerCase();
-
-  const rules = [
-    { words: ["مدرس", "مدارس", "تعليم", "دراسة", "جامعة", "روضة"], icon: "🏫" },
-    { words: ["سيارة", "سياره", "صيانة سيارة", "كراج", "ميكانيك"], icon: "🚗" },
-    { words: ["بيت", "منزل", "شقة", "ايجار", "إيجار", "صيانة بيت"], icon: "🏠" },
-    { words: ["مطعم", "مطاعم", "اكل", "أكل", "غداء", "عشاء", "فطور"], icon: "🍽️" },
-    { words: ["قهوة", "كوفي", "كافيه", "شاي"], icon: "☕" },
-    { words: ["ملابس", "لبس", "حذاء", "أحذية", "احذية"], icon: "👕" },
-    { words: ["هدية", "هدايا", "مناسبة", "عيد"], icon: "🎁" },
-    { words: ["دواء", "علاج", "طبيب", "مستشفى", "صيدلية", "أسنان", "اسنان"], icon: "💊" },
-    { words: ["بنزين", "وقود", "ديزل"], icon: "⛽" },
-    { words: ["فاتورة", "فواتير", "كهرباء", "ماء", "انترنت", "جوال", "هاتف"], icon: "🧾" },
-    { words: ["سفر", "رحلة", "فندق", "طيران", "تذاكر"], icon: "✈️" },
-    { words: ["ترفيه", "سينما", "لعب", "العاب", "ألعاب"], icon: "🎮" },
-    { words: ["مواصلات", "تاكسي", "اوبر", "أوبر", "كريم", "باص"], icon: "🚕" },
-    { words: ["تسوق", "شراء", "سوق", "طلبات"], icon: "🛒" },
-    { words: ["اشتراك", "نتفلكس", "شاهد", "تطبيق", "برنامج"], icon: "📱" },
-    { words: ["رياضة", "نادي", "جيم", "سباحة"], icon: "🏋️" },
-    { words: ["حلاق", "صالون", "تجميل"], icon: "💈" },
-    { words: ["تبرع", "صدقة", "زكاة"], icon: "🤲" },
-  ];
-
-  const matchedRule = rules.find((rule) =>
-    rule.words.some((word) => text.includes(word))
-  );
-
-  return matchedRule?.icon || "•";
-}
 
 function addExtraExpenseCategory() {
   const label = prompt("اكتب اسم نوع المصروف الجديد");
@@ -3045,7 +3058,10 @@ function deleteExpenseCategory(catItem) {
           >
             <button
               type="button"
-              onClick={() => setShowCategoryManager(true)}
+              onClick={() => {
+                setCategoryManagerFilter("");
+                setShowCategoryManager(true);
+              }}
               title="المزيد"
               aria-label="المزيد"
               style={{
@@ -4306,6 +4322,39 @@ flexDirection: "column",
 </div>
       </div>
 
+<label
+  style={{
+    position: "relative",
+    display: "block",
+    marginBottom: 10,
+  }}
+>
+  <Search
+    size={17}
+    style={{
+      position: "absolute",
+      right: 12,
+      top: "50%",
+      transform: "translateY(-50%)",
+      color: HOME_UI.muted,
+      pointerEvents: "none",
+    }}
+  />
+  <input
+    type="search"
+    value={categoryManagerFilter}
+    onChange={(event) => setCategoryManagerFilter(event.target.value)}
+    placeholder="اكتب بداية نوع المصروف"
+    aria-label="فلترة أنواع المصاريف حسب بداية الاسم"
+    autoFocus
+    style={{
+      ...G.inp(),
+      width: "100%",
+      paddingRight: 38,
+    }}
+  />
+</label>
+
 <div
   style={{
     ...HOME_UI.innerCard,
@@ -4313,7 +4362,7 @@ flexDirection: "column",
     overflowY: "auto",
     marginBottom: 14,
   }}
->  {allExpenseCategories.filter((cat) => !cat.isOther).length === 0 ? (
+>  {expenseCategoriesForManager.length === 0 ? (
     <div
       style={{
         textAlign: "center",
@@ -4324,9 +4373,19 @@ flexDirection: "column",
     >
       لا توجد أنواع مصروف إضافية بعد
     </div>
+  ) : filteredExpenseCategoriesForManager.length === 0 ? (
+    <div
+      style={{
+        textAlign: "center",
+        color: HOME_UI.muted,
+        padding: "18px 0",
+        fontSize: 13,
+      }}
+    >
+      لا توجد أنواع تبدأ بـ «{categoryManagerFilter.trim()}»
+    </div>
   ) : (
-    allExpenseCategories
-      .filter((cat) => !cat.isOther)
+    filteredExpenseCategoriesForManager
       .map((catItem) => (
         <div key={catItem.id} style={HOME_UI.row}>
   <button
@@ -4646,10 +4705,11 @@ function ReportsScreen({ state }) {
   const [assetReportView, setAssetReportView] = useState("distribution");
   const [showAssetTrendDetails, setShowAssetTrendDetails] = useState(false);
   const [showExpenseReport, setShowExpenseReport] = useState(false);
+  const [expenseReportInitialCategory, setExpenseReportInitialCategory] = useState("all");
   const [showOverBudgetReport, setShowOverBudgetReport] = useState(false);
   const [assetTrendMonths, setAssetTrendMonths] = useState(6);
   const [selectedTrendAssetKey, setSelectedTrendAssetKey] = useState("");
-  const [expenseChartMode, setExpenseChartMode] = useState("donut");
+  const [expenseChartMode, setExpenseChartMode] = useState("bars");
   const [selectedExpense, setSelectedExpense] = useState(null);
   const [aiWealthReport, setAiWealthReport] = useState(null);
   const [aiWealthReportLoading, setAiWealthReportLoading] = useState(false);
@@ -5242,6 +5302,10 @@ function ReportsScreen({ state }) {
                   expenses={state.expenses}
                   mode={expenseChartMode}
                   categoryColors={expenseCategoryColors}
+                  onCategorySelect={(category) => {
+                    setExpenseReportInitialCategory(category);
+                    setShowExpenseReport(true);
+                  }}
                   centerValue={remainingSpendingCap}
                   centerLabel="المتبقي من السقف"
                   centerColor={
@@ -5251,7 +5315,12 @@ function ReportsScreen({ state }) {
                   }
                 />
               </ExpenseSummaryReportCard>
-              <ExpenseReportLauncher onOpen={() => setShowExpenseReport(true)} />
+              <ExpenseReportLauncher
+                onOpen={() => {
+                  setExpenseReportInitialCategory("all");
+                  setShowExpenseReport(true);
+                }}
+              />
             </>
           )}
 
@@ -5307,7 +5376,12 @@ function ReportsScreen({ state }) {
               <div style={{ margin: "4px 0 12px", color: visualIdentity.colors.textSecondary, fontSize: 9 }}>
                 عرض تفاصيل المصروفات وطرق الدفع ومصادر التغطية
               </div>
-              <ExpenseReportLauncher onOpen={() => setShowExpenseReport(true)} />
+              <ExpenseReportLauncher
+                onOpen={() => {
+                  setExpenseReportInitialCategory("all");
+                  setShowExpenseReport(true);
+                }}
+              />
             </section>
           )}
         </>
@@ -5498,8 +5572,10 @@ function ReportsScreen({ state }) {
       )}
 
       <ExpenseReportModal
+        key={`expense-report-${showExpenseReport ? "open" : "closed"}-${expenseReportInitialCategory}`}
         open={showExpenseReport}
         rows={expenseReportRows}
+        initialCategory={expenseReportInitialCategory}
         selectedExpense={selectedExpense}
         selectedTotal={selectedExpenseTotal}
         selectedRecorded={selectedExpenseRecorded}

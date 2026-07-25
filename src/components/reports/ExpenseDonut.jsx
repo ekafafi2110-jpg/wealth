@@ -54,6 +54,7 @@ export default function ExpenseDonut({
   centerValue,
   centerLabel,
   centerColor = "var(--text-heading)",
+  onCategorySelect,
 }) {
   const { currencyLabel } = useLocale();
   const expenseCats = Array.from(
@@ -96,7 +97,23 @@ const grouped = expenseCats.map((cat, index) => ({
           const width = Math.max(8, (item.value / maxValue) * 100);
 
           return (
-            <div key={item.name} style={{ textAlign: "right" }}>
+            <button
+              key={item.name}
+              type="button"
+              onClick={() => onCategorySelect?.(item.name)}
+              title={`فتح كشف مصروفات ${item.name}`}
+              aria-label={`فتح كشف المصروفات مفلترًا على ${item.name}`}
+              style={{
+                width: "100%",
+                padding: 0,
+                border: "none",
+                background: "transparent",
+                color: "inherit",
+                fontFamily: "inherit",
+                textAlign: "right",
+                cursor: onCategorySelect ? "pointer" : "default",
+              }}
+            >
               <div style={{ display: "flex", justifyContent: "space-between", gap: 8, marginBottom: 4 }}>
                 <span style={{ color: item.color, fontSize: 11, fontWeight: 900 }}>
                   {item.value.toFixed(2)}
@@ -115,7 +132,7 @@ const grouped = expenseCats.map((cat, index) => ({
                   }}
                 />
               </div>
-            </div>
+            </button>
           );
         })}
       </div>

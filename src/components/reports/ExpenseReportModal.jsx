@@ -35,15 +35,18 @@ export default function ExpenseReportModal({
   selectedRecorded,
   selectedDebt,
   selectedAsset,
+  initialCategory = "all",
   onClose,
   onSelect,
   onCloseSelected,
 }) {
   const { currencyLabel } = useLocale();
   const [search, setSearch] = useState("");
-  const [category, setCategory] = useState("all");
+  const [category, setCategory] = useState(initialCategory || "all");
   const [paymentMethod, setPaymentMethod] = useState("all");
-  const [entryType, setEntryType] = useState("all");
+  const [entryType, setEntryType] = useState(
+    initialCategory && initialCategory !== "all" ? "expense" : "all"
+  );
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -85,6 +88,15 @@ export default function ExpenseReportModal({
       return matchesSearch && matchesCategory && matchesPayment && matchesType && matchesFrom && matchesTo;
     });
   }, [category, dateFrom, dateTo, entryType, paymentMethod, rows, search]);
+
+  const filteredExpenseTotal = useMemo(
+    () =>
+      filteredRows.reduce(
+        (total, row) => (row.isIncome ? total : total + Number(row.amount || 0)),
+        0
+      ),
+    [filteredRows]
+  );
 
   const hasFilters = Boolean(
     search || category !== "all" || paymentMethod !== "all" || entryType !== "all" || dateFrom || dateTo
@@ -316,6 +328,42 @@ export default function ExpenseReportModal({
               </div>
             </div>
           )}
+        </section>
+
+        <section
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 10,
+            marginBottom: 12,
+            padding: "10px 12px",
+            borderRadius: 14,
+            border: `1px solid ${visualIdentity.colors.gold}55`,
+            background: "rgba(255,198,45,0.1)",
+          }}
+        >
+          <span
+            style={{
+              color: visualIdentity.colors.textSecondary,
+              fontSize: 11,
+              fontWeight: 800,
+            }}
+          >
+            مجموع المصروفات للنتائج الظاهرة
+          </span>
+          <strong
+            style={{
+              color: visualIdentity.colors.gold,
+              fontSize: 15,
+              fontWeight: 950,
+              direction: "ltr",
+              fontVariantNumeric: "tabular-nums",
+              whiteSpace: "nowrap",
+            }}
+          >
+            {filteredExpenseTotal.toFixed(2)} {currencyLabel}
+          </strong>
         </section>
 
         {filteredRows.map((row, index) => (
